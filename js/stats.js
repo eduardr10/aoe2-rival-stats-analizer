@@ -49,6 +49,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   const wheelBarrow = [];
   const handCart = [];
   const keyTechsData = {};
+  const tcPostCastleCounts = [];
+  const tcPostCastleTimes = [];
   const allMatchFeatures = [];
 
   for (let i = 0; i < matches.length; i++) {
@@ -117,6 +119,22 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
             stats.age_times.imperial.push(seconds);
           }
         }
+      }
+    }
+
+    // TCs post-castle
+    if (meUptimes.castle != null && mePlayer.events) {
+      let tcCount = 0;
+      let firstTcTime = null;
+      for (const e of mePlayer.events) {
+        if (e.type === 'building' && e.name === 'town_center' && e.time > meUptimes.castle) {
+          tcCount++;
+          if (firstTcTime === null) firstTcTime = e.time - meUptimes.castle;
+        }
+      }
+      if (tcCount > 0) {
+        tcPostCastleCounts.push(tcCount);
+        if (firstTcTime !== null) tcPostCastleTimes.push(firstTcTime);
       }
     }
 
@@ -350,6 +368,13 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     : null;
   stats.hand_cart_avg = handCart.length
     ? handCart.reduce((a, b) => a + b, 0) / handCart.length
+    : null;
+
+  stats.tc_post_castle_avg = tcPostCastleCounts.length
+    ? Math.round((tcPostCastleCounts.reduce((a, b) => a + b, 0) / tcPostCastleCounts.length) * 100) / 100
+    : null;
+  stats.tc_post_castle_first_time_avg = tcPostCastleTimes.length
+    ? Math.round((tcPostCastleTimes.reduce((a, b) => a + b, 0) / tcPostCastleTimes.length) * 100) / 100
     : null;
 
   stats.key_techs = {};

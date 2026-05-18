@@ -13,7 +13,8 @@ let currentPlayerStats = null;
 let isAnalyzingRival = false;
 
 export async function initDashboard() {
-  const playerId = DEFAULT_PLAYER_ID;
+  const params = new URLSearchParams(window.location.search);
+  const playerId = params.get('player_id') || DEFAULT_PLAYER_ID;
   const container = document.getElementById('dashboard');
   container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
 
@@ -325,7 +326,10 @@ function renderMapsCard(stats) {
 function renderEconomyCard(stats) {
   const wb = stats.wheel_barrow_avg;
   const hc = stats.hand_cart_avg;
-  if (wb == null && hc == null) {
+  const tcAvg = stats.tc_post_castle_avg;
+  const tcTime = stats.tc_post_castle_first_time_avg;
+
+  if (wb == null && hc == null && tcAvg == null) {
     return '<div class="card"><div class="card-title">Economía</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
   }
 
@@ -336,6 +340,12 @@ function renderEconomyCard(stats) {
   }
   if (hc != null) {
     html += `<div class="economy-row"><div class="economy-label">Hand Cart</div><div class="economy-value">${formatHms(hc)}</div></div>`;
+  }
+  if (tcAvg != null) {
+    html += `<div class="economy-row">
+      <div class="economy-label">TCs post-Castle</div>
+      <div class="economy-value">${tcAvg.toFixed(1)} ${tcTime != null ? '(+' + formatHms(tcTime) + ')' : ''}</div>
+    </div>`;
   }
   html += '</div>';
   return html;
@@ -348,29 +358,41 @@ function renderTechsCard(stats) {
     return '<div class="card"><div class="card-title">Key Techs</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
   }
 
-  const byCategory = { military: [], economy: [], other: [] };
-  for (const [name, data] of entries) {
-    const cat = data.category || 'other';
-    if (byCategory[cat]) byCategory[cat].push([name, data]);
-    else byCategory.other.push([name, data]);
-  }
+  // Juntar todas las techs y ordenar por frecuencia descendente
+  const allTechs = entries.map(([name, data]) => ({ name, ...data }));
+  allTechs.sort((a, b) => b.frequency - a.frequency);
 
   let html = '<div class="card">';
   html += '<div class="card-title">Key Techs</div>';
-  for (const cat of ['military', 'economy', 'other']) {
-    const list = byCategory[cat];
-    if (list.length === 0) continue;
-    list.sort((a, b) => b[1].frequency - a[1].frequency);
+  html += '<div class="tech-list">';
 
-    html += `<div class="tech-category"><div class="tech-category-label">${cat}</div><div class="tech-items">`;
-    for (const [name, data] of list.slice(0, 5)) {
-      const display = techDisplayName(name);
-      const time = data.avg_time != null ? formatHms(data.avg_time) : '';
-      html += `<span class="tech-item">${display} <span class="tech-freq">${data.frequency}%</span>${time ? `<span class="tech-time">${time}</span>` : ''}</span>`;
-    }
-    html += '</div></div>';
+  for (const tech of allTechs.slice(0, 12)) {
+    const display = techDisplayName(tech.name);
+    const time = tech.avg_time != null ? formatHms(tech.avg_time) : '';
+    const maxFreq = allTechs[0].frequency || 100;
+    const barWidth = maxFreq > 0 ? (tech.frequency / maxFreq) * 100 : 0;
+
+    const catColors = {
+      military: 'var(--accent-red)',
+      economy: 'var(--accent-green)',
+      naval: 'var(--accent-blue)',
+      other: 'var(--text-muted)',
+    };
+    const color = catColors[tech.category] || 'var(--text-muted)';
+
+    html += `<div class="tech-list-row">`;
+    html += `<div class="tech-list-info">`;
+    html += `<span class="tech-list-name">${display}</span>`;
+    html += `<span class="tech-list-time">${time}</span>`;
+    html += `</div>`;
+    html += `<div class="tech-list-bar-track">`;
+    html += `<div class="tech-list-bar" style="width:${barWidth}%;background:${color}"></div>`;
+    html += `</div>`;
+    html += `<div class="tech-list-freq">${Math.round(tech.frequency)}%</div>`;
+    html += `</div>`;
   }
-  html += '</div>';
+
+  html += '</div></div>';
   return html;
 }
 
@@ -389,35 +411,38 @@ function renderMarketCard(stats) {
   }
 
   let html = '<div class="card">';
-  html += '<div class="card-title">Market Activity</div>';
+  html += '<div class="card-title">Uso del Mercado</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+
   for (const age of ['feudal', 'castle', 'imperial']) {
     const avgByAge = marketAvg[age] || null;
-    const topBuys = [];
-    const topSells = [];
+    if (!avgByAge) continue;
 
-    if (avgByAge) {
-      const buys = avgByAge.buy || {};
-      const sells = avgByAge.sell || {};
-      if (Object.keys(buys).length > 0) {
-        Object.entries(buys).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([r, v]) => topBuys.push([r, Math.round(v)]));
-      }
-      if (Object.keys(sells).length > 0) {
-        Object.entries(sells).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([r, v]) => topSells.push([r, Math.round(v)]));
-      }
+    const buys = Object.keys(avgByAge.buy || {});
+    const sells = Object.keys(avgByAge.sell || {});
+    if (buys.length === 0 && sells.length === 0) continue;
+
+    html += `<div style="display:flex;align-items:flex-start;gap:10px;">`;
+    html += `<div style="width:56px;font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:capitalize;flex-shrink:0;padding-top:3px;">${age}</div>`;
+    html += `<div style="flex:1;display:flex;flex-direction:column;gap:4px;">`;
+
+    if (buys.length > 0) {
+      html += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-green);">`;
+      html += `<span style="font-weight:600;">Compra</span>`;
+      html += `<span style="color:var(--text-secondary);">${buys.join(', ')}</span>`;
+      html += `</div>`;
+    }
+    if (sells.length > 0) {
+      html += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-red);">`;
+      html += `<span style="font-weight:600;">Vende</span>`;
+      html += `<span style="color:var(--text-secondary);">${sells.join(', ')}</span>`;
+      html += `</div>`;
     }
 
-    if (topBuys.length === 0 && topSells.length === 0) continue;
-
-    html += `<div class="market-age-row"><div class="market-age-label">${age}</div><div class="market-items">`;
-    for (const [resource, val] of topBuys) {
-      html += `<span class="market-item buy">+${resource} ${val}</span>`;
-    }
-    for (const [resource, val] of topSells) {
-      html += `<span class="market-item sell">-${resource} ${val}</span>`;
-    }
-    html += '</div></div>';
+    html += `</div></div>`;
   }
-  html += '</div>';
+
+  html += '</div></div>';
   return html;
 }
 
