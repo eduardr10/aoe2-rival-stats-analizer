@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AoE2 Dashboard</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+  <header class="dashboard-header">
+    <div class="header-inner">
+      <div class="player-avatar" id="header-avatar">?</div>
+      <div class="player-info">
+        <div class="player-name" id="header-name">Cargando...</div>
+        <div class="player-meta" id="header-meta">—</div>
+      </div>
+      <div class="wr-badge" id="header-wr">—</div>
+    </div>
+  </header>
+
+  <main class="dashboard-main">
+    <!-- Live match banner -->
+    <div class="live-match-banner" id="live-match-banner">
+      <div class="live-match-title">Partida en curso</div>
+      <div class="live-match-vs" id="live-match-vs">vs ...</div>
+    </div>
+
+    <!-- Comparative section (appears when live match detected) -->
+    <div id="comparative"></div>
+
+    <!-- Main dashboard content -->
+    <div id="dashboard">
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        Cargando perfil...
+      </div>
+    </div>
+  </main>
+
+  <footer class="dashboard-footer">
+    AoE2 Rival Stats Analyzer · Datos de AoE2 Companion
+  </footer>
+
+  <script type="module">
+    import { initDashboard } from './js/dashboard.js';
+    document.addEventListener('DOMContentLoaded', initDashboard);
+  </script>
+</body>
+</html>

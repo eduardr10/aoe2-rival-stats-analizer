@@ -1,4 +1,4 @@
-export function initWebSocket(playerId, existingMatchId) {
+export function initWebSocket(playerId, existingMatchId, onNewMatch = null) {
   const analyzedMatchIds = new Set();
 
   if (existingMatchId && existingMatchId !== 'self') {
@@ -48,8 +48,12 @@ export function initWebSocket(playerId, existingMatchId) {
         return;
       }
 
-      const newUrl = `${window.location.pathname}?matchId=${matchData.matchId}&rivalProfileId=${rivalProfileId}&t=${Date.now()}`;
-      window.location.replace(newUrl);
+      if (onNewMatch) {
+        onNewMatch({ matchData, rivalProfileId });
+      } else {
+        const newUrl = `${window.location.pathname}?matchId=${matchData.matchId}&rivalProfileId=${rivalProfileId}&t=${Date.now()}`;
+        window.location.replace(newUrl);
+      }
     };
 
     socket.onclose = (event) => {

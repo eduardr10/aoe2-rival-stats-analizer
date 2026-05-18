@@ -6,10 +6,12 @@ import { initWebSocket } from './websocket.js';
 import { resolveCivNumber, sleep } from './utils.js';
 import { clearCache, getCacheStats } from './cache.js';
 
+const DEFAULT_PLAYER_ID = '8621659';
+
 export async function init() {
   const params = new URLSearchParams(window.location.search);
-  const playerId = params.get('player_id');
-  const matchId = params.get('matchId') || null;
+  const playerId = params.get('player_id') || DEFAULT_PLAYER_ID;
+  const matchId = params.get('matchId') || 'self';
   const rivalProfileId = params.get('rivalProfileId') || null;
   const playedCivilization = params.get('played_civilization') || null;
   const opponentCiv = params.get('opponent_civ') || null;
@@ -17,14 +19,6 @@ export async function init() {
   const perPage = parseInt(params.get('per_page') || '10');
   const ongoing = params.get('ongoing') === 'true';
   const pages = parseInt(params.get('pages') || '1');
-
-  if (!playerId) {
-    document.getElementById('aoe2-overlay').innerHTML =
-      '<div class="loading-state" style="font-size:14px;">' +
-      'Falta el parametro <code>player_id</code> en la URL.<br>' +
-      'Ejemplo: <code>?player_id=8621659&matchId=self</code></div>';
-    return;
-  }
 
   if (matchId === 'self') {
     await runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivilization, opponentCiv, ongoing);
