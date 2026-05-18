@@ -1,9 +1,36 @@
 import { fetchAnalysis } from './api.js';
-import { parseGameJson, extractEarlyFeatures, computePlayerBaselines, classifyOpening, computePlayerPrimaryOpenings } from './analysis.js';
+import { parseGameJson, extractEarlyFeatures, computePlayerBaselines, classifyOpening } from './analysis.js';
 import { parseTimestamp, formatHms, average, CIV_CANONICAL_NAMES, sleep, isKeyTech, getTechCategory } from './utils.js';
 
 const AGES = ['feudal', 'castle', 'imperial'];
 const AGE_TECH_FILTER = ['feudal age', 'castle age', 'imperial age'];
+
+const UNIT_CATEGORIES = {
+  cavalry: ['scout_cavalry', 'knight', 'cavalier', 'paladin', 'camel_rider', 'heavy_camel_rider',
+    'battle_elephant', 'elite_battle_elephant', 'steppe_lancer', 'elite_steppe_lancer',
+    'hussar', 'light_cavalry', 'tarkan', 'elite_tarkan', 'konnik', 'keshik', 'leitis',
+    'boyar', 'magyar_huszar', 'war_elephant', 'mameluke', 'cataphract'],
+  archers: ['archer', 'crossbowman', 'arbalester', 'skirmisher', 'elite_skirmisher',
+    'cavalry_archer', 'heavy_cavalry_archer', 'hand_cannoneer', 'genoese_crossbowman',
+    'plumed_archer', 'chu_ko_nu', 'longbowman', 'war_wagon', 'elephant_archer',
+    'rattan_archer', 'arambai', 'karambit_warrior'],
+  infantry: ['militia', 'men-at-arms', 'long_swordsman', 'two-handed_swordsman', 'champion',
+    'spearman', 'pikeman', 'halberdier', 'eagle_warrior', 'elite_eagle_warrior',
+    'ghulam', 'teutonic_knight', 'berserk', 'jaguar_warrior', 'samurai', 'woad_raider',
+    'throwing_axeman', 'huskarl', 'shotel_warrior', 'condottiero'],
+  siege: ['battering_ram', 'capped_ram', 'siege_ram', 'mangonel', 'onager', 'siege_onager',
+    'scorpion', 'heavy_scorpion', 'bombard_cannon', 'trebuchet', 'siege_tower',
+    'petard', 'flaming_camel', 'organ_gun', 'ballista_elephant', 'houfnice'],
+};
+
+function categorizeUnit(unitName) {
+  if (!unitName) return 'other';
+  const n = unitName.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+  for (const [cat, units] of Object.entries(UNIT_CATEGORIES)) {
+    if (units.includes(n)) return cat;
+  }
+  return 'other';
+}
 
 export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, dataMainPlayer) {
   const stats = {
@@ -30,9 +57,13 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       imperial: { buy: {}, sell: {} },
     },
     market_times_by_age: { feudal: [], castle: [], imperial: [] },
+    market_transactions_by_age: { feudal: 0, castle: 0, imperial: 0 },
     analyzed: 0,
     skipped: 0,
     all_match_features: [],
+    unit_categories: {},
+    unit_categories_wins: {},
+    unit_categories_losses: {},
   };
 
   const marketSums = {
@@ -49,8 +80,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   const wheelBarrow = [];
   const handCart = [];
   const keyTechsData = {};
-  const tcPostCastleCounts = [];
-  const tcPostCastleTimes = [];
+  const tc2Times = [];
+  const tc3Times = [];
   const allMatchFeatures = [];
 
   for (let i = 0; i < matches.length; i++) {
@@ -58,24 +89,15 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     const matchId = match.match_id;
     const data = await fetchAnalysis(matchId);
 
-    // delay entre requests de analisis para evitar rate limiting
-    if (i < matches.length - 1) {
-      await sleep(500);
-    }
+    if (i < matches.length - 1) await sleep(500);
 
-    if (!data) {
-      stats.skipped++;
-      continue;
-    }
+    if (!data) { stats.skipped++; continue; }
 
     const gameRecord = parseGameJson(data, playerId);
     const mePlayer = gameRecord.player || null;
     const oppPlayer = gameRecord.opponent || null;
 
-    if (!mePlayer) {
-      stats.skipped++;
-      continue;
-    }
+    if (!mePlayer) { stats.skipped++; continue; }
 
     const features = extractEarlyFeatures(gameRecord);
     features.match_id = matchId;
@@ -88,13 +110,29 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
 
     const techs = mePlayer.queuedTechs || [];
 
+    // Unidades por categoría
+    const queuedUnits = mePlayer.queuedUnits || [];
+    const matchCategories = new Set();
+    for (const u of queuedUnits) {
+      if (!u.unit) continue;
+      const cat = categorizeUnit(u.unit);
+      if (cat !== 'other') {
+        matchCategories.add(cat);
+        stats.unit_categories[cat] = (stats.unit_categories[cat] || 0) + (u.amount || 1);
+      }
+    }
+    for (const cat of matchCategories) {
+      if (winner) {
+        stats.unit_categories_wins[cat] = (stats.unit_categories_wins[cat] || 0) + 1;
+      } else {
+        stats.unit_categories_losses[cat] = (stats.unit_categories_losses[cat] || 0) + 1;
+      }
+    }
+
     if (mapName && typeof mapName === 'string') {
       stats.map_played[mapName] = (stats.map_played[mapName] || 0) + 1;
-      if (winner) {
-        stats.win_maps[mapName] = (stats.win_maps[mapName] || 0) + 1;
-      } else {
-        stats.lose_maps[mapName] = (stats.lose_maps[mapName] || 0) + 1;
-      }
+      if (winner) stats.win_maps[mapName] = (stats.win_maps[mapName] || 0) + 1;
+      else stats.lose_maps[mapName] = (stats.lose_maps[mapName] || 0) + 1;
     }
 
     const meUptimes = {};
@@ -122,20 +160,13 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       }
     }
 
-    // TCs post-castle
+    // TCs post-castle (2do y 3er)
     if (meUptimes.castle != null && mePlayer.events) {
-      let tcCount = 0;
-      let firstTcTime = null;
-      for (const e of mePlayer.events) {
-        if (e.type === 'building' && e.name === 'town_center' && e.time > meUptimes.castle) {
-          tcCount++;
-          if (firstTcTime === null) firstTcTime = e.time - meUptimes.castle;
-        }
-      }
-      if (tcCount > 0) {
-        tcPostCastleCounts.push(tcCount);
-        if (firstTcTime !== null) tcPostCastleTimes.push(firstTcTime);
-      }
+      const tcEvents = mePlayer.events
+        .filter(e => e.type === 'building' && e.name === 'town_center' && e.time > meUptimes.castle)
+        .sort((a, b) => a.time - b.time);
+      if (tcEvents.length >= 1 && tcEvents[0]) tc2Times.push(tcEvents[0].time);
+      if (tcEvents.length >= 2 && tcEvents[1]) tc3Times.push(tcEvents[1].time);
     }
 
     if (oppPlayer && oppPlayer.uptimes && Array.isArray(oppPlayer.uptimes)) {
@@ -153,26 +184,19 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       for (const t of oppPlayer.queuedTechs) {
         if (t.unit && t.unit.toLowerCase() === 'imperial age' && t.timestamp) {
           const seconds = parseTimestamp(t.timestamp);
-          if (seconds !== null) {
-            stats.opp_age_times.imperial.push(seconds);
-          }
+          if (seconds !== null) stats.opp_age_times.imperial.push(seconds);
         }
       }
     }
 
-    // Wheelbarrow / Hand Cart absolute timings + key techs
     for (const t of techs) {
       if (!t.timestamp || !t.unit) continue;
       const tSec = parseTimestamp(t.timestamp);
       if (tSec === null) continue;
       const unit = t.unit;
       const canon = CIV_CANONICAL_NAMES[unit];
-      if (canon === 'wheelbarrow') {
-        wheelBarrow.push(tSec);
-      }
-      if (canon === 'hand_cart') {
-        handCart.push(tSec);
-      }
+      if (canon === 'wheelbarrow') wheelBarrow.push(tSec);
+      if (canon === 'hand_cart') handCart.push(tSec);
       if (isKeyTech(unit)) {
         if (!keyTechsData[unit]) keyTechsData[unit] = { count: 0, times: [] };
         keyTechsData[unit].count++;
@@ -246,10 +270,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
             const ageTime = meUptimes[age];
             const nextAgeTime = (idx < AGES.length - 1) ? meUptimes[AGES[idx + 1]] : null;
             const inRange = marketSec >= ageTime && (nextAgeTime === null || marketSec < nextAgeTime);
-            if (inRange) {
-              marketAge = age;
-              break;
-            }
+            if (inRange) { marketAge = age; break; }
           }
         }
         if (marketAge) {
@@ -259,12 +280,11 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
           stats.market_resources_by_age[marketAge][mu.type][mu.unit] =
             (stats.market_resources_by_age[marketAge][mu.type][mu.unit] || 0) + mu.amount;
           stats.market_times_by_age[marketAge].push(marketSec);
+          stats.market_transactions_by_age[marketAge]++;
           if (!marketSums[marketAge][mu.type]) marketSums[marketAge][mu.type] = {};
           if (!marketCounts[marketAge][mu.type]) marketCounts[marketAge][mu.type] = {};
-          marketSums[marketAge][mu.type][mu.unit] =
-            (marketSums[marketAge][mu.type][mu.unit] || 0) + mu.amount;
-          marketCounts[marketAge][mu.type][mu.unit] =
-            (marketCounts[marketAge][mu.type][mu.unit] || 0) + 1;
+          marketSums[marketAge][mu.type][mu.unit] = (marketSums[marketAge][mu.type][mu.unit] || 0) + mu.amount;
+          marketCounts[marketAge][mu.type][mu.unit] = (marketCounts[marketAge][mu.type][mu.unit] || 0) + 1;
         }
       }
     }
@@ -272,25 +292,17 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     stats.analyzed++;
     if (meEapm !== null) stats.eapm.push(meEapm);
     if (mePreferRandom !== null) stats.prefer_random.push(mePreferRandom ? 1 : 0);
-    if (meCiv) {
-      stats.civ_played[meCiv] = (stats.civ_played[meCiv] || 0) + 1;
-    }
+    if (meCiv) stats.civ_played[meCiv] = (stats.civ_played[meCiv] || 0) + 1;
 
     allMatchFeatures.push(features);
   }
 
   const baselines = computePlayerBaselines(playerId, allMatchFeatures);
   stats.baselines = baselines;
-
-  for (const features of allMatchFeatures) {
-    features.opening = classifyOpening(features, baselines);
-  }
-
+  for (const features of allMatchFeatures) features.opening = classifyOpening(features, baselines);
   stats.all_match_features = allMatchFeatures;
 
-  if (dataMainPlayer.match_id !== 'self' && allMatchFeatures.length > 0) {
-    stats.current_opening = allMatchFeatures[0].opening;
-  } else if (allMatchFeatures.length > 0) {
+  if (allMatchFeatures.length > 0) {
     stats.current_opening = allMatchFeatures[0].opening;
   } else {
     stats.current_opening = null;
@@ -301,15 +313,9 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     stats['avg_' + age + '_hms'] = stats['avg_' + age] !== null ? formatHms(stats['avg_' + age]) : 'N/A';
     stats['opp_avg_' + age] = average(stats.opp_age_times[age]);
     stats['opp_avg_' + age + '_hms'] = stats['opp_avg_' + age] !== null ? formatHms(stats['opp_avg_' + age]) : 'N/A';
-    stats['avg_techs_after_' + age] = average(stats.techs_after_age[age].map(t => t.length));
-    const allTechTimes = stats.tech_times_after_age[age].flat();
-    stats['avg_tech_time_after_' + age] = average(allTechTimes);
   }
 
   stats.avg_eapm = average(stats.eapm);
-  stats.percent_prefer_random = stats.prefer_random.length
-    ? Math.round((stats.prefer_random.reduce((a, b) => a + b, 0) * 100) / stats.prefer_random.length * 100) / 100
-    : null;
 
   const totalMaps = Object.values(stats.map_played).reduce((a, b) => a + b, 0);
   stats.map_played_percent = {};
@@ -330,61 +336,37 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     }
   }
 
-  const maxWins = Math.max(...Object.values(stats.win_maps), 0);
-  if (maxWins > 0) {
-    for (const [map, wins] of Object.entries(stats.win_maps)) {
-      if (wins === maxWins) {
-        stats.best_map = map;
-        break;
-      }
-    }
-  } else {
-    stats.best_map = null;
-  }
-
   stats.market_avg_by_age = {};
+  stats.market_totals_by_age = {};
   for (const age of AGES) {
     stats.market_avg_by_age[age] = { buy: {}, sell: {} };
+    stats.market_totals_by_age[age] = { buy: {}, sell: {} };
     for (const type of ['buy', 'sell']) {
       if (stats.market_resources_by_age[age][type]) {
         for (const [resource, total] of Object.entries(stats.market_resources_by_age[age][type])) {
           const count = marketCounts[age][type]?.[resource] || 0;
           const avg = count > 0 ? Math.round((total / count) * 100) / 100 : null;
           stats.market_avg_by_age[age][type][resource] = avg;
+          stats.market_totals_by_age[age][type][resource] = total;
         }
       }
     }
   }
 
-  stats.techs_first5_after_age = {};
-  for (const age of AGES) {
-    const allTechs = stats.techs_full_after_age[age].flat();
-    allTechs.sort((a, b) => (a.abs_time || 0) - (b.abs_time || 0));
-    stats.techs_first5_after_age[age] = allTechs.slice(0, 5);
-  }
+  stats.wheel_barrow_avg = wheelBarrow.length ? wheelBarrow.reduce((a, b) => a + b, 0) / wheelBarrow.length : null;
+  stats.hand_cart_avg = handCart.length ? handCart.reduce((a, b) => a + b, 0) / handCart.length : null;
 
-  stats.wheel_barrow_avg = wheelBarrow.length
-    ? wheelBarrow.reduce((a, b) => a + b, 0) / wheelBarrow.length
-    : null;
-  stats.hand_cart_avg = handCart.length
-    ? handCart.reduce((a, b) => a + b, 0) / handCart.length
-    : null;
-
-  stats.tc_post_castle_avg = tcPostCastleCounts.length
-    ? Math.round((tcPostCastleCounts.reduce((a, b) => a + b, 0) / tcPostCastleCounts.length) * 100) / 100
-    : null;
-  stats.tc_post_castle_first_time_avg = tcPostCastleTimes.length
-    ? Math.round((tcPostCastleTimes.reduce((a, b) => a + b, 0) / tcPostCastleTimes.length) * 100) / 100
-    : null;
+  stats.tc2_time_avg = tc2Times.length ? tc2Times.reduce((a, b) => a + b, 0) / tc2Times.length : null;
+  stats.tc3_time_avg = tc3Times.length ? tc3Times.reduce((a, b) => a + b, 0) / tc3Times.length : null;
+  stats.tc2_pct = stats.analyzed > 0 ? Math.round((tc2Times.length * 100 / stats.analyzed) * 100) / 100 : null;
+  stats.tc3_pct = stats.analyzed > 0 ? Math.round((tc3Times.length * 100 / stats.analyzed) * 100) / 100 : null;
 
   stats.key_techs = {};
   const totalMatchesAnalyzed = stats.analyzed || 1;
   for (const [techName, data] of Object.entries(keyTechsData)) {
     const freq = Math.round((data.count * 100 / totalMatchesAnalyzed) * 100) / 100;
     if (freq < 10) continue;
-    const avgTime = data.times.length
-      ? Math.round((data.times.reduce((a, b) => a + b, 0) / data.times.length) * 100) / 100
-      : null;
+    const avgTime = data.times.length ? Math.round((data.times.reduce((a, b) => a + b, 0) / data.times.length) * 100) / 100 : null;
     stats.key_techs[techName] = {
       count: data.count,
       frequency: freq,

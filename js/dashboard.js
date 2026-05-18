@@ -130,17 +130,22 @@ function renderDashboard(stats) {
   html += renderAgeTimingsCard(stats);
   html += '</div>';
 
-  // Row 2: Civs + Maps + Economy
+  // Row 2: Civs + Maps + Economy + Units
   html += '<div class="grid grid-3">';
   html += renderCivsCard(stats);
   html += renderMapsCard(stats);
   html += renderEconomyCard(stats);
   html += '</div>';
 
-  // Row 3: Techs + Market + Playstyle
+  // Row 3: Units + Techs + Market
   html += '<div class="grid grid-3">';
+  html += renderUnitsCard(stats);
   html += renderTechsCard(stats);
   html += renderMarketCard(stats);
+  html += '</div>';
+
+  // Row 4: Playstyle (full width)
+  html += '<div class="grid">';
   html += renderPlaystyleCard(stats);
   html += '</div>';
 
@@ -210,6 +215,64 @@ function renderMiniStats(stats) {
 // CARD BUILDERS
 // ============================================================================
 
+function renderUnitsCard(stats) {
+  const cats = stats.unit_categories || {};
+  const wins = stats.unit_categories_wins || {};
+  const losses = stats.unit_categories_losses || {};
+  const entries = Object.entries(cats);
+
+  if (entries.length === 0) {
+    return '<div class="card"><div class="card-title">Preferencia de Unidades</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+  }
+
+  const catLabels = {
+    cavalry: 'Caballería',
+    archers: 'Arqueros',
+    infantry: 'Infantería',
+    siege: 'Asedio',
+  };
+  const catColors = {
+    cavalry: 'var(--accent-red)',
+    archers: 'var(--accent-blue)',
+    infantry: 'var(--accent-green)',
+    siege: 'var(--accent-orange)',
+  };
+
+  const enriched = entries.map(([cat, total]) => {
+    const w = wins[cat] || 0;
+    const l = losses[cat] || 0;
+    const games = w + l;
+    const wr = games > 0 ? Math.round((w * 100 / games) * 100) / 100 : 0;
+    return { cat, total, wr, games };
+  }).sort((a, b) => b.total - a.total);
+
+  const maxTotal = enriched[0]?.total || 1;
+
+  let html = '<div class="card">';
+  html += '<div class="card-title">Preferencia de Unidades</div>';
+  html += '<div class="unit-categories">';
+
+  for (const item of enriched) {
+    const color = catColors[item.cat] || 'var(--text-muted)';
+    const label = catLabels[item.cat] || item.cat;
+    const barWidth = (item.total / maxTotal) * 100;
+
+    html += `<div class="unit-cat-row">`;
+    html += `<div class="unit-cat-header">`;
+    html += `<span class="unit-cat-name" style="color:${color}">${label}</span>`;
+    html += `<span class="unit-cat-count">${item.total} unidades</span>`;
+    html += `</div>`;
+    html += `<div class="unit-cat-bar-track">`;
+    html += `<div class="unit-cat-bar" style="width:${barWidth}%;background:${color}"></div>`;
+    html += `</div>`;
+    html += `<div class="unit-cat-wr">WR ${item.wr}% <span style="font-size:10px;color:var(--text-muted);">(${item.games} games)</span></div>`;
+    html += `</div>`;
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
 function renderOpeningCard(stats) {
   const pp = stats.player_profile;
   if (!pp) return '<div class="card"><div class="card-title">Apertura</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
@@ -256,6 +319,8 @@ function renderAgeTimingsCard(stats) {
     if (o) allTimes.push(o);
   }
   const maxTime = Math.max(...allTimes, 1);
+  const playerName = stats.player_name || 'You';
+  const playerInitial = playerName.length > 8 ? playerName.substring(0, 6) + '..' : playerName;
 
   let html = '<div class="card">';
   html += '<div class="card-title">Age Timings</div>';
@@ -275,7 +340,7 @@ function renderAgeTimingsCard(stats) {
       <div class="age-time">${oTime}</div>
     </div>`;
     html += `<div class="age-row" style="margin-top:-2px;margin-bottom:8px;">
-      <div class="age-label" style="color:var(--accent-blue)">You</div>
+      <div class="age-label" style="color:var(--accent-blue);font-size:10px;">${playerInitial}</div>
       <div class="age-bar-container"><div class="age-bar player" style="width:${pPct}%"></div></div>
       <div class="age-time" style="color:var(--accent-blue)">${pTime}</div>
     </div>`;
@@ -326,27 +391,40 @@ function renderMapsCard(stats) {
 function renderEconomyCard(stats) {
   const wb = stats.wheel_barrow_avg;
   const hc = stats.hand_cart_avg;
-  const tcAvg = stats.tc_post_castle_avg;
-  const tcTime = stats.tc_post_castle_first_time_avg;
-
-  if (wb == null && hc == null && tcAvg == null) {
-    return '<div class="card"><div class="card-title">Economía</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
+  const tc2 = stats.tc2_time_avg;
+  const tc3 = stats.tc3_time_avg;
+  const tc2Pct = stats.tc2_pct;
+  const tc3Pct = stats.tc3_pct;
 
   let html = '<div class="card">';
   html += '<div class="card-title">Economía</div>';
+
   if (wb != null) {
     html += `<div class="economy-row"><div class="economy-label">Wheelbarrow</div><div class="economy-value">${formatHms(wb)}</div></div>`;
   }
   if (hc != null) {
     html += `<div class="economy-row"><div class="economy-label">Hand Cart</div><div class="economy-value">${formatHms(hc)}</div></div>`;
   }
-  if (tcAvg != null) {
+
+  // TC 2do
+  if (tc2 != null) {
     html += `<div class="economy-row">
-      <div class="economy-label">TCs post-Castle</div>
-      <div class="economy-value">${tcAvg.toFixed(1)} ${tcTime != null ? '(+' + formatHms(tcTime) + ')' : ''}</div>
+      <div class="economy-label">2do TC <span style="font-size:10px;color:var(--text-muted);">(${tc2Pct}% games)</span></div>
+      <div class="economy-value">${formatHms(tc2)}</div>
     </div>`;
   }
+  // TC 3er
+  if (tc3 != null) {
+    html += `<div class="economy-row">
+      <div class="economy-label">3er TC <span style="font-size:10px;color:var(--text-muted);">(${tc3Pct}% games)</span></div>
+      <div class="economy-value">${formatHms(tc3)}</div>
+    </div>`;
+  }
+
+  if (wb == null && hc == null && tc2 == null) {
+    html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Sin datos de mejoras.</div>';
+  }
+
   html += '</div>';
   return html;
 }
@@ -358,19 +436,17 @@ function renderTechsCard(stats) {
     return '<div class="card"><div class="card-title">Key Techs</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
   }
 
-  // Juntar todas las techs y ordenar por frecuencia descendente
+  // Ordenar por tiempo de partida (avg_time) ascendente
   const allTechs = entries.map(([name, data]) => ({ name, ...data }));
-  allTechs.sort((a, b) => b.frequency - a.frequency);
+  allTechs.sort((a, b) => (a.avg_time || 99999) - (b.avg_time || 99999));
 
   let html = '<div class="card">';
-  html += '<div class="card-title">Key Techs</div>';
+  html += '<div class="card-title">Key Techs <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(por tiempo de partida)</span></div>';
   html += '<div class="tech-list">';
 
   for (const tech of allTechs.slice(0, 12)) {
     const display = techDisplayName(tech.name);
     const time = tech.avg_time != null ? formatHms(tech.avg_time) : '';
-    const maxFreq = allTechs[0].frequency || 100;
-    const barWidth = maxFreq > 0 ? (tech.frequency / maxFreq) * 100 : 0;
 
     const catColors = {
       military: 'var(--accent-red)',
@@ -382,11 +458,8 @@ function renderTechsCard(stats) {
 
     html += `<div class="tech-list-row">`;
     html += `<div class="tech-list-info">`;
-    html += `<span class="tech-list-name">${display}</span>`;
+    html += `<span class="tech-list-name" style="color:${color};font-weight:600;">${display}</span>`;
     html += `<span class="tech-list-time">${time}</span>`;
-    html += `</div>`;
-    html += `<div class="tech-list-bar-track">`;
-    html += `<div class="tech-list-bar" style="width:${barWidth}%;background:${color}"></div>`;
     html += `</div>`;
     html += `<div class="tech-list-freq">${Math.round(tech.frequency)}%</div>`;
     html += `</div>`;
@@ -398,6 +471,8 @@ function renderTechsCard(stats) {
 
 function renderMarketCard(stats) {
   const marketAvg = stats.market_avg_by_age || {};
+  const marketTotals = stats.market_totals_by_age || {};
+  const marketTrans = stats.market_transactions_by_age || {};
   let hasAny = false;
   for (const age of ['feudal', 'castle', 'imperial']) {
     const avg = marketAvg[age];
@@ -412,34 +487,49 @@ function renderMarketCard(stats) {
 
   let html = '<div class="card">';
   html += '<div class="card-title">Uso del Mercado</div>';
-  html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+  html += '<div style="display:flex;flex-direction:column;gap:12px;">';
 
   for (const age of ['feudal', 'castle', 'imperial']) {
-    const avgByAge = marketAvg[age] || null;
-    if (!avgByAge) continue;
+    const avgByAge = marketAvg[age] || {};
+    const totalsByAge = marketTotals[age] || {};
+    const trans = marketTrans[age] || 0;
+    const buys = avgByAge.buy || {};
+    const sells = avgByAge.sell || {};
+    if (Object.keys(buys).length === 0 && Object.keys(sells).length === 0) continue;
 
-    const buys = Object.keys(avgByAge.buy || {});
-    const sells = Object.keys(avgByAge.sell || {});
-    if (buys.length === 0 && sells.length === 0) continue;
+    html += `<div style="border-bottom:1px solid var(--border-subtle);padding-bottom:8px;">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">`;
+    html += `<span style="font-size:12px;font-weight:600;text-transform:capitalize;color:var(--text-primary);">${age}</span>`;
+    html += `<span style="font-size:10px;color:var(--text-muted);">${trans} transacciones</span>`;
+    html += `</div>`;
 
-    html += `<div style="display:flex;align-items:flex-start;gap:10px;">`;
-    html += `<div style="width:56px;font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:capitalize;flex-shrink:0;padding-top:3px;">${age}</div>`;
-    html += `<div style="flex:1;display:flex;flex-direction:column;gap:4px;">`;
-
-    if (buys.length > 0) {
-      html += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-green);">`;
-      html += `<span style="font-weight:600;">Compra</span>`;
-      html += `<span style="color:var(--text-secondary);">${buys.join(', ')}</span>`;
+    // Compras
+    const buyEntries = Object.entries(buys);
+    if (buyEntries.length > 0) {
+      html += `<div style="margin-bottom:4px;">`;
+      html += `<span style="font-size:10px;color:var(--accent-green);font-weight:600;">COMPRA </span>`;
+      const buyParts = buyEntries.map(([res, avg]) => {
+        const total = (totalsByAge.buy || {})[res] || 0;
+        return `<span style="font-size:11px;color:var(--text-secondary);">${res}: <strong>${Math.round(total)}</strong> total (~${Math.round(avg)} c/u)</span>`;
+      });
+      html += buyParts.join('<span style="color:var(--border-accent);margin:0 4px;">·</span>');
       html += `</div>`;
     }
-    if (sells.length > 0) {
-      html += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-red);">`;
-      html += `<span style="font-weight:600;">Vende</span>`;
-      html += `<span style="color:var(--text-secondary);">${sells.join(', ')}</span>`;
+
+    // Ventas
+    const sellEntries = Object.entries(sells);
+    if (sellEntries.length > 0) {
+      html += `<div>`;
+      html += `<span style="font-size:10px;color:var(--accent-red);font-weight:600;">VENTA </span>`;
+      const sellParts = sellEntries.map(([res, avg]) => {
+        const total = (totalsByAge.sell || {})[res] || 0;
+        return `<span style="font-size:11px;color:var(--text-secondary);">${res}: <strong>${Math.round(total)}</strong> total (~${Math.round(avg)} c/u)</span>`;
+      });
+      html += sellParts.join('<span style="color:var(--border-accent);margin:0 4px;">·</span>');
       html += `</div>`;
     }
 
-    html += `</div></div>`;
+    html += `</div>`;
   }
 
   html += '</div></div>';

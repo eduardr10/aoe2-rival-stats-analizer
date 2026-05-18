@@ -558,6 +558,55 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Unit categories */
+.unit-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.unit-cat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.unit-cat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.unit-cat-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.unit-cat-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.unit-cat-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.unit-cat-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.unit-cat-wr {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 /* Footer */
 .dashboard-footer {
   text-align: center;
