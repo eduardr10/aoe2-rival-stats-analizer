@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AoE2 Live Monitor</title>
+  <style>
+    body { background: #0a0c14; color: #f0f0f5; font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; }
+    h1 { color: #6c8cff; font-size: 16px; margin-bottom: 4px; }
+    p { color: #8b8fa3; font-size: 12px; margin-top: 0; }
+    #log { margin-top: 12px; font-family: 'Consolas', monospace; font-size: 11px; white-space: pre-wrap; color: #5a5e72; max-height: 70vh; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>AoE2 Live Match Monitor</h1>
+  <p>Conectado a wss://socket.aoe2companion.com/listen</p>
+  <div id="log"></div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const playerId = params.get('player_id') || '8621659';
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      logEl.textContent += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function createSocket(handlerName) {
+      const url = `wss://socket.aoe2companion.com/listen?handler=${handlerName}&profile_ids=${playerId}`;
+      let socket = new WebSocket(url);
+      socket.onopen = () => log(`OPEN ${handlerName}`);
+      socket.onmessage = (e) => log(`MSG ${handlerName}: ${e.data.substring(0, 120)}...`);
+      socket.onclose = (e) => {
+        log(`CLOSE ${handlerName} code=${e.code} — retrying 3s`);
+        setTimeout(() => { socket = createSocket(handlerName); }, 3000);
+      };
+      socket.onerror = () => { log(`ERROR ${handlerName}`); socket.close(); };
+      return socket;
+    }
+    createSocket('ongoing-matches');
+  </script>
+</body>
+</html>
