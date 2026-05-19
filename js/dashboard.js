@@ -11,6 +11,8 @@ const PAGES = 1;
 
 let currentPlayerStats = null;
 let isAnalyzingRival = false;
+let currentRivalId = null;
+let currentRivalName = null;
 
 export async function initDashboard() {
   const params = new URLSearchParams(window.location.search);
@@ -28,23 +30,44 @@ export async function initDashboard() {
     container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
   }
 
+  // Botón analizar rival
+  const btnAnalyze = document.getElementById('btn-analyze-rival');
+  if (btnAnalyze) {
+    btnAnalyze.addEventListener('click', async () => {
+      if (!currentRivalId || isAnalyzingRival) return;
+      isAnalyzingRival = true;
+      btnAnalyze.textContent = 'Analizando...';
+      btnAnalyze.disabled = true;
+
+      try {
+        const rivalStats = await runSelfAnalysis(currentRivalId, pages, perPage);
+        renderComparative(currentPlayerStats, rivalStats, currentRivalName);
+        btnAnalyze.textContent = 'Análisis listo';
+      } catch (err) {
+        console.error('Error analizando rival:', err);
+        btnAnalyze.textContent = 'Error, reintentar';
+        btnAnalyze.disabled = false;
+      } finally {
+        isAnalyzingRival = false;
+      }
+    });
+  }
+
   // Iniciar WebSocket para detectar partidas 1v1
   initWebSocket(playerId, 'self', async ({ matchData, rivalProfileId }) => {
-    if (isAnalyzingRival) return;
-    isAnalyzingRival = true;
-
     const banner = document.getElementById('live-match-banner');
     const rivalName = matchData.players.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
+
+    currentRivalId = rivalProfileId;
+    currentRivalName = rivalName;
+
     banner.querySelector('.live-match-vs').textContent = `vs ${rivalName}`;
     banner.classList.add('active');
 
-    try {
-      const rivalStats = await runSelfAnalysis(rivalProfileId, pages, perPage);
-      renderComparative(currentPlayerStats, rivalStats, rivalName);
-    } catch (err) {
-      console.error('Error analizando rival:', err);
-    } finally {
-      isAnalyzingRival = false;
+    // Resetear botón
+    if (btnAnalyze) {
+      btnAnalyze.textContent = 'Analizar Rival';
+      btnAnalyze.disabled = false;
     }
   });
 }

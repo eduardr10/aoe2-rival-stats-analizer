@@ -7,17 +7,22 @@ const AGE_TECH_FILTER = ['feudal age', 'castle age', 'imperial age'];
 
 const UNIT_CATEGORIES = {
   cavalry: ['scout_cavalry', 'knight', 'cavalier', 'paladin', 'camel_rider', 'heavy_camel_rider',
+    'imperial_camel_rider', 'camel', 'savar',
     'battle_elephant', 'elite_battle_elephant', 'steppe_lancer', 'elite_steppe_lancer',
-    'hussar', 'light_cavalry', 'tarkan', 'elite_tarkan', 'konnik', 'keshik', 'leitis',
-    'boyar', 'magyar_huszar', 'war_elephant', 'mameluke', 'cataphract'],
+    'hussar', 'light_cavalry', 'winged_hussar', 'tarkan', 'elite_tarkan', 'konnik', 'keshik', 'leitis',
+    'boyar', 'magyar_huszar', 'war_elephant', 'mameluke', 'cataphract',
+    'shrivamsha_rider', 'sosso_guard', 'monaspa'],
   archers: ['archer', 'crossbowman', 'arbalester', 'skirmisher', 'elite_skirmisher',
     'cavalry_archer', 'heavy_cavalry_archer', 'hand_cannoneer', 'genoese_crossbowman',
     'plumed_archer', 'chu_ko_nu', 'longbowman', 'war_wagon', 'elephant_archer',
-    'rattan_archer', 'arambai', 'karambit_warrior'],
+    'rattan_archer', 'arambai', 'genitour', 'elite_genitour', 'camel_archer', 'elite_camel_archer',
+    'slinger'],
   infantry: ['militia', 'men-at-arms', 'long_swordsman', 'two-handed_swordsman', 'champion',
     'spearman', 'pikeman', 'halberdier', 'eagle_warrior', 'elite_eagle_warrior',
     'ghulam', 'teutonic_knight', 'berserk', 'jaguar_warrior', 'samurai', 'woad_raider',
-    'throwing_axeman', 'huskarl', 'shotel_warrior', 'condottiero'],
+    'throwing_axeman', 'huskarl', 'shotel_warrior', 'condottiero',
+    'karambit_warrior', 'elite_karambit_warrior', 'serjeant', 'flemish_militia',
+    'obuch', 'urumi_swordsman', 'elite_urumi_swordsman', 'chakram_thrower', 'elite_chakram_thrower'],
   siege: ['battering_ram', 'capped_ram', 'siege_ram', 'mangonel', 'onager', 'siege_onager',
     'scorpion', 'heavy_scorpion', 'bombard_cannon', 'trebuchet', 'siege_tower',
     'petard', 'flaming_camel', 'organ_gun', 'ballista_elephant', 'houfnice'],
@@ -29,6 +34,8 @@ function categorizeUnit(unitName) {
   for (const [cat, units] of Object.entries(UNIT_CATEGORIES)) {
     if (units.includes(n)) return cat;
   }
+  // Debug: log unidades no categorizadas para expandir la lista
+  console.log('[unit debug] uncategorized:', unitName, '->', n);
   return 'other';
 }
 

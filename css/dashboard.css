@@ -90,13 +90,20 @@ body {
   border-radius: var(--radius-md);
   display: none;
   animation: pulse 2s ease-in-out infinite;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.live-match-banner.active { display: block; }
+.live-match-banner.active { display: flex; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }
+}
+
+.live-match-banner-info {
+  flex: 1;
 }
 
 .live-match-title {
@@ -110,6 +117,23 @@ body {
 .live-match-vs {
   font-size: 16px;
   font-weight: 700;
+}
+
+.btn-analyze-rival {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-analyze-rival:hover {
+  background: rgba(255,255,255,0.35);
 }
 
 /* Main layout */
