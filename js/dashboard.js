@@ -30,25 +30,6 @@ export async function initDashboard() {
     container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
   }
 
-  // Iniciar WebSocket para detectar partidas 1v1
-  initWebSocket(playerId, 'self', async ({ matchData, rivalProfileId }) => {
-    const banner = document.getElementById('live-match-banner');
-    const rivalName = matchData.players.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
-
-    currentRivalId = rivalProfileId;
-    currentRivalName = rivalName;
-
-    banner.querySelector('.live-match-vs').textContent = `vs ${rivalName}`;
-    banner.classList.add('active');
-
-    // Resetear botón
-    if (btnAnalyze) {
-      btnAnalyze.textContent = 'Analizar Rival';
-      btnAnalyze.disabled = false;
-    }
-  });
-}
-
   // Botón analizar rival
   const btnAnalyze = document.getElementById('btn-analyze-rival');
   if (btnAnalyze) {
