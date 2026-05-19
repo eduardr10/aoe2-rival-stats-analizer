@@ -816,36 +816,36 @@ body {
   font-weight: 600;
 }
 
-/* Cavalry detail */
-.cavalry-list {
+/* Unit detail (replaces cavalry detail) */
+.unit-detail-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.cavalry-row {
+.unit-detail-row {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.cavalry-header {
+.unit-detail-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.cavalry-name {
+.unit-detail-name {
   font-size: 13px;
   font-weight: 600;
 }
 
-.cavalry-count {
+.unit-detail-count {
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.cavalry-bar-track {
+.unit-detail-bar-track {
   width: 100%;
   height: 6px;
   background: var(--border-subtle);
@@ -853,10 +853,59 @@ body {
   overflow: hidden;
 }
 
-.cavalry-bar {
+.unit-detail-bar {
   height: 100%;
   border-radius: 3px;
   transition: width 0.3s ease;
+}
+
+.unit-detail-wr {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Unit upgrades */
+.unit-upgrades-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.unit-upgrade-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.unit-upgrade-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+}
+
+.unit-upgrade-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.unit-upgrade-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.unit-upgrade-name {
+  color: var(--text-secondary);
+}
+
+.unit-upgrade-value {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* Tech context */

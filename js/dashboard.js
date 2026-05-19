@@ -306,11 +306,16 @@ function renderDashboard(stats) {
   html += renderEconomyCard(stats);
   html += '</div>';
 
-  // Row 3: Units by Age + Cavalry Detail + Techs
+  // Row 3: Units by Age + Unit Detail + Techs
   html += '<div class="grid grid-3">';
   html += renderUnitsByAgeCard(stats);
-  html += renderCavalryDetailCard(stats);
+  html += renderUnitDetailCard(stats);
   html += renderTechsCard(stats);
+  html += '</div>';
+
+  // Row 3b: Unit Upgrades
+  html += '<div class="grid">';
+  html += renderUnitUpgradesCard(stats);
   html += '</div>';
 
   // Row 4: Market + Tech Context
@@ -789,46 +794,140 @@ function renderUnitsByAgeCard(stats) {
   return html;
 }
 
-function renderCavalryDetailCard(stats) {
-  const cav = stats.cavalry_detail || {};
-  const entries = Object.entries(cav);
+function renderUnitDetailCard(stats) {
+  const units = stats.unit_stats || {};
+  const entries = Object.entries(units).slice(0, 12); // Top 12
   if (entries.length === 0) {
-    return '<div class="card"><div class="card-title">Detalle Caballería</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+    return '<div class="card"><div class="card-title">Unidades Preferidas</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
   }
 
-  const cavColors = {
-    scout_cavalry: 'var(--accent-blue)',
-    light_cavalry: 'var(--accent-blue)',
-    hussar: 'var(--accent-blue)',
-    knight: 'var(--accent-red)',
-    cavalier: 'var(--accent-red)',
-    paladin: 'var(--accent-red)',
-    camel_rider: 'var(--accent-green)',
-    heavy_camel_rider: 'var(--accent-green)',
-    steppe_lancer: 'var(--accent-orange)',
-    elite_steppe_lancer: 'var(--accent-orange)',
+  const catColors = {
+    cavalry: 'var(--accent-red)',
+    archers: 'var(--accent-blue)',
+    infantry: 'var(--accent-green)',
+    siege: 'var(--accent-orange)',
   };
+
+  // Para saber la categoría de una unidad individual, reutilizamos la lógica de stats.js
+  // Pero como no exportamos categorizeUnit, hacemos una versión local simple
+  function getUnitCat(unitName) {
+    const cats = {
+      cavalry: ['scout_cavalry','knight','cavalier','paladin','camel_rider','heavy_camel_rider','imperial_camel_rider','camel','savar','battle_elephant','elite_battle_elephant','steppe_lancer','elite_steppe_lancer','hussar','light_cavalry','winged_hussar','tarkan','elite_tarkan','konnik','keshik','leitis','boyar','magyar_huszar','war_elephant','mameluke','cataphract','shrivamsha_rider','sosso_guard','monaspa'],
+      archers: ['archer','crossbowman','arbalester','skirmisher','elite_skirmisher','cavalry_archer','heavy_cavalry_archer','hand_cannoneer','genoese_crossbowman','plumed_archer','chu_ko_nu','longbowman','war_wagon','elephant_archer','rattan_archer','arambai','genitour','elite_genitour','camel_archer','elite_camel_archer','slinger'],
+      infantry: ['militia','men-at-arms','long_swordsman','two-handed_swordsman','champion','spearman','pikeman','halberdier','eagle_warrior','elite_eagle_warrior','ghulam','teutonic_knight','berserk','jaguar_warrior','samurai','woad_raider','throwing_axeman','huskarl','shotel_warrior','condottiero','karambit_warrior','elite_karambit_warrior','serjeant','flemish_militia','obuch','urumi_swordsman','elite_urumi_swordsman','chakram_thrower','elite_chakram_thrower'],
+      siege: ['battering_ram','capped_ram','siege_ram','mangonel','onager','siege_onager','scorpion','heavy_scorpion','bombard_cannon','trebuchet','siege_tower','petard','flaming_camel','organ_gun','ballista_elephant','houfnice'],
+    };
+    for (const [cat, list] of Object.entries(cats)) {
+      if (list.includes(unitName)) return cat;
+    }
+    return 'other';
+  }
 
   const maxTotal = entries[0][1].total || 1;
 
   let html = '<div class="card">';
-  html += '<div class="card-title">Detalle Caballería</div>';
-  html += '<div class="cavalry-list">';
+  html += '<div class="card-title">Unidades Preferidas</div>';
+  html += '<div class="unit-detail-list">';
 
   for (const [unitName, data] of entries) {
-    const color = cavColors[unitName] || 'var(--text-muted)';
+    const cat = getUnitCat(unitName);
+    const color = catColors[cat] || 'var(--text-muted)';
     const display = unitName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const barWidth = (data.total / maxTotal) * 100;
 
-    html += `<div class="cavalry-row">`;
-    html += `<div class="cavalry-header">`;
-    html += `<span class="cavalry-name" style="color:${color}">${display}</span>`;
-    html += `<span class="cavalry-count">${data.avg} avg <span style="font-size:10px;color:var(--text-muted);">(${data.total} tot)</span></span>`;
+    html += `<div class="unit-detail-row">`;
+    html += `<div class="unit-detail-header">`;
+    html += `<span class="unit-detail-name" style="color:${color}">${display}</span>`;
+    html += `<span class="unit-detail-count">${data.avg} avg <span style="font-size:10px;color:var(--text-muted);">(${data.total} tot)</span></span>`;
     html += `</div>`;
-    html += `<div class="cavalry-bar-track">`;
-    html += `<div class="cavalry-bar" style="width:${barWidth}%;background:${color}"></div>`;
+    html += `<div class="unit-detail-bar-track">`;
+    html += `<div class="unit-detail-bar" style="width:${barWidth}%;background:${color}"></div>`;
     html += `</div>`;
+    html += `<div class="unit-detail-wr">WR ${data.wr}% <span style="font-size:10px;color:var(--text-muted);">(${data.matches} games)</span></div>`;
     html += `</div>`;
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderUnitUpgradesCard(stats) {
+  const upgrades = stats.unit_upgrades || {};
+  const entries = Object.entries(upgrades);
+  if (entries.length === 0) {
+    return '<div class="card"><div class="card-title">Mejoras de Unidades</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+  }
+
+  // Agrupar por categoría
+  const groups = {
+    'Ataque (Forja)': ['forging','iron casting','blast furnace'],
+    'Armadura Infantería': ['scale mail armor','chain mail armor','plate mail armor'],
+    'Armadura Caballería': ['scale barding armor','chain barding armor','plate barding armor'],
+    'Armadura Arqueros': ['padded archer armor','leather archer armor','ring archer armor'],
+    'Ataque a Distancia': ['fletching','bodkin arrow','bracer'],
+    'Caballería': ['bloodlines','husbandry'],
+    'Arqueros Especiales': ['thumb ring','ballistics'],
+    'Otros': ['chemistry','siege engineers'],
+  };
+
+  const groupColors = {
+    'Ataque (Forja)': 'var(--accent-red)',
+    'Armadura Infantería': 'var(--accent-green)',
+    'Armadura Caballería': 'var(--accent-orange)',
+    'Armadura Arqueros': 'var(--accent-blue)',
+    'Ataque a Distancia': 'var(--accent-purple)',
+    'Caballería': 'var(--accent-yellow)',
+    'Arqueros Especiales': 'var(--accent-cyan)',
+    'Otros': 'var(--text-muted)',
+  };
+
+  const displayNames = {
+    'forging': 'Forging',
+    'iron casting': 'Iron Casting',
+    'blast furnace': 'Blast Furnace',
+    'scale mail armor': 'Scale Mail',
+    'chain mail armor': 'Chain Mail',
+    'plate mail armor': 'Plate Mail',
+    'scale barding armor': 'Scale Barding',
+    'chain barding armor': 'Chain Barding',
+    'plate barding armor': 'Plate Barding',
+    'padded archer armor': 'Padded Archer',
+    'leather archer armor': 'Leather Archer',
+    'ring archer armor': 'Ring Archer',
+    'fletching': 'Fletching',
+    'bodkin arrow': 'Bodkin Arrow',
+    'bracer': 'Bracer',
+    'bloodlines': 'Bloodlines',
+    'husbandry': 'Husbandry',
+    'thumb ring': 'Thumb Ring',
+    'ballistics': 'Ballistics',
+    'chemistry': 'Chemistry',
+    'siege engineers': 'Siege Engineers',
+  };
+
+  let html = '<div class="card">';
+  html += '<div class="card-title">Mejoras de Unidades</div>';
+  html += '<div class="unit-upgrades-grid">';
+
+  for (const [groupName, techList] of Object.entries(groups)) {
+    const groupEntries = entries.filter(([name]) => techList.includes(name));
+    if (groupEntries.length === 0) continue;
+
+    const color = groupColors[groupName] || 'var(--text-muted)';
+
+    html += `<div class="unit-upgrade-group">`;
+    html += `<div class="unit-upgrade-group-title" style="color:${color}">${groupName}</div>`;
+    html += `<div class="unit-upgrade-items">`;
+
+    for (const [techName, data] of groupEntries) {
+      const label = displayNames[techName] || techName;
+      html += `<div class="unit-upgrade-item">`;
+      html += `<span class="unit-upgrade-name">${label}</span>`;
+      html += `<span class="unit-upgrade-value">${data.count}x <span style="font-size:10px;color:var(--text-muted);">WR ${data.wr}%</span></span>`;
+      html += `</div>`;
+    }
+
+    html += `</div></div>`;
   }
 
   html += '</div></div>';

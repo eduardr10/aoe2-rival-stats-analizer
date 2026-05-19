@@ -74,6 +74,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     unit_categories: {},
     unit_categories_wins: {},
     unit_categories_losses: {},
+    unit_stats: {},
+    unit_upgrades: {},
   };
 
   const marketSums = {
@@ -100,7 +102,22 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     'pre-castle': {},
     'pre-imperial': {},
   };
-  const cavalryDetail = {};
+
+  // Unidades individuales (todas las categorías)
+  const unitStats = {};
+
+  // Mejoras de unidades (forja, armor, etc.)
+  const UNIT_UPGRADES = [
+    'forging', 'iron casting', 'blast furnace',
+    'scale mail armor', 'chain mail armor', 'plate mail armor',
+    'scale barding armor', 'chain barding armor', 'plate barding armor',
+    'padded archer armor', 'leather archer armor', 'ring archer armor',
+    'fletching', 'bodkin arrow', 'bracer',
+    'bloodlines', 'husbandry',
+    'thumb ring', 'ballistics', 'chemistry',
+    'siege engineers',
+  ];
+  const unitUpgrades = {};
 
   // Contexto de techs: unidades presentes al investigar
   const techContextData = {
@@ -166,16 +183,28 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       }
     }
 
-    // Unidades por categoría
+    // Unidades por categoría + individuales
     const queuedUnits = mePlayer.queuedUnits || [];
     const matchCategories = new Set();
+    const matchUnits = new Set();
     for (const u of queuedUnits) {
       if (!u.unit) continue;
+      const unitName = u.unit.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+      const amount = u.amount || 1;
       const cat = categorizeUnit(u.unit);
+
+      // Categoría
       if (cat !== 'other') {
         matchCategories.add(cat);
-        stats.unit_categories[cat] = (stats.unit_categories[cat] || 0) + (u.amount || 1);
+        stats.unit_categories[cat] = (stats.unit_categories[cat] || 0) + amount;
       }
+
+      // Individual
+      if (!unitStats[unitName]) {
+        unitStats[unitName] = { total: 0, matches: 0, wins: 0, losses: 0 };
+      }
+      unitStats[unitName].total += amount;
+      matchUnits.add(unitName);
     }
     for (const cat of matchCategories) {
       if (winner) {
@@ -184,10 +213,14 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
         stats.unit_categories_losses[cat] = (stats.unit_categories_losses[cat] || 0) + 1;
       }
     }
+    for (const unitName of matchUnits) {
+      unitStats[unitName].matches++;
+      if (winner) unitStats[unitName].wins++;
+      else unitStats[unitName].losses++;
+    }
 
     // Unidades por periodo de edad
     const matchUnitsByPeriod = { 'pre-feudal': new Set(), 'pre-castle': new Set(), 'pre-imperial': new Set() };
-    const matchCavalryUnits = new Set();
     for (const u of queuedUnits) {
       if (!u.unit || !u.timestamp) continue;
       const uSec = parseTimestamp(u.timestamp);
@@ -211,23 +244,11 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
         unitsByAgePeriod[period][unitName].total += amount;
         matchUnitsByPeriod[period].add(unitName);
       }
-
-      // Detalle de caballería
-      if (UNIT_CATEGORIES.cavalry.includes(unitName)) {
-        if (!cavalryDetail[unitName]) {
-          cavalryDetail[unitName] = { total: 0, matches: 0 };
-        }
-        cavalryDetail[unitName].total += amount;
-        matchCavalryUnits.add(unitName);
-      }
     }
     for (const period of Object.keys(matchUnitsByPeriod)) {
       for (const unitName of matchUnitsByPeriod[period]) {
         unitsByAgePeriod[period][unitName].matches++;
       }
-    }
-    for (const unitName of matchCavalryUnits) {
-      cavalryDetail[unitName].matches++;
     }
 
     if (mapName && typeof mapName === 'string') {
@@ -277,6 +298,14 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
         if (!keyTechsData[unit]) keyTechsData[unit] = { count: 0, times: [] };
         keyTechsData[unit].count++;
         keyTechsData[unit].times.push(tSec);
+      }
+
+      // Mejoras de unidades
+      if (UNIT_UPGRADES.includes(unit.toLowerCase())) {
+        if (!unitUpgrades[unit]) unitUpgrades[unit] = { count: 0, wins: 0, losses: 0 };
+        unitUpgrades[unit].count++;
+        if (winner) unitUpgrades[unit].wins++;
+        else unitUpgrades[unit].losses++;
       }
 
       // Contexto: unidades presentes al investigar esta tech
@@ -493,15 +522,32 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     stats.units_by_age_period[period] = sorted;
   }
 
-  // --- Detalle de caballería ---
-  stats.cavalry_detail = {};
-  const sortedCav = Object.entries(cavalryDetail)
+  // --- Unidades individuales (todas las categorías) ---
+  stats.unit_stats = {};
+  const sortedUnits = Object.entries(unitStats)
     .sort((a, b) => b[1].total - a[1].total);
-  for (const [unitName, data] of sortedCav) {
-    stats.cavalry_detail[unitName] = {
+  for (const [unitName, data] of sortedUnits) {
+    stats.unit_stats[unitName] = {
       total: data.total,
       matches: data.matches,
       avg: Math.round((data.total / data.matches) * 100) / 100,
+      wins: data.wins,
+      losses: data.losses,
+      wr: data.matches > 0 ? Math.round((data.wins * 100 / data.matches) * 100) / 100 : 0,
+    };
+  }
+
+  // --- Mejoras de unidades ---
+  stats.unit_upgrades = {};
+  const sortedUpgrades = Object.entries(unitUpgrades)
+    .sort((a, b) => b[1].count - a[1].count);
+  for (const [upgradeName, data] of sortedUpgrades) {
+    const games = data.wins + data.losses;
+    stats.unit_upgrades[upgradeName] = {
+      count: data.count,
+      wins: data.wins,
+      losses: data.losses,
+      wr: games > 0 ? Math.round((data.wins * 100 / games) * 100) / 100 : 0,
     };
   }
 
