@@ -32,6 +32,27 @@
       </div>
     </div>
 
+    <!-- Controls -->
+    <div class="controls-bar" id="controls-bar">
+      <div class="control-group">
+        <label for="ctrl-ladder">Ladder</label>
+        <select id="ctrl-ladder">
+          <option value="">Ambos</option>
+          <option value="rm_1v1">Ranked 1v1</option>
+          <option value="unranked">Unranked</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="ctrl-date-from">Desde</label>
+        <input type="date" id="ctrl-date-from" />
+      </div>
+      <div class="control-group">
+        <label for="ctrl-date-to">Hasta</label>
+        <input type="date" id="ctrl-date-to" />
+      </div>
+      <button class="btn-apply" id="btn-apply">Aplicar</button>
+    </div>
+
     <!-- Comparative section (appears when live match detected) -->
     <div id="comparative"></div>
 

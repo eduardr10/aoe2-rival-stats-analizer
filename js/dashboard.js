@@ -13,21 +13,75 @@ let isAnalyzingRival = false;
 let currentRivalId = null;
 let currentRivalName = null;
 
-export async function initDashboard() {
+function readControls() {
   const params = new URLSearchParams(window.location.search);
-  const playerId = params.get('player_id') || DEFAULT_PLAYER_ID;
-  const pages = parseInt(params.get('pages') || '1');
-  const perPage = parseInt(params.get('per_page') || '10');
-  const leaderboard = params.get('leaderboard') || null; // null = ambos
+  return {
+    playerId: params.get('player_id') || DEFAULT_PLAYER_ID,
+    pages: parseInt(params.get('pages') || '1'),
+    perPage: parseInt(params.get('per_page') || '10'),
+    leaderboard: params.get('leaderboard') || '',
+    dateFrom: params.get('date_from') || '',
+    dateTo: params.get('date_to') || '',
+  };
+}
+
+function syncControlsToURL() {
+  const url = new URL(window.location.href);
+  const ladder = document.getElementById('ctrl-ladder')?.value || '';
+  const dateFrom = document.getElementById('ctrl-date-from')?.value || '';
+  const dateTo = document.getElementById('ctrl-date-to')?.value || '';
+
+  if (ladder) url.searchParams.set('leaderboard', ladder);
+  else url.searchParams.delete('leaderboard');
+
+  if (dateFrom) url.searchParams.set('date_from', dateFrom);
+  else url.searchParams.delete('date_from');
+
+  if (dateTo) url.searchParams.set('date_to', dateTo);
+  else url.searchParams.delete('date_to');
+
+  window.history.replaceState({}, '', url.toString());
+  return readControls();
+}
+
+function syncURLToControls(cfg) {
+  const sel = document.getElementById('ctrl-ladder');
+  const df = document.getElementById('ctrl-date-from');
+  const dt = document.getElementById('ctrl-date-to');
+  if (sel) sel.value = cfg.leaderboard;
+  if (df) df.value = cfg.dateFrom;
+  if (dt) dt.value = cfg.dateTo;
+}
+
+export async function initDashboard() {
+  let cfg = readControls();
+  syncURLToControls(cfg);
+
   const container = document.getElementById('dashboard');
   container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
 
   try {
-    currentPlayerStats = await runSelfAnalysis(playerId, pages, perPage, leaderboard);
+    currentPlayerStats = await runSelfAnalysis(cfg.playerId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
     renderDashboard(currentPlayerStats);
   } catch (err) {
     console.error(err);
     container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
+  }
+
+  // Botón Aplicar
+  const btnApply = document.getElementById('btn-apply');
+  if (btnApply) {
+    btnApply.addEventListener('click', async () => {
+      cfg = syncControlsToURL();
+      container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
+      try {
+        currentPlayerStats = await runSelfAnalysis(cfg.playerId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
+        renderDashboard(currentPlayerStats);
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
+      }
+    });
   }
 
   // Botón analizar rival
@@ -40,7 +94,7 @@ export async function initDashboard() {
       btnAnalyze.disabled = true;
 
       try {
-        const rivalStats = await runSelfAnalysis(currentRivalId, pages, perPage, leaderboard);
+        const rivalStats = await runSelfAnalysis(currentRivalId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
         renderComparative(currentPlayerStats, rivalStats, currentRivalName);
         btnAnalyze.textContent = 'Análisis listo';
       } catch (err) {
@@ -54,7 +108,7 @@ export async function initDashboard() {
   }
 
   // Iniciar WebSocket para detectar partidas 1v1
-  initWebSocket(playerId, 'self', async ({ matchData, rivalProfileId }) => {
+  initWebSocket(cfg.playerId, 'self', async ({ matchData, rivalProfileId }) => {
     const banner = document.getElementById('live-match-banner');
     const rivalName = matchData.players.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
 
@@ -69,7 +123,6 @@ export async function initDashboard() {
     if (btnProfile) {
       const url = new URL(window.location.href);
       url.searchParams.set('player_id', rivalProfileId);
-      // Preservar pages, per_page, leaderboard
       btnProfile.href = url.toString();
     }
 
@@ -99,7 +152,23 @@ function findPlayerInMatch(m, playerId) {
   return null;
 }
 
-async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam) {
+function matchInDateRange(started, dateFrom, dateTo) {
+  if (!started) return true;
+  const d = new Date(started);
+  if (dateFrom) {
+    const from = new Date(dateFrom);
+    from.setHours(0, 0, 0, 0);
+    if (d < from) return false;
+  }
+  if (dateTo) {
+    const to = new Date(dateTo);
+    to.setHours(23, 59, 59, 999);
+    if (d > to) return false;
+  }
+  return true;
+}
+
+async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateFrom, dateTo) {
   const playedCivNum = null;
   const opponentCivNum = null;
   const effPages = pages || PAGES;
@@ -124,6 +193,9 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam) {
 
         const found = findPlayerInMatch(m, playerId);
         if (!found) return null;
+
+        // Filtro por fecha
+        if (!matchInDateRange(m.started, dateFrom, dateTo)) return null;
 
         const profileTeamIndex = found.teamIndex;
         const opponentTeamIndex = profileTeamIndex === 0 ? 1 : 0;
