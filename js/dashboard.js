@@ -40,7 +40,7 @@ export async function initDashboard() {
       btnAnalyze.disabled = true;
 
       try {
-        const rivalStats = await runSelfAnalysis(currentRivalId, pages, perPage);
+        const rivalStats = await runSelfAnalysis(currentRivalId, pages, perPage, leaderboard);
         renderComparative(currentPlayerStats, rivalStats, currentRivalName);
         btnAnalyze.textContent = 'Análisis listo';
       } catch (err) {
@@ -63,6 +63,15 @@ export async function initDashboard() {
 
     banner.querySelector('.live-match-vs').textContent = `vs ${rivalName}`;
     banner.classList.add('active');
+
+    // Actualizar link "Ver perfil del rival"
+    const btnProfile = document.getElementById('btn-rival-profile');
+    if (btnProfile) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('player_id', rivalProfileId);
+      // Preservar pages, per_page, leaderboard
+      btnProfile.href = url.toString();
+    }
 
     // Resetear botón
     if (btnAnalyze) {
