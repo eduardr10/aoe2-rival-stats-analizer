@@ -897,6 +897,24 @@ body {
   color: var(--accent-blue);
 }
 
+/* Loading bar */
+.loading-bar {
+  width: 100%;
+  max-width: 300px;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  background: var(--accent-blue);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
 /* Footer */
 .dashboard-footer {
   text-align: center;

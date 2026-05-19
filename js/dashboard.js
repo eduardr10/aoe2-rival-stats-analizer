@@ -166,7 +166,18 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam) {
     match_id: 'self',
   };
 
-  let stats = await analyzeMatches(allMatches, parseInt(playerId), playedCivNum, opponentCivNum, dataMainPlayer);
+  let stats = await analyzeMatches(allMatches, parseInt(playerId), playedCivNum, opponentCivNum, dataMainPlayer, (progress) => {
+    const container = document.getElementById('dashboard');
+    if (container) {
+      const pct = Math.round((progress.current / progress.total) * 100);
+      const cacheLabel = progress.fromCache ? ' (cache)' : '';
+      container.innerHTML = `<div class="loading-state">
+        <div class="loading-spinner"></div>
+        <div>Analizando partida ${progress.current} de ${progress.total}${cacheLabel}...</div>
+        <div class="loading-bar"><div class="loading-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }
+  });
   stats.total_wins = allMatches.filter(m => m.won).length;
   stats.win_percent = stats.total ? Math.round(stats.total_wins * 100 / stats.total * 100) / 100 : 0;
   stats.player_id = playerId;
@@ -192,7 +203,15 @@ function renderDashboard(stats) {
   const headerAvatar = document.getElementById('header-avatar');
 
   if (headerName) headerName.textContent = stats.player_name || 'Unknown';
-  if (headerMeta) headerMeta.textContent = `Rating: ${stats.rating || '—'} · ${stats.analyzed} partidas analizadas`;
+  let ladderText = '';
+  if (stats.ladder_counts && Object.keys(stats.ladder_counts).length > 0) {
+    const parts = Object.entries(stats.ladder_counts).map(([lb, count]) => {
+      const label = lb === 'rm_1v1' ? 'Ranked' : lb === 'unranked' ? 'Unranked' : lb;
+      return `${count} ${label}`;
+    });
+    ladderText = ` · ${parts.join(' + ')}`;
+  }
+  if (headerMeta) headerMeta.textContent = `Rating: ${stats.rating || '—'} · ${stats.analyzed} partidas${ladderText}`;
   if (headerBadge) {
     headerBadge.textContent = `${stats.win_percent || 0}% WR`;
     headerBadge.className = `wr-badge ${(stats.win_percent || 0) >= 50 ? 'good' : 'bad'}`;

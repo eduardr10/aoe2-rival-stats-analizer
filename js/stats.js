@@ -39,7 +39,7 @@ function categorizeUnit(unitName) {
   return 'other';
 }
 
-export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, dataMainPlayer) {
+export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, dataMainPlayer, onProgress = null) {
   const stats = {
     total: matches.length,
     player_name: matches.length > 0 ? (matches[0].player_name || 'Unknown') : 'Unknown',
@@ -70,6 +70,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     analyzed: 0,
     skipped: 0,
     all_match_features: [],
+    ladder_counts: {},  // { rm_1v1: 5, unranked: 8 }
     unit_categories: {},
     unit_categories_wins: {},
     unit_categories_losses: {},
@@ -381,6 +382,13 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     }
 
     stats.analyzed++;
+    const lb = match.leaderboard || 'unknown';
+    stats.ladder_counts[lb] = (stats.ladder_counts[lb] || 0) + 1;
+
+    if (onProgress) {
+      onProgress({ current: i + 1, total: matches.length, matchId, fromCache });
+    }
+
     if (meEapm !== null) stats.eapm.push(meEapm);
     if (mePreferRandom !== null) stats.prefer_random.push(mePreferRandom ? 1 : 0);
     if (meCiv) {
