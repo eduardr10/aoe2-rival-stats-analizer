@@ -607,6 +607,135 @@ body {
   color: var(--text-secondary);
 }
 
+/* Units by age */
+.age-units-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.age-units-section {
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.age-units-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.age-units-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.age-units-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.age-unit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.age-unit-name {
+  color: var(--text-primary);
+}
+
+.age-unit-count {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Cavalry detail */
+.cavalry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cavalry-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cavalry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cavalry-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cavalry-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cavalry-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cavalry-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Tech context */
+.tech-context-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tech-context-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tech-context-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tech-context-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tech-context-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tech-context-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+
 /* Footer */
 .dashboard-footer {
   text-align: center;

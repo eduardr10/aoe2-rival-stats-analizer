@@ -63,7 +63,7 @@ export async function fetchAnalysis(matchId) {
   const cached = await getCachedAnalysis(matchId);
   if (cached) {
     console.log(`[cache] analysis ${matchId}`);
-    return cached;
+    return { data: cached, fromCache: true };
   }
 
   try {
@@ -72,9 +72,9 @@ export async function fetchAnalysis(matchId) {
     if (data) {
       await setCachedAnalysis(matchId, data);
     }
-    return data;
+    return { data, fromCache: false };
   } catch (e) {
     console.error(`fetchAnalysis error for ${matchId}:`, e);
-    return null;
+    return { data: null, fromCache: false };
   }
 }

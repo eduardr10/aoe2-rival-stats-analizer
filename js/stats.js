@@ -84,12 +84,32 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   const tc3Times = [];
   const allMatchFeatures = [];
 
+  // Unidades por periodo de edad
+  const unitsByAgePeriod = {
+    'pre-feudal': {},
+    'pre-castle': {},
+    'pre-imperial': {},
+  };
+  const cavalryDetail = {};
+
+  // Contexto de techs: unidades presentes al investigar
+  const techContextData = {
+    'wheelbarrow': { unitTypes: ['villager'], values: [] },
+    'hand cart': { unitTypes: ['villager'], values: [] },
+    'fletching': { unitTypes: ['archer'], values: [] },
+    'bodkin arrow': { unitTypes: ['archer', 'crossbowman'], values: [] },
+    'bloodlines': { unitTypes: ['scout_cavalry'], values: [] },
+    'scale barding armor': { unitTypes: ['knight', 'scout_cavalry', 'light_cavalry'], values: [] },
+    'forging': { unitTypes: ['militia', 'men-at-arms', 'spearman', 'scout_cavalry', 'knight'], values: [] },
+    'iron casting': { unitTypes: ['militia', 'men-at-arms', 'long_swordsman', 'knight', 'cavalier'], values: [] },
+  };
+
   for (let i = 0; i < matches.length; i++) {
     const match = matches[i];
     const matchId = match.match_id;
-    const data = await fetchAnalysis(matchId);
+    const { data, fromCache } = await fetchAnalysis(matchId);
 
-    if (i < matches.length - 1) await sleep(500);
+    if (!fromCache && i < matches.length - 1) await sleep(500);
 
     if (!data) { stats.skipped++; continue; }
 
@@ -110,31 +130,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
 
     const techs = mePlayer.queuedTechs || [];
 
-    // Unidades por categoría
-    const queuedUnits = mePlayer.queuedUnits || [];
-    const matchCategories = new Set();
-    for (const u of queuedUnits) {
-      if (!u.unit) continue;
-      const cat = categorizeUnit(u.unit);
-      if (cat !== 'other') {
-        matchCategories.add(cat);
-        stats.unit_categories[cat] = (stats.unit_categories[cat] || 0) + (u.amount || 1);
-      }
-    }
-    for (const cat of matchCategories) {
-      if (winner) {
-        stats.unit_categories_wins[cat] = (stats.unit_categories_wins[cat] || 0) + 1;
-      } else {
-        stats.unit_categories_losses[cat] = (stats.unit_categories_losses[cat] || 0) + 1;
-      }
-    }
-
-    if (mapName && typeof mapName === 'string') {
-      stats.map_played[mapName] = (stats.map_played[mapName] || 0) + 1;
-      if (winner) stats.win_maps[mapName] = (stats.win_maps[mapName] || 0) + 1;
-      else stats.lose_maps[mapName] = (stats.lose_maps[mapName] || 0) + 1;
-    }
-
+    // Parse uptimes PRIMERO (lo necesitamos para clasificar unidades por edad)
     const meUptimes = {};
     if (mePlayer.uptimes && Array.isArray(mePlayer.uptimes)) {
       for (const uptime of mePlayer.uptimes) {
@@ -158,6 +154,76 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
           }
         }
       }
+    }
+
+    // Unidades por categoría
+    const queuedUnits = mePlayer.queuedUnits || [];
+    const matchCategories = new Set();
+    for (const u of queuedUnits) {
+      if (!u.unit) continue;
+      const cat = categorizeUnit(u.unit);
+      if (cat !== 'other') {
+        matchCategories.add(cat);
+        stats.unit_categories[cat] = (stats.unit_categories[cat] || 0) + (u.amount || 1);
+      }
+    }
+    for (const cat of matchCategories) {
+      if (winner) {
+        stats.unit_categories_wins[cat] = (stats.unit_categories_wins[cat] || 0) + 1;
+      } else {
+        stats.unit_categories_losses[cat] = (stats.unit_categories_losses[cat] || 0) + 1;
+      }
+    }
+
+    // Unidades por periodo de edad
+    const matchUnitsByPeriod = { 'pre-feudal': new Set(), 'pre-castle': new Set(), 'pre-imperial': new Set() };
+    const matchCavalryUnits = new Set();
+    for (const u of queuedUnits) {
+      if (!u.unit || !u.timestamp) continue;
+      const uSec = parseTimestamp(u.timestamp);
+      if (uSec === null) continue;
+      const unitName = u.unit.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+      const amount = u.amount || 1;
+
+      let period = null;
+      if (meUptimes.feudal != null && uSec < meUptimes.feudal) {
+        period = 'pre-feudal';
+      } else if (meUptimes.castle != null && uSec < meUptimes.castle) {
+        period = 'pre-castle';
+      } else if (meUptimes.imperial != null && uSec < meUptimes.imperial) {
+        period = 'pre-imperial';
+      }
+
+      if (period) {
+        if (!unitsByAgePeriod[period][unitName]) {
+          unitsByAgePeriod[period][unitName] = { total: 0, matches: 0 };
+        }
+        unitsByAgePeriod[period][unitName].total += amount;
+        matchUnitsByPeriod[period].add(unitName);
+      }
+
+      // Detalle de caballería
+      if (UNIT_CATEGORIES.cavalry.includes(unitName)) {
+        if (!cavalryDetail[unitName]) {
+          cavalryDetail[unitName] = { total: 0, matches: 0 };
+        }
+        cavalryDetail[unitName].total += amount;
+        matchCavalryUnits.add(unitName);
+      }
+    }
+    for (const period of Object.keys(matchUnitsByPeriod)) {
+      for (const unitName of matchUnitsByPeriod[period]) {
+        unitsByAgePeriod[period][unitName].matches++;
+      }
+    }
+    for (const unitName of matchCavalryUnits) {
+      cavalryDetail[unitName].matches++;
+    }
+
+    if (mapName && typeof mapName === 'string') {
+      stats.map_played[mapName] = (stats.map_played[mapName] || 0) + 1;
+      if (winner) stats.win_maps[mapName] = (stats.win_maps[mapName] || 0) + 1;
+      else stats.lose_maps[mapName] = (stats.lose_maps[mapName] || 0) + 1;
     }
 
     // TCs post-castle (2do y 3er)
@@ -201,6 +267,22 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
         if (!keyTechsData[unit]) keyTechsData[unit] = { count: 0, times: [] };
         keyTechsData[unit].count++;
         keyTechsData[unit].times.push(tSec);
+      }
+
+      // Contexto: unidades presentes al investigar esta tech
+      const techKey = unit.toLowerCase();
+      if (techContextData[techKey]) {
+        let unitCount = 0;
+        for (const u of queuedUnits) {
+          if (!u.unit || !u.timestamp) continue;
+          const uSec = parseTimestamp(u.timestamp);
+          if (uSec === null || uSec > tSec) continue;
+          const queuedUnit = u.unit.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+          if (techContextData[techKey].unitTypes.includes(queuedUnit)) {
+            unitCount += u.amount || 1;
+          }
+        }
+        techContextData[techKey].values.push(unitCount);
       }
     }
 
@@ -372,6 +454,42 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       frequency: freq,
       avg_time: avgTime,
       category: getTechCategory(techName),
+    };
+  }
+
+  // --- Unidades por periodo de edad ---
+  stats.units_by_age_period = {};
+  for (const [period, units] of Object.entries(unitsByAgePeriod)) {
+    const sorted = Object.entries(units)
+      .sort((a, b) => b[1].total - a[1].total)
+      .reduce((obj, [unitName, data]) => {
+        obj[unitName] = { total: data.total, matches: data.matches, avg: Math.round((data.total / data.matches) * 100) / 100 };
+        return obj;
+      }, {});
+    stats.units_by_age_period[period] = sorted;
+  }
+
+  // --- Detalle de caballería ---
+  stats.cavalry_detail = {};
+  const sortedCav = Object.entries(cavalryDetail)
+    .sort((a, b) => b[1].total - a[1].total);
+  for (const [unitName, data] of sortedCav) {
+    stats.cavalry_detail[unitName] = {
+      total: data.total,
+      matches: data.matches,
+      avg: Math.round((data.total / data.matches) * 100) / 100,
+    };
+  }
+
+  // --- Contexto de techs (unidades presentes al investigar) ---
+  stats.tech_context = {};
+  for (const [techKey, ctx] of Object.entries(techContextData)) {
+    if (ctx.values.length === 0) continue;
+    const avg = Math.round((ctx.values.reduce((a, b) => a + b, 0) / ctx.values.length) * 100) / 100;
+    stats.tech_context[techKey] = {
+      unit_types: ctx.unitTypes,
+      avg_count: avg,
+      samples: ctx.values.length,
     };
   }
 

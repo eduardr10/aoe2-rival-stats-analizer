@@ -73,7 +73,7 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
     allMatches.push(...processed);
 
     const hasMorePages = pageMatches.length === perPage;
-    const enoughMatches = playedCivilization ? allMatches.length >= 5 : true;
+    const enoughMatches = playedCivilization ? allMatches.length >= 5 : page >= pages;
     if (!hasMorePages || enoughMatches) break;
 
     page++;

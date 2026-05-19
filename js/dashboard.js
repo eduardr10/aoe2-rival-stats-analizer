@@ -137,14 +137,20 @@ function renderDashboard(stats) {
   html += renderEconomyCard(stats);
   html += '</div>';
 
-  // Row 3: Units + Techs + Market
+  // Row 3: Units by Age + Cavalry Detail + Techs
   html += '<div class="grid grid-3">';
-  html += renderUnitsCard(stats);
+  html += renderUnitsByAgeCard(stats);
+  html += renderCavalryDetailCard(stats);
   html += renderTechsCard(stats);
-  html += renderMarketCard(stats);
   html += '</div>';
 
-  // Row 4: Playstyle (full width)
+  // Row 4: Market + Tech Context
+  html += '<div class="grid grid-2">';
+  html += renderMarketCard(stats);
+  html += renderTechContextCard(stats);
+  html += '</div>';
+
+  // Row 5: Playstyle (full width)
   html += '<div class="grid">';
   html += renderPlaystyleCard(stats);
   html += '</div>';
@@ -529,6 +535,148 @@ function renderMarketCard(stats) {
       html += `</div>`;
     }
 
+    html += `</div>`;
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderUnitsByAgeCard(stats) {
+  const byAge = stats.units_by_age_period || {};
+  const periods = ['pre-feudal', 'pre-castle', 'pre-imperial'];
+  const periodLabels = {
+    'pre-feudal': 'Antes de Feudal',
+    'pre-castle': 'Feudal → Castle',
+    'pre-imperial': 'Castle → Imperial',
+  };
+
+  let hasAny = false;
+  for (const p of periods) {
+    if (Object.keys(byAge[p] || {}).length > 0) { hasAny = true; break; }
+  }
+  if (!hasAny) {
+    return '<div class="card"><div class="card-title">Unidades por Edad</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+  }
+
+  let html = '<div class="card">';
+  html += '<div class="card-title">Unidades por Edad</div>';
+  html += '<div class="age-units-container">';
+
+  for (const period of periods) {
+    const units = byAge[period] || {};
+    const entries = Object.entries(units).sort((a, b) => b[1].total - a[1].total);
+    if (entries.length === 0) continue;
+
+    html += `<div class="age-units-section">`;
+    html += `<div class="age-units-label">${periodLabels[period]}</div>`;
+    html += `<div class="age-units-list">`;
+    for (const [unitName, data] of entries.slice(0, 8)) {
+      const display = unitName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      html += `<div class="age-unit-row">`;
+      html += `<span class="age-unit-name">${display}</span>`;
+      html += `<span class="age-unit-count">${data.total} <span style="font-size:10px;color:var(--text-muted);">(${data.matches}p)</span></span>`;
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderCavalryDetailCard(stats) {
+  const cav = stats.cavalry_detail || {};
+  const entries = Object.entries(cav);
+  if (entries.length === 0) {
+    return '<div class="card"><div class="card-title">Detalle Caballería</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+  }
+
+  const cavColors = {
+    scout_cavalry: 'var(--accent-blue)',
+    light_cavalry: 'var(--accent-blue)',
+    hussar: 'var(--accent-blue)',
+    knight: 'var(--accent-red)',
+    cavalier: 'var(--accent-red)',
+    paladin: 'var(--accent-red)',
+    camel_rider: 'var(--accent-green)',
+    heavy_camel_rider: 'var(--accent-green)',
+    steppe_lancer: 'var(--accent-orange)',
+    elite_steppe_lancer: 'var(--accent-orange)',
+  };
+
+  const maxTotal = entries[0][1].total || 1;
+
+  let html = '<div class="card">';
+  html += '<div class="card-title">Detalle Caballería</div>';
+  html += '<div class="cavalry-list">';
+
+  for (const [unitName, data] of entries) {
+    const color = cavColors[unitName] || 'var(--text-muted)';
+    const display = unitName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const barWidth = (data.total / maxTotal) * 100;
+
+    html += `<div class="cavalry-row">`;
+    html += `<div class="cavalry-header">`;
+    html += `<span class="cavalry-name" style="color:${color}">${display}</span>`;
+    html += `<span class="cavalry-count">${data.total} <span style="font-size:10px;color:var(--text-muted);">(${data.matches}p)</span></span>`;
+    html += `</div>`;
+    html += `<div class="cavalry-bar-track">`;
+    html += `<div class="cavalry-bar" style="width:${barWidth}%;background:${color}"></div>`;
+    html += `</div>`;
+    html += `</div>`;
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderTechContextCard(stats) {
+  const ctx = stats.tech_context || {};
+  const entries = Object.entries(ctx);
+  if (entries.length === 0) {
+    return '<div class="card"><div class="card-title">Contexto de Techs</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+  }
+
+  const techLabels = {
+    'wheelbarrow': 'Wheelbarrow',
+    'hand cart': 'Hand Cart',
+    'fletching': 'Fletching',
+    'bodkin arrow': 'Bodkin Arrow',
+    'bloodlines': 'Bloodlines',
+    'scale barding armor': 'Scale Barding',
+    'forging': 'Forging',
+    'iron casting': 'Iron Casting',
+  };
+  const unitLabels = {
+    'villager': 'Aldeanos',
+    'archer': 'Arqueros',
+    'crossbowman': 'Arqueros',
+    'scout_cavalry': 'Scouts',
+    'knight': 'Caballería',
+    'light_cavalry': 'Caballería',
+    'militia': 'Infantería',
+    'men-at-arms': 'Infantería',
+    'long_swordsman': 'Infantería',
+    'cavalier': 'Caballería',
+    'spearman': 'Infantería',
+  };
+
+  let html = '<div class="card">';
+  html += '<div class="card-title">Contexto de Techs</div>';
+  html += '<div class="tech-context-list">';
+
+  for (const [techKey, data] of entries) {
+    const label = techLabels[techKey] || techKey;
+    const unitType = data.unit_types[0] || '';
+    const unitLabel = unitLabels[unitType] || unitType;
+
+    html += `<div class="tech-context-row">`;
+    html += `<div class="tech-context-header">`;
+    html += `<span class="tech-context-name">${label}</span>`;
+    html += `<span class="tech-context-value">${Math.round(data.avg_count * 10) / 10} ${unitLabel}</span>`;
+    html += `</div>`;
+    html += `<div style="font-size:10px;color:var(--text-muted);">Promedio en ${data.samples} partidas</div>`;
     html += `</div>`;
   }
 
