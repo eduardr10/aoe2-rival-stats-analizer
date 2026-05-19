@@ -51,6 +51,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     map_played: {},
     map_win_percent: {},
     civ_played: {},
+    civ_win: {},
+    civ_loss: {},
     market_resources_by_age: {
       feudal: { buy: {}, sell: {} },
       castle: { buy: {}, sell: {} },
@@ -374,7 +376,14 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     stats.analyzed++;
     if (meEapm !== null) stats.eapm.push(meEapm);
     if (mePreferRandom !== null) stats.prefer_random.push(mePreferRandom ? 1 : 0);
-    if (meCiv) stats.civ_played[meCiv] = (stats.civ_played[meCiv] || 0) + 1;
+    if (meCiv) {
+      stats.civ_played[meCiv] = (stats.civ_played[meCiv] || 0) + 1;
+      if (winner) {
+        stats.civ_win[meCiv] = (stats.civ_win[meCiv] || 0) + 1;
+      } else {
+        stats.civ_loss[meCiv] = (stats.civ_loss[meCiv] || 0) + 1;
+      }
+    }
 
     allMatchFeatures.push(features);
   }

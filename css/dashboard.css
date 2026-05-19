@@ -320,6 +320,120 @@ body {
   font-weight: 600;
 }
 
+/* Civs detailed */
+.civs-list-detailed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.civ-detailed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.civ-detailed-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.civ-detailed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.civ-detailed-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.civ-detailed-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.civ-detailed-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.civ-detailed-bar {
+  height: 100%;
+  background: var(--accent-blue);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.civ-detailed-wr {
+  font-size: 11px;
+  font-weight: 600;
+}
+.civ-detailed-wr.good { color: var(--accent-green); }
+.civ-detailed-wr.bad { color: var(--accent-red); }
+.civ-detailed-wr.neutral { color: var(--text-muted); }
+
+/* Maps detailed */
+.map-detailed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.map-detailed-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.map-detailed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.map-detailed-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.map-detailed-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.map-detailed-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.map-detailed-bar {
+  height: 100%;
+  background: var(--accent-purple);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.map-detailed-wr {
+  font-size: 11px;
+  font-weight: 600;
+}
+.map-detailed-wr.good { color: var(--accent-green); }
+.map-detailed-wr.bad { color: var(--accent-red); }
+.map-detailed-wr.neutral { color: var(--text-muted); }
+
 /* Economy */
 .economy-row {
   display: flex;

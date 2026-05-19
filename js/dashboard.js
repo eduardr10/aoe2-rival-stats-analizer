@@ -15,11 +15,13 @@ let isAnalyzingRival = false;
 export async function initDashboard() {
   const params = new URLSearchParams(window.location.search);
   const playerId = params.get('player_id') || DEFAULT_PLAYER_ID;
+  const pages = parseInt(params.get('pages') || '1');
+  const perPage = parseInt(params.get('per_page') || '10');
   const container = document.getElementById('dashboard');
   container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
 
   try {
-    currentPlayerStats = await runSelfAnalysis(playerId);
+    currentPlayerStats = await runSelfAnalysis(playerId, pages, perPage);
     renderDashboard(currentPlayerStats);
   } catch (err) {
     console.error(err);
@@ -37,7 +39,7 @@ export async function initDashboard() {
     banner.classList.add('active');
 
     try {
-      const rivalStats = await runSelfAnalysis(rivalProfileId);
+      const rivalStats = await runSelfAnalysis(rivalProfileId, pages, perPage);
       renderComparative(currentPlayerStats, rivalStats, rivalName);
     } catch (err) {
       console.error('Error analizando rival:', err);
@@ -47,15 +49,17 @@ export async function initDashboard() {
   });
 }
 
-async function runSelfAnalysis(playerId) {
+async function runSelfAnalysis(playerId, pages, perPage) {
   const playedCivNum = null;
   const opponentCivNum = null;
+  const effPages = pages || PAGES;
+  const effPerPage = perPage || PER_PAGE;
 
   let allMatches = [];
   let page = 1;
 
-  while (page <= PAGES) {
-    const pageMatches = await fetchMatches(playerId, LEADERBOARD, page, PER_PAGE);
+  while (page <= effPages) {
+    const pageMatches = await fetchMatches(playerId, LEADERBOARD, page, effPerPage);
     if (pageMatches.length === 0) break;
 
     const processed = pageMatches.map(m => {
@@ -74,7 +78,7 @@ async function runSelfAnalysis(playerId) {
     }).filter(Boolean);
 
     allMatches.push(...processed);
-    if (pageMatches.length < PER_PAGE) break;
+    if (pageMatches.length < effPerPage) break;
     page++;
     await sleep(300);
   }
@@ -358,15 +362,39 @@ function renderAgeTimingsCard(stats) {
 
 function renderCivsCard(stats) {
   const civs = stats.civ_played_percent || {};
+  const civCounts = stats.civ_played || {};
+  const civWins = stats.civ_win || {};
+  const civLosses = stats.civ_loss || {};
+
   if (Object.keys(civs).length === 0) {
     return '<div class="card"><div class="card-title">Civilizaciones</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
   }
 
+  const sorted = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const maxPct = sorted[0][1];
+
   let html = '<div class="card">';
   html += '<div class="card-title">Civilizaciones</div>';
-  html += '<div class="civs-list">';
-  for (const [civ, pct] of Object.entries(civs)) {
-    html += `<span class="civ-pill">${civ} <span class="civ-pct">${pct}%</span></span>`;
+  html += '<div class="civs-list-detailed">';
+  for (const [civ, pct] of sorted) {
+    const count = civCounts[civ] || 0;
+    const wins = civWins[civ] || 0;
+    const losses = civLosses[civ] || 0;
+    const games = wins + losses;
+    const wr = games > 0 ? Math.round((wins * 100 / games) * 100) / 100 : 0;
+    const wrClass = wr >= 55 ? 'good' : wr <= 40 ? 'bad' : 'neutral';
+    const barWidth = (pct / maxPct) * 100;
+
+    html += `<div class="civ-detailed-row">`;
+    html += `<div class="civ-detailed-header">`;
+    html += `<span class="civ-detailed-name">${civ}</span>`;
+    html += `<span class="civ-detailed-meta">${count}g · ${wr}% WR</span>`;
+    html += `</div>`;
+    html += `<div class="civ-detailed-bar-track">`;
+    html += `<div class="civ-detailed-bar" style="width:${barWidth}%"></div>`;
+    html += `</div>`;
+    html += `<div class="civ-detailed-wr ${wrClass}">${wins}W / ${losses}L</div>`;
+    html += `</div>`;
   }
   html += '</div></div>';
   return html;
@@ -374,21 +402,32 @@ function renderCivsCard(stats) {
 
 function renderMapsCard(stats) {
   const maps = stats.map_played_percent || {};
+  const mapCounts = stats.map_played || {};
   if (Object.keys(maps).length === 0) {
     return '<div class="card"><div class="card-title">Mapas</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
   }
 
   const sorted = Object.entries(maps).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxPct = sorted[0][1];
+
   let html = '<div class="card">';
   html += '<div class="card-title">Top Maps</div>';
   for (const [map, pct] of sorted) {
     const wr = stats.map_win_percent?.[map] ?? 0;
     const wrClass = wr >= 55 ? 'good' : wr <= 40 ? 'bad' : 'neutral';
-    html += `<div class="map-row">
-      <div class="map-name">${map}</div>
-      <div class="map-play-pct">${pct}%</div>
-      <div class="map-wr ${wrClass}">${wr}% WR</div>
-    </div>`;
+    const count = mapCounts[map] || 0;
+    const barWidth = (pct / maxPct) * 100;
+
+    html += `<div class="map-detailed-row">`;
+    html += `<div class="map-detailed-header">`;
+    html += `<span class="map-detailed-name">${map}</span>`;
+    html += `<span class="map-detailed-meta">${count}g · ${wr}% WR</span>`;
+    html += `</div>`;
+    html += `<div class="map-detailed-bar-track">`;
+    html += `<div class="map-detailed-bar" style="width:${barWidth}%"></div>`;
+    html += `</div>`;
+    html += `<div class="map-detailed-wr ${wrClass}">${pct}% pick rate</div>`;
+    html += `</div>`;
   }
   html += '</div>';
   return html;
@@ -575,7 +614,7 @@ function renderUnitsByAgeCard(stats) {
       const display = unitName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       html += `<div class="age-unit-row">`;
       html += `<span class="age-unit-name">${display}</span>`;
-      html += `<span class="age-unit-count">${data.total} <span style="font-size:10px;color:var(--text-muted);">(${data.matches}p)</span></span>`;
+      html += `<span class="age-unit-count">${data.avg} <span style="font-size:10px;color:var(--text-muted);">avg (${data.total} tot)</span></span>`;
       html += `</div>`;
     }
     html += `</div></div>`;
@@ -619,7 +658,7 @@ function renderCavalryDetailCard(stats) {
     html += `<div class="cavalry-row">`;
     html += `<div class="cavalry-header">`;
     html += `<span class="cavalry-name" style="color:${color}">${display}</span>`;
-    html += `<span class="cavalry-count">${data.total} <span style="font-size:10px;color:var(--text-muted);">(${data.matches}p)</span></span>`;
+    html += `<span class="cavalry-count">${data.avg} avg <span style="font-size:10px;color:var(--text-muted);">(${data.total} tot)</span></span>`;
     html += `</div>`;
     html += `<div class="cavalry-bar-track">`;
     html += `<div class="cavalry-bar" style="width:${barWidth}%;background:${color}"></div>`;
