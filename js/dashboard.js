@@ -5,7 +5,6 @@ import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js'
 import { initWebSocket } from './websocket.js';
 
 const DEFAULT_PLAYER_ID = '8621659';
-const LEADERBOARD = 'rm_1v1';
 const PER_PAGE = 10;
 const PAGES = 1;
 
@@ -19,16 +18,36 @@ export async function initDashboard() {
   const playerId = params.get('player_id') || DEFAULT_PLAYER_ID;
   const pages = parseInt(params.get('pages') || '1');
   const perPage = parseInt(params.get('per_page') || '10');
+  const leaderboard = params.get('leaderboard') || null; // null = ambos
   const container = document.getElementById('dashboard');
   container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
 
   try {
-    currentPlayerStats = await runSelfAnalysis(playerId, pages, perPage);
+    currentPlayerStats = await runSelfAnalysis(playerId, pages, perPage, leaderboard);
     renderDashboard(currentPlayerStats);
   } catch (err) {
     console.error(err);
     container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
   }
+
+  // Iniciar WebSocket para detectar partidas 1v1
+  initWebSocket(playerId, 'self', async ({ matchData, rivalProfileId }) => {
+    const banner = document.getElementById('live-match-banner');
+    const rivalName = matchData.players.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
+
+    currentRivalId = rivalProfileId;
+    currentRivalName = rivalName;
+
+    banner.querySelector('.live-match-vs').textContent = `vs ${rivalName}`;
+    banner.classList.add('active');
+
+    // Resetear botón
+    if (btnAnalyze) {
+      btnAnalyze.textContent = 'Analizar Rival';
+      btnAnalyze.disabled = false;
+    }
+  });
+}
 
   // Botón analizar rival
   const btnAnalyze = document.getElementById('btn-analyze-rival');
@@ -72,38 +91,80 @@ export async function initDashboard() {
   });
 }
 
-async function runSelfAnalysis(playerId, pages, perPage) {
+function is1v1Match(m) {
+  if (!m.teams || m.teams.length !== 2) return false;
+  return m.teams[0].players?.length === 1 && m.teams[1].players?.length === 1;
+}
+
+function findPlayerInMatch(m, playerId) {
+  for (let i = 0; i < m.teams.length; i++) {
+    const team = m.teams[i];
+    if (!team.players) continue;
+    for (const p of team.players) {
+      if (p.profileId === parseInt(playerId)) {
+        return { teamIndex: i, player: p };
+      }
+    }
+  }
+  return null;
+}
+
+async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam) {
   const playedCivNum = null;
   const opponentCivNum = null;
   const effPages = pages || PAGES;
   const effPerPage = perPage || PER_PAGE;
 
+  // Leaderboards a consultar
+  const leaderboards = leaderboardParam
+    ? [leaderboardParam]
+    : ['rm_1v1', 'unranked'];
+
   let allMatches = [];
-  let page = 1;
 
-  while (page <= effPages) {
-    const pageMatches = await fetchMatches(playerId, LEADERBOARD, page, effPerPage);
-    if (pageMatches.length === 0) break;
+  for (const lb of leaderboards) {
+    let page = 1;
+    while (page <= effPages) {
+      const pageMatches = await fetchMatches(playerId, lb, page, effPerPage);
+      if (pageMatches.length === 0) break;
 
-    const processed = pageMatches.map(m => {
-      const profileTeamIndex = m.teams[0].players[0].profileId === parseInt(playerId) ? 0 : 1;
-      const opponentTeamIndex = profileTeamIndex === 0 ? 1 : 0;
-      return {
-        match_id: m.matchId,
-        map_name: m.mapName || null,
-        player_name: m.teams[profileTeamIndex].players[0].name || null,
-        player_civ: m.teams[profileTeamIndex].players[0].civName || null,
-        opponent_civ: m.teams[opponentTeamIndex].players[0].civName || null,
-        won: m.teams[profileTeamIndex].players[0].won || false,
-        started: m.started || null,
-        finished: m.finished || null,
-      };
-    }).filter(Boolean);
+      const processed = pageMatches.map(m => {
+        // Para unranked, solo analizar 1v1
+        if (lb === 'unranked' && !is1v1Match(m)) return null;
 
-    allMatches.push(...processed);
-    if (pageMatches.length < effPerPage) break;
-    page++;
-    await sleep(300);
+        const found = findPlayerInMatch(m, playerId);
+        if (!found) return null;
+
+        const profileTeamIndex = found.teamIndex;
+        const opponentTeamIndex = profileTeamIndex === 0 ? 1 : 0;
+        const opponentTeam = m.teams[opponentTeamIndex];
+        const opponentPlayer = opponentTeam?.players?.[0];
+
+        return {
+          match_id: m.matchId,
+          map_name: m.mapName || null,
+          player_name: found.player.name || null,
+          player_civ: found.player.civName || null,
+          opponent_civ: opponentPlayer?.civName || null,
+          won: found.player.won || false,
+          started: m.started || null,
+          finished: m.finished || null,
+          leaderboard: lb,
+        };
+      }).filter(Boolean);
+
+      allMatches.push(...processed);
+      if (pageMatches.length < effPerPage) break;
+      page++;
+      await sleep(300);
+    }
+  }
+
+  // Ordenar por fecha más reciente y limitar al total esperado
+  allMatches.sort((a, b) => new Date(b.started) - new Date(a.started));
+  const maxMatches = effPages * effPerPage;
+  if (allMatches.length > maxMatches) {
+    allMatches = allMatches.slice(0, maxMatches);
   }
 
   if (allMatches.length === 0) {
