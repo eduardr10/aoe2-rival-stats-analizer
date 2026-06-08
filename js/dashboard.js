@@ -177,7 +177,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   // Leaderboards a consultar
   const leaderboards = leaderboardParam
     ? [leaderboardParam]
-    : ['rm_1v1', 'unranked'];
+    : ['rm_1v1'];
 
   let allMatches = [];
 
