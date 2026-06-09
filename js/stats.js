@@ -88,6 +88,15 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     unit_cat_match_totals_losses: {},
     opening_map_wr: {},
     opening_civ_wr: {},
+    // Opponent-derived: what do rivals do when we win vs lose?
+    opp_age_times_wins: { feudal: [], castle: [], imperial: [] },
+    opp_age_times_losses: { feudal: [], castle: [], imperial: [] },
+    opp_key_techs_wins: {},
+    opp_key_techs_losses: {},
+    opp_unit_cat_match_totals_wins: {},
+    opp_unit_cat_match_totals_losses: {},
+    opp_unit_stats_wins: {},
+    opp_unit_stats_losses: {},
   };
 
   const marketSums = {
@@ -295,13 +304,18 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       if (tcEvents.length >= 2 && tcEvents[1]) tc3Times.push(tcEvents[1].time);
     }
 
+    // --- Oponente: tiempos de edad ---
+    const oppUptimes = {};
     if (oppPlayer && oppPlayer.uptimes && Array.isArray(oppPlayer.uptimes)) {
       for (const uptime of oppPlayer.uptimes) {
         if (uptime.age && uptime.timestamp) {
           const ageKey = uptime.age.replace(/_age|age/g, '').toLowerCase();
           const seconds = parseTimestamp(uptime.timestamp);
           if (seconds !== null) {
+            oppUptimes[ageKey] = seconds;
             if (stats.opp_age_times[ageKey]) stats.opp_age_times[ageKey].push(seconds);
+            const targetOppAge = winner ? stats.opp_age_times_wins : stats.opp_age_times_losses;
+            targetOppAge[ageKey].push(seconds);
           }
         }
       }
@@ -310,19 +324,34 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       for (const t of oppPlayer.queuedTechs) {
         if (t.unit && t.unit.toLowerCase() === 'imperial age' && t.timestamp) {
           const seconds = parseTimestamp(t.timestamp);
-          if (seconds !== null) stats.opp_age_times.imperial.push(seconds);
+          if (seconds !== null) {
+            oppUptimes.imperial = seconds;
+            stats.opp_age_times.imperial.push(seconds);
+            const targetOppAge = winner ? stats.opp_age_times_wins : stats.opp_age_times_losses;
+            targetOppAge.imperial.push(seconds);
+          }
         }
       }
     }
 
-    // --- Oponente: categorías de unidades ---
+    // --- Oponente: categorías de unidades + específicas ---
+    const oppMatchCatTotals = {};
+    const oppMatchUnitTotals = {};
     if (oppPlayer && oppPlayer.queuedUnits) {
       const oppCategories = new Set();
       for (const u of oppPlayer.queuedUnits) {
         if (!u.unit) continue;
         const cat = categorizeUnit(u.unit);
+        const unitName = u.unit.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+        const amount = u.amount || 1;
         if (cat !== 'other') {
           oppCategories.add(cat);
+          oppMatchCatTotals[cat] = (oppMatchCatTotals[cat] || 0) + amount;
+        }
+        // Track specific units for opponent
+        const keyUnits = ['scout_cavalry', 'archer', 'knight', 'militia', 'skirmisher', 'spearman'];
+        if (keyUnits.includes(unitName)) {
+          oppMatchUnitTotals[unitName] = (oppMatchUnitTotals[unitName] || 0) + amount;
         }
       }
       for (const cat of oppCategories) {
@@ -330,6 +359,32 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
           stats.opp_unit_categories_wins[cat] = (stats.opp_unit_categories_wins[cat] || 0) + 1;
         } else {
           stats.opp_unit_categories_losses[cat] = (stats.opp_unit_categories_losses[cat] || 0) + 1;
+        }
+      }
+    }
+    // Store opponent per-match category totals by our result
+    const targetOppCat = winner ? stats.opp_unit_cat_match_totals_wins : stats.opp_unit_cat_match_totals_losses;
+    for (const [cat, total] of Object.entries(oppMatchCatTotals)) {
+      if (!targetOppCat[cat]) targetOppCat[cat] = [];
+      targetOppCat[cat].push(total);
+    }
+    // Store opponent per-match specific unit totals by our result
+    const targetOppUnit = winner ? stats.opp_unit_stats_wins : stats.opp_unit_stats_losses;
+    for (const [unit, total] of Object.entries(oppMatchUnitTotals)) {
+      if (!targetOppUnit[unit]) targetOppUnit[unit] = [];
+      targetOppUnit[unit].push(total);
+    }
+
+    // --- Oponente: key techs ---
+    if (oppPlayer && oppPlayer.queuedTechs) {
+      for (const t of oppPlayer.queuedTechs) {
+        if (!t.timestamp || !t.unit) continue;
+        const tSec = parseTimestamp(t.timestamp);
+        if (tSec === null) continue;
+        if (isKeyTech(t.unit)) {
+          const targetOppTech = winner ? stats.opp_key_techs_wins : stats.opp_key_techs_losses;
+          if (!targetOppTech[t.unit]) targetOppTech[t.unit] = [];
+          targetOppTech[t.unit].push(tSec);
         }
       }
     }
@@ -617,6 +672,41 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   }
   for (const [cat, totals] of Object.entries(stats.unit_cat_match_totals_losses)) {
     stats.unit_cat_loss_avg[cat] = avgArr(totals);
+  }
+
+  // Opponent-derived averages: what do rivals do when we win vs lose?
+  stats.opp_age_time_win_avg = {};
+  stats.opp_age_time_loss_avg = {};
+  for (const age of AGES) {
+    stats.opp_age_time_win_avg[age] = avgArr(stats.opp_age_times_wins[age]);
+    stats.opp_age_time_loss_avg[age] = avgArr(stats.opp_age_times_losses[age]);
+  }
+
+  stats.opp_key_tech_win_avg = {};
+  stats.opp_key_tech_loss_avg = {};
+  for (const [techName, times] of Object.entries(stats.opp_key_techs_wins)) {
+    stats.opp_key_tech_win_avg[techName] = avgArr(times);
+  }
+  for (const [techName, times] of Object.entries(stats.opp_key_techs_losses)) {
+    stats.opp_key_tech_loss_avg[techName] = avgArr(times);
+  }
+
+  stats.opp_unit_cat_win_avg = {};
+  stats.opp_unit_cat_loss_avg = {};
+  for (const [cat, totals] of Object.entries(stats.opp_unit_cat_match_totals_wins)) {
+    stats.opp_unit_cat_win_avg[cat] = avgArr(totals);
+  }
+  for (const [cat, totals] of Object.entries(stats.opp_unit_cat_match_totals_losses)) {
+    stats.opp_unit_cat_loss_avg[cat] = avgArr(totals);
+  }
+
+  stats.opp_unit_stats_win_avg = {};
+  stats.opp_unit_stats_loss_avg = {};
+  for (const [unit, totals] of Object.entries(stats.opp_unit_stats_wins)) {
+    stats.opp_unit_stats_win_avg[unit] = avgArr(totals);
+  }
+  for (const [unit, totals] of Object.entries(stats.opp_unit_stats_losses)) {
+    stats.opp_unit_stats_loss_avg[unit] = avgArr(totals);
   }
 
   // Normalize unit_categories to objects with count + avg per game

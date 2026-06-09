@@ -1138,20 +1138,65 @@ export function generateDeepInsights(stats) {
     }
   }
 
-  // 3. Unit category production differentials (wins vs losses)
-  const cats = ['cavalry', 'archers', 'infantry', 'siege'];
-  for (const cat of cats) {
-    const winAvg = stats.unit_cat_win_avg?.[cat];
-    const lossAvg = stats.unit_cat_loss_avg?.[cat];
+  // 3. Opponent age time differentials (when we win vs lose)
+  for (const age of ['feudal', 'castle', 'imperial']) {
+    const winAvg = stats.opp_age_time_win_avg?.[age];
+    const lossAvg = stats.opp_age_time_loss_avg?.[age];
     if (winAvg != null && lossAvg != null) {
-      const gap = winAvg - lossAvg;
-      if (gap > 0.8) {
-        insights.push(`${cat.charAt(0).toUpperCase() + cat.slice(1)} avg ${winAvg.toFixed(1)} in wins vs ${lossAvg.toFixed(1)} in losses`);
+      const gap = lossAvg - winAvg; // positive = opponent faster when we lose
+      if (gap > 25) {
+        insights.push(`Opponent ${age} age ${fmtGap(gap)} faster in our losses (${formatHms(lossAvg)} vs ${formatHms(winAvg)})`);
       }
     }
   }
 
-  // 4. Opening x Map WR disparities (min 3 games per map-opening combo)
+  // 4. Opponent key tech differentials (when we win vs lose)
+  const oppImportantTechs = ['fletching', 'bodkin arrow', 'bloodlines', 'forging', 'wheelbarrow', 'hand cart', 'iron casting', 'scale barding armor'];
+  for (const tech of oppImportantTechs) {
+    const winAvg = stats.opp_key_tech_win_avg?.[tech];
+    const lossAvg = stats.opp_key_tech_loss_avg?.[tech];
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 40) {
+        insights.push(`Opponent ${techDisplayName(tech)} ${fmtGap(gap)} earlier in our losses (${formatHms(lossAvg)} vs ${formatHms(winAvg)})`);
+      }
+    }
+  }
+
+  // 5. Opponent unit production differentials (when we win vs lose)
+  const oppCats = ['cavalry', 'archers', 'infantry'];
+  for (const cat of oppCats) {
+    const winAvg = stats.opp_unit_cat_win_avg?.[cat];
+    const lossAvg = stats.opp_unit_cat_loss_avg?.[cat];
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 1.0) {
+        insights.push(`Opponent produces ${lossAvg.toFixed(1)} ${cat} avg when we lose vs ${winAvg.toFixed(1)} when we win`);
+      }
+    }
+  }
+
+  // 6. Opponent specific unit differentials
+  const oppKeyUnits = [
+    { key: 'scout_cavalry', label: 'scouts' },
+    { key: 'archer', label: 'archers' },
+    { key: 'knight', label: 'knights' },
+    { key: 'militia', label: 'militia' },
+    { key: 'skirmisher', label: 'skirms' },
+    { key: 'spearman', label: 'spears' },
+  ];
+  for (const u of oppKeyUnits) {
+    const winAvg = stats.opp_unit_stats_win_avg?.[u.key];
+    const lossAvg = stats.opp_unit_stats_loss_avg?.[u.key];
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 1.0) {
+        insights.push(`Opponent makes ${lossAvg.toFixed(1)} ${u.label} avg when we lose vs ${winAvg.toFixed(1)} when we win`);
+      }
+    }
+  }
+
+  // 7. Opening x Map WR disparities (min 3 games per map-opening combo)
   const openingMapWR = stats.opening_map_wr || {};
   for (const [opening, maps] of Object.entries(openingMapWR)) {
     let bestMap = null;
@@ -1171,7 +1216,7 @@ export function generateDeepInsights(stats) {
     }
   }
 
-  // 5. Opening x Civ WR disparities (min 3 games per civ-opening combo)
+  // 8. Opening x Civ WR disparities (min 3 games per civ-opening combo)
   const openingCivWR = stats.opening_civ_wr || {};
   for (const [opening, civs] of Object.entries(openingCivWR)) {
     let bestCiv = null;
