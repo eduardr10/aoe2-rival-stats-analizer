@@ -643,64 +643,59 @@ function buildHistoricalData(stats) {
 function buildUnitsByAgePanel(stats, id) {
   const unitsByAge = stats.units_by_age_period || {};
   const periods = [
-    { key: 'pre-feudal', label: 'Dark Age → Feudal' },
+    { key: 'pre-feudal', label: 'Dark → Feudal' },
     { key: 'pre-castle', label: 'Feudal → Castle' },
     { key: 'pre-imperial', label: 'Castle → Imperial' },
   ];
 
-  let html = '';
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
   for (const period of periods) {
     const units = unitsByAge[period.key] || {};
-    const entries = Object.entries(units).slice(0, 6);
+    const entries = Object.entries(units).slice(0, 5);
     if (entries.length === 0) continue;
 
-    html += `<div style="margin-bottom:12px;">
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${period.label}</div>`;
+    html += `<div>
+      <div style="font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;border-bottom:1px solid var(--border-subtle);padding-bottom:3px;">${period.label}</div>`;
     for (const [unitName, data] of entries) {
-      html += `<div class="opening-bar-row" style="margin-bottom:3px;">
-        <div class="opening-bar-label" style="width:110px;font-size:11px;">${techDisplayName(unitName)}</div>
-        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${Math.min(data.avg * 20, 100)}%;background:var(--accent-cyan)"></div></div>
-        <div class="opening-bar-pct" style="font-size:11px;">${data.avg.toFixed(1)} avg</div>
+      html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+        <span>${techDisplayName(unitName)}</span>
+        <span style="color:var(--text-muted);">${data.avg.toFixed(1)}</span>
       </div>`;
     }
     html += `</div>`;
   }
+  html += '</div>';
 
   return `<div class="tab-panel" data-panel="${id}">
-    ${html || '<div class="card-subtitle" style="padding:10px 0;">No unit data by age.</div>'}
+    ${html}
   </div>`;
 }
 
 function buildTechTimingsPanel(stats, id) {
   const coreTechs = stats.core_tech_timings || {};
   const categoryLabels = {
-    wood: 'Wood Upgrades',
-    farm: 'Farm Upgrades',
-    blacksmith: 'Blacksmith',
-    archery_range: 'Archery Range',
-    barracks: 'Barracks',
-    stable: 'Stable',
-    university: 'University',
-    other: 'Other',
+    wood: 'Wood', farm: 'Farm', blacksmith: 'Blacksmith',
+    archery_range: 'Archery', barracks: 'Barracks', stable: 'Stable',
+    university: 'University', other: 'Other',
   };
 
-  let html = '';
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
   for (const [cat, techs] of Object.entries(coreTechs)) {
     const entries = Object.entries(techs);
     if (entries.length === 0) continue;
 
-    html += `<div style="margin-bottom:12px;">
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${categoryLabels[cat] || cat}</div>`;
+    html += `<div>
+      <div style="font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;border-bottom:1px solid var(--border-subtle);padding-bottom:3px;">${categoryLabels[cat] || cat}</div>`;
     for (const [techName, data] of entries) {
       const timeStr = data.avg_time != null ? formatHms(data.avg_time) : '—';
-      html += `<div class="opening-bar-row" style="margin-bottom:3px;">
-        <div class="opening-bar-label" style="width:110px;font-size:11px;">${techDisplayName(techName)}</div>
-        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${Math.min(data.frequency, 100)}%;background:var(--accent-green)"></div></div>
-        <div class="opening-bar-pct" style="font-size:11px;">${timeStr} · ${Math.round(data.frequency)}%</div>
+      html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+        <span>${techDisplayName(techName)}</span>
+        <span style="color:var(--text-muted);">${timeStr} · ${Math.round(data.frequency)}%</span>
       </div>`;
     }
     html += `</div>`;
   }
+  html += '</div>';
 
   return `<div class="tab-panel" data-panel="${id}">
     ${html || '<div class="card-subtitle" style="padding:10px 0;">No tech timing data.</div>'}

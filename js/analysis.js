@@ -1,6 +1,6 @@
 import {
   CIV_CANONICAL_NAMES, MILITARY_UNITS,
-  parseTimestamp, formatHms, average, median, percentile,
+  parseTimestamp, formatHms, average, median, percentile, techDisplayName,
 } from './utils.js';
 
 export function parseGameJson(analysisData, playerId) {
@@ -1101,4 +1101,95 @@ function formatOpeningName(label) {
     'Mixed/No Data': 'Mixed',
   };
   return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+export function generateDeepInsights(stats) {
+  const insights = [];
+
+  // Helper: gap significance
+  function fmtGap(gapSec) {
+    const m = Math.floor(Math.abs(gapSec) / 60);
+    const s = Math.round(Math.abs(gapSec) % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  // 1. Age time differentials (wins vs losses)
+  for (const age of ['feudal', 'castle', 'imperial']) {
+    const winAvg = stats.age_time_win_avg?.[age];
+    const lossAvg = stats.age_time_loss_avg?.[age];
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 30) {
+        insights.push(`${age.charAt(0).toUpperCase() + age.slice(1)} age ${fmtGap(gap)} slower in losses (${formatHms(winAvg)} in wins)`);
+      }
+    }
+  }
+
+  // 2. Key tech differentials (wins vs losses)
+  const importantTechs = ['wheelbarrow', 'hand cart', 'fletching', 'bodkin arrow', 'bloodlines', 'forging', 'iron casting', 'scale barding armor', 'chain barding armor'];
+  for (const tech of importantTechs) {
+    const winAvg = stats.key_tech_win_avg?.[tech];
+    const lossAvg = stats.key_tech_loss_avg?.[tech];
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 45) {
+        insights.push(`${techDisplayName(tech)} ${fmtGap(gap)} slower in losses (${formatHms(winAvg)} in wins)`);
+      }
+    }
+  }
+
+  // 3. Unit category production differentials (wins vs losses)
+  const cats = ['cavalry', 'archers', 'infantry', 'siege'];
+  for (const cat of cats) {
+    const winAvg = stats.unit_cat_win_avg?.[cat];
+    const lossAvg = stats.unit_cat_loss_avg?.[cat];
+    if (winAvg != null && lossAvg != null) {
+      const gap = winAvg - lossAvg;
+      if (gap > 0.8) {
+        insights.push(`${cat.charAt(0).toUpperCase() + cat.slice(1)} avg ${winAvg.toFixed(1)} in wins vs ${lossAvg.toFixed(1)} in losses`);
+      }
+    }
+  }
+
+  // 4. Opening x Map WR disparities (min 3 games per map-opening combo)
+  const openingMapWR = stats.opening_map_wr || {};
+  for (const [opening, maps] of Object.entries(openingMapWR)) {
+    let bestMap = null;
+    let worstMap = null;
+    for (const [map, data] of Object.entries(maps)) {
+      const total = data.wins + data.losses;
+      if (total < 3) continue;
+      const wr = Math.round((data.wins * 100 / total) * 100) / 100;
+      if (!bestMap || wr > bestMap.wr) bestMap = { map, wr, total };
+      if (!worstMap || wr < worstMap.wr) worstMap = { map, wr, total };
+    }
+    if (bestMap && worstMap && bestMap.map !== worstMap.map) {
+      const diff = Math.round((bestMap.wr - worstMap.wr) * 100) / 100;
+      if (diff >= 30) {
+        insights.push(`${formatOpeningName(opening)} ${bestMap.wr}% WR on ${bestMap.map} vs ${worstMap.wr}% on ${worstMap.map}`);
+      }
+    }
+  }
+
+  // 5. Opening x Civ WR disparities (min 3 games per civ-opening combo)
+  const openingCivWR = stats.opening_civ_wr || {};
+  for (const [opening, civs] of Object.entries(openingCivWR)) {
+    let bestCiv = null;
+    let worstCiv = null;
+    for (const [civ, data] of Object.entries(civs)) {
+      const total = data.wins + data.losses;
+      if (total < 3) continue;
+      const wr = Math.round((data.wins * 100 / total) * 100) / 100;
+      if (!bestCiv || wr > bestCiv.wr) bestCiv = { civ, wr, total };
+      if (!worstCiv || wr < worstCiv.wr) worstCiv = { civ, wr, total };
+    }
+    if (bestCiv && worstCiv && bestCiv.civ !== worstCiv.civ) {
+      const diff = Math.round((bestCiv.wr - worstCiv.wr) * 100) / 100;
+      if (diff >= 30) {
+        insights.push(`${formatOpeningName(opening)} ${bestCiv.wr}% WR as ${bestCiv.civ} vs ${worstCiv.wr}% as ${worstCiv.civ}`);
+      }
+    }
+  }
+
+  return insights.slice(0, 8);
 }

@@ -13,6 +13,7 @@ import {
   computeStreak,
   analyzeOpponentPatterns,
   computePlayerPrimaryOpenings,
+  generateDeepInsights,
 } from './analysis.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js';
 import { initWebSocket } from './websocket.js';
@@ -657,6 +658,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
   stats.opp_patterns = analyzeOpponentPatterns(stats);
+  stats.deep_insights = generateDeepInsights(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
@@ -847,12 +849,11 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderTimingAnalysisCard(stats);
   html += `</div>`;
 
-  // BLOCK 5: WEAKNESSES + THREATS
+  // BLOCK 5: KEY INSIGHTS (deep data-driven analysis)
   html += `<div class="block">`;
-  html += `<div class="block-grid block-grid-2">`;
-  html += renderWeaknessesCard(stats);
-  html += renderThreatsCard(stats);
-  html += `</div></div>`;
+  html += `<div class="section-title">Key Insights</div>`;
+  html += renderKeyInsightsCard(stats);
+  html += `</div>`;
 
   // BLOCK 6: Detailed Analysis with tabs
   html += `<div class="block">`;
@@ -1092,6 +1093,27 @@ function renderRecommendationsCard(stats) {
   return html;
 }
 
+function renderKeyInsightsCard(stats) {
+  const insights = stats.deep_insights || [];
+
+  if (insights.length === 0) {
+    return `<div class="card">
+      <div class="card-subtitle">${t('noData')}</div>
+    </div>`;
+  }
+
+  let rows = '';
+  for (const insight of insights) {
+    rows += `<div style="padding:10px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;color:var(--text-primary);">
+      ${escapeHtml(insight)}
+    </div>`;
+  }
+
+  return `<div class="card" style="padding:16px 20px;">
+    ${rows}
+  </div>`;
+}
+
 function renderWeaknessesCard(stats) {
   const weaknesses = stats.weaknesses || [];
 
@@ -1249,64 +1271,59 @@ function buildOpeningsPanel(stats, id) {
 function buildUnitsByAgePanel(stats, id) {
   const unitsByAge = stats.units_by_age_period || {};
   const periods = [
-    { key: 'pre-feudal', label: 'Dark Age → Feudal' },
+    { key: 'pre-feudal', label: 'Dark → Feudal' },
     { key: 'pre-castle', label: 'Feudal → Castle' },
     { key: 'pre-imperial', label: 'Castle → Imperial' },
   ];
 
-  let html = '';
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">';
   for (const period of periods) {
     const units = unitsByAge[period.key] || {};
-    const entries = Object.entries(units).slice(0, 6);
+    const entries = Object.entries(units).slice(0, 5);
     if (entries.length === 0) continue;
 
-    html += `<div style="margin-bottom:14px;">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${period.label}</div>`;
+    html += `<div>
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;border-bottom:1px solid var(--border-subtle);padding-bottom:4px;">${period.label}</div>`;
     for (const [unitName, data] of entries) {
-      html += `<div class="opening-bar-row" style="margin-bottom:4px;">
-        <div class="opening-bar-label" style="width:120px;font-size:12px;">${techDisplayName(unitName)}</div>
-        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${Math.min(data.avg * 20, 100)}%;background:var(--accent-cyan)"></div></div>
-        <div class="opening-bar-pct" style="font-size:12px;">${data.avg.toFixed(1)} avg</div>
+      html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+        <span>${techDisplayName(unitName)}</span>
+        <span style="color:var(--text-muted);">${data.avg.toFixed(1)}</span>
       </div>`;
     }
     html += `</div>`;
   }
+  html += '</div>';
 
   return `<div class="tab-panel" data-panel="${id}">
-    ${html || '<div class="card-subtitle" style="padding:10px 0;">No unit data by age.</div>'}
+    ${html}
   </div>`;
 }
 
 function buildTechTimingsPanel(stats, id) {
   const coreTechs = stats.core_tech_timings || {};
   const categoryLabels = {
-    wood: 'Wood Upgrades',
-    farm: 'Farm Upgrades',
-    blacksmith: 'Blacksmith',
-    archery_range: 'Archery Range',
-    barracks: 'Barracks',
-    stable: 'Stable',
-    university: 'University',
-    other: 'Other',
+    wood: 'Wood', farm: 'Farm', blacksmith: 'Blacksmith',
+    archery_range: 'Archery', barracks: 'Barracks', stable: 'Stable',
+    university: 'University', other: 'Other',
   };
 
-  let html = '';
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">';
   for (const [cat, techs] of Object.entries(coreTechs)) {
     const entries = Object.entries(techs);
     if (entries.length === 0) continue;
 
-    html += `<div style="margin-bottom:14px;">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${categoryLabels[cat] || cat}</div>`;
+    html += `<div>
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;border-bottom:1px solid var(--border-subtle);padding-bottom:4px;">${categoryLabels[cat] || cat}</div>`;
     for (const [techName, data] of entries) {
       const timeStr = data.avg_time != null ? formatHms(data.avg_time) : '—';
-      html += `<div class="opening-bar-row" style="margin-bottom:4px;">
-        <div class="opening-bar-label" style="width:120px;font-size:12px;">${techDisplayName(techName)}</div>
-        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${Math.min(data.frequency, 100)}%;background:var(--accent-green)"></div></div>
-        <div class="opening-bar-pct" style="font-size:12px;">${timeStr} · ${Math.round(data.frequency)}%</div>
+      html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+        <span>${techDisplayName(techName)}</span>
+        <span style="color:var(--text-muted);">${timeStr} · ${Math.round(data.frequency)}%</span>
       </div>`;
     }
     html += `</div>`;
   }
+  html += '</div>';
 
   return `<div class="tab-panel" data-panel="${id}">
     ${html || '<div class="card-subtitle" style="padding:10px 0;">No tech timing data.</div>'}

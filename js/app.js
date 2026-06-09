@@ -13,6 +13,7 @@ import {
   computeStreak,
   analyzeOpponentPatterns,
   computePlayerPrimaryOpenings,
+  generateDeepInsights,
 } from './analysis.js';
 import { buildOverlay, restartOverlay } from './render.js';
 import { initWebSocket } from './websocket.js';
@@ -172,6 +173,7 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
   stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
   stats.opp_patterns = analyzeOpponentPatterns(stats);
+  stats.deep_insights = generateDeepInsights(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
