@@ -63,13 +63,12 @@ export function parseGameJson(analysisData, playerId) {
   return gameRecord;
 }
 
-export function extractEarlyFeatures(gameRecord) {
-  const player = gameRecord.player;
-  if (!player) return {};
+export function extractEarlyFeatures(playerData) {
+  if (!playerData) return {};
 
   const features = {};
-  const events = player.events || [];
-  const uptimes = player.uptimes || [];
+  const events = playerData.events || [];
+  const uptimes = playerData.uptimes || [];
 
   const tFeudalObj = uptimes.find(u => u.age === 'feudal_age')
     || events.find(e => e.type === 'tech' && e.name === 'feudal_age');
@@ -611,9 +610,12 @@ export function detectWeaknesses(stats) {
     weaknesses.push(`One-trick ${formatOpeningName(primary)} — hard counterable`);
   }
 
-  // DATA-DRIVEN: late wheelbarrow = eco weakness
-  if (stats.wheel_barrow_avg != null && stats.wheel_barrow_avg > 800) {
-    weaknesses.push('Delayed wheelbarrow — economy falls behind');
+  // DATA-DRIVEN: wheelbarrow timing gap between wins and losses
+  if (stats.wheel_barrow_loss_avg != null && stats.wheel_barrow_win_avg != null) {
+    const gap = stats.wheel_barrow_loss_avg - stats.wheel_barrow_win_avg;
+    if (gap > 60) {
+      weaknesses.push(`Wheelbarrow ${formatHms(gap)} slower in losses — eco timing costs games`);
+    }
   }
 
   // DATA-DRIVEN: low versatility
@@ -659,19 +661,19 @@ export function detectThreats(stats) {
   const dims = arch.dimensions || {};
   const unitStats = stats.unit_stats || {};
 
-  // DATA-DRIVEN: specific unit threats from actual stats
-  const scoutCount = unitStats['scout_cavalry']?.total || 0;
-  const archerCount = unitStats['archer']?.total || 0;
-  const knightCount = unitStats['knight']?.total || 0;
+  // DATA-DRIVEN: specific unit threats from actual stats (avg per game)
+  const scoutAvg = unitStats['scout_cavalry']?.avg || 0;
+  const archerAvg = unitStats['archer']?.avg || 0;
+  const knightAvg = unitStats['knight']?.avg || 0;
 
-  if (scoutCount > 20) {
-    threats.push(`Heavy scout production (${scoutCount} total) — early map control`);
+  if (scoutAvg > 2.5) {
+    threats.push(`Heavy scout production (${scoutAvg.toFixed(1)} avg/game) — early map control`);
   }
-  if (archerCount > 20) {
-    threats.push(`Mass archer player (${archerCount} total) — ranged pressure`);
+  if (archerAvg > 2.0) {
+    threats.push(`Mass archer player (${archerAvg.toFixed(1)} avg/game) — ranged pressure`);
   }
-  if (knightCount > 15) {
-    threats.push(`Knight switch threat (${knightCount} total) — cav armor needed`);
+  if (knightAvg > 1.5) {
+    threats.push(`Knight switch threat (${knightAvg.toFixed(1)} avg/game) — cav armor needed`);
   }
 
   // DATA-DRIVEN: speed threat
@@ -721,12 +723,12 @@ export function generateDataDrivenRecommendations(stats) {
   const unitCats = stats.unit_categories || {};
   const keyTechs = stats.key_techs || {};
 
-  // DATA-DRIVEN: based on actual unit production stats
-  const scoutCount = unitStats['scout_cavalry']?.total || 0;
-  const archerCount = unitStats['archer']?.total || 0;
-  const knightCount = unitStats['knight']?.total || 0;
-  const militiaCount = unitStats['militia']?.total || 0;
-  const skirmCount = unitStats['skirmisher']?.total || 0;
+  // DATA-DRIVEN: based on actual unit production stats (avg per game)
+  const scoutAvg = unitStats['scout_cavalry']?.avg || 0;
+  const archerAvg = unitStats['archer']?.avg || 0;
+  const knightAvg = unitStats['knight']?.avg || 0;
+  const militiaAvg = unitStats['militia']?.avg || 0;
+  const skirmAvg = unitStats['skirmisher']?.avg || 0;
 
   // Opening frequency based
   const scoutFreq = perFreq['scout_rush'] || 0;
@@ -737,13 +739,13 @@ export function generateDataDrivenRecommendations(stats) {
   const trushFreq = perFreq['tower_rush'] || 0;
 
   // Build opening-based recommendations with DATA backing
-  if (scoutFreq >= 25 || scoutCount > 15) {
-    recs.push({ type: 'must', text: `Expect Scout Rush (${scoutFreq}% / ${scoutCount} scouts total)` });
+  if (scoutFreq >= 25 || scoutAvg > 2.0) {
+    recs.push({ type: 'must', text: `Expect Scout Rush (${scoutFreq}% / ${scoutAvg.toFixed(1)} scouts avg)` });
     recs.push({ type: 'must', text: 'Build houses to wall berries before Feudal' });
   }
 
-  if (archerFreq >= 25 || archerCount > 15) {
-    recs.push({ type: 'must', text: `Expect Archer Rush (${archerFreq}% / ${archerCount} archers total)` });
+  if (archerFreq >= 25 || archerAvg > 1.5) {
+    recs.push({ type: 'must', text: `Expect Archer Rush (${archerFreq}% / ${archerAvg.toFixed(1)} archers avg)` });
     recs.push({ type: 'must', text: 'Get early skirmishers if civ allows' });
   }
 
@@ -755,8 +757,8 @@ export function generateDataDrivenRecommendations(stats) {
     recs.push({ type: 'must', text: `Expect aggressive Feudal (${ffaFreq}%) — extra wood for walls` });
   }
 
-  if (drushFreq >= 15 || militiaCount > 10) {
-    recs.push({ type: 'must', text: `Expect Drush (${drushFreq}% / ${militiaCount} militia) — early palisade` });
+  if (drushFreq >= 15 || militiaAvg > 1.0) {
+    recs.push({ type: 'must', text: `Expect Drush (${drushFreq}% / ${militiaAvg.toFixed(1)} militia avg) — early palisade` });
   }
 
   if (trushFreq >= 10) {
@@ -788,9 +790,33 @@ export function generateDataDrivenRecommendations(stats) {
     recs.push({ type: 'warn', text: `Plays ${mainCiv[0]} ${mainCiv[1]}% — prepare civ counter` });
   }
 
-  // DATA-DRIVEN: economy timing
-  if (stats.wheel_barrow_avg != null && stats.wheel_barrow_avg > 750) {
-    recs.push({ type: 'warn', text: `Late wheelbarrow (${formatHms(stats.wheel_barrow_avg)}) — eco vulnerable` });
+  // DATA-DRIVEN: economy timing — compare wins vs losses, not fixed threshold
+  if (stats.wheel_barrow_loss_avg != null && stats.wheel_barrow_win_avg != null) {
+    const gap = stats.wheel_barrow_loss_avg - stats.wheel_barrow_win_avg;
+    if (gap > 60) {
+      recs.push({ type: 'warn', text: `Wheelbarrow ${formatHms(gap)} slower in losses (${formatHms(stats.wheel_barrow_win_avg)} win avg) — punish delayed eco` });
+    }
+  }
+  if (stats.hand_cart_loss_avg != null && stats.hand_cart_win_avg != null) {
+    const gap = stats.hand_cart_loss_avg - stats.hand_cart_win_avg;
+    if (gap > 60) {
+      recs.push({ type: 'warn', text: `Hand Cart ${formatHms(gap)} slower in losses — late Castle eco` });
+    }
+  }
+
+  // DATA-DRIVEN: opponent pattern analysis
+  const oppPatterns = analyzeOpponentPatterns(stats);
+  for (const [opening, wr] of Object.entries(oppPatterns.opp_opening_wr)) {
+    if (wr >= 70) {
+      recs.push({ type: 'must', text: `Strong vs ${formatOpeningName(opening)} (${wr}% WR in ${oppPatterns.opp_opening_freq[opening]} games)` });
+    } else if (wr <= 35) {
+      recs.push({ type: 'warn', text: `Weak vs ${formatOpeningName(opening)} (${wr}% WR) — avoid direct counter` });
+    }
+  }
+  for (const [cat, wr] of Object.entries(oppPatterns.opp_unit_wr)) {
+    if (wr <= 35) {
+      recs.push({ type: 'warn', text: `Struggles when rival goes ${cat} (${wr}% WR) — prepare counter` });
+    }
   }
 
   if (recs.length === 0) {
@@ -818,11 +844,11 @@ export function generatePrediction(stats) {
   const drushFreq = perFreq['drush'] || 0;
   const trushFreq = perFreq['tower_rush'] || 0;
 
-  // Pick the dominant strategy with unit stats backing
-  if (scoutFreq >= 30 || (unitStats['scout_cavalry']?.total || 0) > 20) {
+  // Pick the dominant strategy with unit stats backing (avg per game)
+  if (scoutFreq >= 30 || (unitStats['scout_cavalry']?.avg || 0) > 2.5) {
     expectedStrategy = 'Scout Rush → Knights/Skirms';
     strategyProb = scoutFreq || 40;
-  } else if (archerFreq >= 30 || (unitStats['archer']?.total || 0) > 20) {
+  } else if (archerFreq >= 30 || (unitStats['archer']?.avg || 0) > 2.0) {
     expectedStrategy = 'Archer Rush → Crossbows/Knights';
     strategyProb = archerFreq || 40;
   } else if (fcFreq >= 30) {
@@ -831,7 +857,7 @@ export function generatePrediction(stats) {
   } else if (ffaFreq >= 25) {
     expectedStrategy = 'Aggressive Feudal → Military pressure';
     strategyProb = ffaFreq;
-  } else if (drushFreq >= 20 || (unitStats['militia']?.total || 0) > 15) {
+  } else if (drushFreq >= 20 || (unitStats['militia']?.avg || 0) > 1.0) {
     expectedStrategy = 'Drush → Archer/Scout transition';
     strategyProb = drushFreq || 30;
   } else if (trushFreq >= 15) {
@@ -1030,6 +1056,43 @@ export function computeStreak(matches) {
   }
 
   return { type: currentType || 'none', count };
+}
+
+export function analyzeOpponentPatterns(stats) {
+  const patterns = {
+    opp_opening_wr: {},   // { opening: winrate% }
+    opp_unit_wr: {},      // { category: winrate% }
+    opp_opening_freq: {}, // { opening: count }
+  };
+
+  // Opening del oponente vs resultado
+  const oppOpeningsWins = stats.opp_openings_vs_result?.wins || {};
+  const oppOpeningsLosses = stats.opp_openings_vs_result?.losses || {};
+  const allOppOpenings = new Set([...Object.keys(oppOpeningsWins), ...Object.keys(oppOpeningsLosses)]);
+  for (const opening of allOppOpenings) {
+    const wins = oppOpeningsWins[opening] || 0;
+    const losses = oppOpeningsLosses[opening] || 0;
+    const total = wins + losses;
+    if (total >= 3) {
+      patterns.opp_opening_wr[opening] = Math.round((wins * 100 / total) * 100) / 100;
+      patterns.opp_opening_freq[opening] = total;
+    }
+  }
+
+  // Unidades del oponente vs resultado
+  const oppUnitWins = stats.opp_unit_categories_wins || {};
+  const oppUnitLosses = stats.opp_unit_categories_losses || {};
+  const allOppCats = new Set([...Object.keys(oppUnitWins), ...Object.keys(oppUnitLosses)]);
+  for (const cat of allOppCats) {
+    const wins = oppUnitWins[cat] || 0;
+    const losses = oppUnitLosses[cat] || 0;
+    const total = wins + losses;
+    if (total >= 3) {
+      patterns.opp_unit_wr[cat] = Math.round((wins * 100 / total) * 100) / 100;
+    }
+  }
+
+  return patterns;
 }
 
 function formatOpeningName(label) {

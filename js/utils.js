@@ -32,6 +32,7 @@ const TECH_CATEGORIES = {
     'leather archer armor','ring archer armor','thumb ring','ballistics','chemistry',
     'siege engineers','murder holes','arrowslits','sanctity','faith','heresy',
     'conscription','hoardings','sappers','keep','bombard tower',
+    'squires','arson','supplies',
   ],
   economy: [
     'wheelbarrow','hand cart','horse collar','heavy plow','crop rotation',

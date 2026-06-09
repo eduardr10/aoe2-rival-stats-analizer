@@ -76,6 +76,10 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     unit_categories_losses: {},
     unit_stats: {},
     unit_upgrades: {},
+    opp_unit_categories_wins: {},
+    opp_unit_categories_losses: {},
+    opp_openings: {},
+    opp_openings_vs_result: { wins: {}, losses: {} },
   };
 
   const marketSums = {
@@ -89,12 +93,15 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     imperial: { buy: {}, sell: {} },
   };
   const techTimesGlobal = { feudal: {}, castle: {}, imperial: {} };
-  const wheelBarrow = [];
-  const handCart = [];
+  const wheelBarrowWins = [];
+  const wheelBarrowLosses = [];
+  const handCartWins = [];
+  const handCartLosses = [];
   const keyTechsData = {};
   const tc2Times = [];
   const tc3Times = [];
   const allMatchFeatures = [];
+  const allOppFeatures = [];
 
   // Unidades por periodo de edad
   const unitsByAgePeriod = {
@@ -146,7 +153,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
 
     if (!mePlayer) { stats.skipped++; continue; }
 
-    const features = extractEarlyFeatures(gameRecord);
+    const features = extractEarlyFeatures(gameRecord.player);
+    const oppFeatures = extractEarlyFeatures(gameRecord.opponent);
     features.match_id = matchId;
 
     const meCiv = mePlayer.civilization || null;
@@ -286,14 +294,40 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       }
     }
 
+    // --- Oponente: categorías de unidades ---
+    if (oppPlayer && oppPlayer.queuedUnits) {
+      const oppCategories = new Set();
+      for (const u of oppPlayer.queuedUnits) {
+        if (!u.unit) continue;
+        const cat = categorizeUnit(u.unit);
+        if (cat !== 'other') {
+          oppCategories.add(cat);
+        }
+      }
+      for (const cat of oppCategories) {
+        if (winner) {
+          stats.opp_unit_categories_wins[cat] = (stats.opp_unit_categories_wins[cat] || 0) + 1;
+        } else {
+          stats.opp_unit_categories_losses[cat] = (stats.opp_unit_categories_losses[cat] || 0) + 1;
+        }
+      }
+    }
+
+    // Guardar oppFeatures para clasificación posterior
+    allOppFeatures.push({ features: oppFeatures, winner });
+
     for (const t of techs) {
       if (!t.timestamp || !t.unit) continue;
       const tSec = parseTimestamp(t.timestamp);
       if (tSec === null) continue;
       const unit = t.unit;
       const canon = CIV_CANONICAL_NAMES[unit];
-      if (canon === 'wheelbarrow') wheelBarrow.push(tSec);
-      if (canon === 'hand_cart') handCart.push(tSec);
+      if (canon === 'wheelbarrow') {
+        if (winner) wheelBarrowWins.push(tSec); else wheelBarrowLosses.push(tSec);
+      }
+      if (canon === 'hand_cart') {
+        if (winner) handCartWins.push(tSec); else handCartLosses.push(tSec);
+      }
       if (isKeyTech(unit)) {
         if (!keyTechsData[unit]) keyTechsData[unit] = { count: 0, times: [] };
         keyTechsData[unit].count++;
@@ -437,6 +471,14 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   for (const features of allMatchFeatures) features.opening = classifyOpening(features, baselines);
   stats.all_match_features = allMatchFeatures;
 
+  // Clasificar openings del oponente usando los mismos baselines
+  for (const opp of allOppFeatures) {
+    const oppOpening = classifyOpening(opp.features, baselines);
+    stats.opp_openings[oppOpening] = (stats.opp_openings[oppOpening] || 0) + 1;
+    const resultKey = opp.winner ? 'losses' : 'wins'; // opp winner = our loss
+    stats.opp_openings_vs_result[resultKey][oppOpening] = (stats.opp_openings_vs_result[resultKey][oppOpening] || 0) + 1;
+  }
+
   if (allMatchFeatures.length > 0) {
     stats.current_opening = allMatchFeatures[0].opening;
   } else {
@@ -491,13 +533,26 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     }
   }
 
-  stats.wheel_barrow_avg = wheelBarrow.length ? wheelBarrow.reduce((a, b) => a + b, 0) / wheelBarrow.length : null;
-  stats.hand_cart_avg = handCart.length ? handCart.reduce((a, b) => a + b, 0) / handCart.length : null;
+  const avgArr = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  stats.wheel_barrow_avg = avgArr([...wheelBarrowWins, ...wheelBarrowLosses]);
+  stats.wheel_barrow_win_avg = avgArr(wheelBarrowWins);
+  stats.wheel_barrow_loss_avg = avgArr(wheelBarrowLosses);
+  stats.hand_cart_avg = avgArr([...handCartWins, ...handCartLosses]);
+  stats.hand_cart_win_avg = avgArr(handCartWins);
+  stats.hand_cart_loss_avg = avgArr(handCartLosses);
 
   stats.tc2_time_avg = tc2Times.length ? tc2Times.reduce((a, b) => a + b, 0) / tc2Times.length : null;
   stats.tc3_time_avg = tc3Times.length ? tc3Times.reduce((a, b) => a + b, 0) / tc3Times.length : null;
   stats.tc2_pct = stats.analyzed > 0 ? Math.round((tc2Times.length * 100 / stats.analyzed) * 100) / 100 : null;
   stats.tc3_pct = stats.analyzed > 0 ? Math.round((tc3Times.length * 100 / stats.analyzed) * 100) / 100 : null;
+
+  // Normalize unit_categories to objects with count + avg per game
+  const normalizedUnitCats = {};
+  const analyzedGames = stats.analyzed || 1;
+  for (const [cat, count] of Object.entries(stats.unit_categories)) {
+    normalizedUnitCats[cat] = { count, avg: Math.round((count / analyzedGames) * 100) / 100 };
+  }
+  stats.unit_categories = normalizedUnitCats;
 
   stats.tc_timing = {
     tc2_avg_hms: stats.tc2_time_avg != null ? formatHms(stats.tc2_time_avg) : 'N/A',
@@ -531,6 +586,16 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       avg_time: avgTime,
       category: getTechCategory(techName),
     };
+  }
+
+  // --- Core tech timings grouped by category ---
+  stats.core_tech_timings = {
+    wood: {}, farm: {}, blacksmith: {}, archery_range: {}, barracks: {}, stable: {}, university: {}, other: {},
+  };
+  for (const [techName, data] of Object.entries(stats.key_techs)) {
+    const cat = data.category || 'other';
+    const target = stats.core_tech_timings[cat] || stats.core_tech_timings.other;
+    target[techName] = { avg_time: data.avg_time, frequency: data.frequency };
   }
 
   // --- Unidades por periodo de edad ---

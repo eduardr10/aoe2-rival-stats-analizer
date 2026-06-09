@@ -1,18 +1,15 @@
 import { fetchRating, fetchMatches } from './api.js';
 import { analyzeMatches } from './stats.js';
 import {
-  computePlayerPrimaryOpenings,
-  classifyPlayerArchetype,
-  computeDangerScore,
   classifyPlaystyle,
   detectWeaknesses,
   detectThreats,
   generateDataDrivenRecommendations,
-  computeConfidence,
-  computeStreak,
-  interpretTimings,
   generatePrediction,
+  interpretTimings,
   computeConfidenceDetails,
+  computeStreak,
+  analyzeOpponentPatterns,
 } from './analysis.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js';
 import { initWebSocket } from './websocket.js';
@@ -27,10 +24,6 @@ const PAGES = 1;
 
 const i18n = {
   en: {
-    dangerScore: 'Danger Score',
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
     rating: 'Rating',
     winrate: 'Winrate',
     games: 'Games',
@@ -89,12 +82,11 @@ const i18n = {
     to: 'To',
     ranked1v1: 'Ranked 1v1',
     unranked: 'Unranked',
+    unitsByAge: 'Units by Age',
+    techs: 'Techs',
+    avgUnitsPerGame: 'Avg Units/Game',
   },
   es: {
-    dangerScore: 'Nivel de Peligro',
-    low: 'Bajo',
-    medium: 'Medio',
-    high: 'Alto',
     rating: 'ELO',
     winrate: 'Winrate',
     games: 'Partidas',
@@ -153,6 +145,9 @@ const i18n = {
     to: 'Hasta',
     ranked1v1: 'Ranked 1v1',
     unranked: 'No rankeado',
+    unitsByAge: 'Unidades por Edad',
+    techs: 'Tecnologías',
+    avgUnitsPerGame: 'Prom. Unid./Partida',
   },
 };
 
@@ -652,13 +647,13 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
 
   // NEW: Intelligence features
   stats.playstyle = classifyPlaystyle(stats.archetype);
-  stats.danger_score = computeDangerScore(stats, stats.rating);
   stats.confidence = computeConfidence(stats);
   stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
   stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
+  stats.opp_patterns = analyzeOpponentPatterns(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
@@ -744,12 +739,7 @@ function updateHeader(stats) {
 function renderHistoricalAnalysisHTML(stats, compressed) {
   let html = '';
 
-  // BLOCK 1: DANGER SCORE (Dominant visual element)
-  html += `<div class="block">`;
-  html += renderDangerScoreDominant(stats);
-  html += `</div>`;
-
-  // BLOCK 2: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
+  // BLOCK 1: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
   html += `<div class="block">`;
   html += `<div class="section-title">${t('expectedStrategy')}</div>`;
   html += `<div class="block-grid block-grid-2">`;
@@ -792,46 +782,6 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += `</div>`;
 
   return html;
-}
-
-function renderDangerScoreDominant(stats) {
-  const danger = stats.danger_score || { score: 0, level: 'low', label: 'Unknown' };
-  const dangerColorClass = danger.level || 'low';
-  const wr = stats.win_percent || 0;
-  const streak = stats.current_streak || { type: 'none', count: 0 };
-  const streakText = streak.type === 'win' ? `+${streak.count} wins` :
-                       streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
-  const eapm = stats.avg_eapm || 0;
-  const eapmLabel = eapm >= 30 ? 'Fast' : eapm >= 20 ? 'Average' : 'Relaxed';
-
-  return `<div class="card danger-card" style="padding:28px;text-align:center;">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px;">${t('dangerScore')}</div>
-    <div style="font-size:56px;font-weight:800;color:var(--danger-${dangerColorClass === 'low' ? 'low' : dangerColorClass === 'medium' ? 'mid' : 'high'});line-height:1;">${danger.score}</div>
-    <div style="font-size:22px;font-weight:700;color:var(--danger-${dangerColorClass === 'low' ? 'low' : dangerColorClass === 'medium' ? 'mid' : 'high'});margin-top:8px;">${danger.label.toUpperCase()}</div>
-    <div style="display:flex;justify-content:center;gap:16px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle);flex-wrap:wrap;">
-      <div style="text-align:center;min-width:80px;">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('rating')}</div>
-        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${stats.rating || '—'}</div>
-      </div>
-      <div style="text-align:center;min-width:80px;">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('winrate')}</div>
-        <div style="font-size:18px;font-weight:700;color:${wr >= 50 ? 'var(--accent-green)' : 'var(--accent-red)'};margin-top:2px;">${wr}%</div>
-      </div>
-      <div style="text-align:center;min-width:80px;">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('games')}</div>
-        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${stats.analyzed}</div>
-      </div>
-      <div style="text-align:center;min-width:80px;">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('streak')}</div>
-        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${streakText}</div>
-      </div>
-      <div style="text-align:center;min-width:80px;">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('avgEapm')}</div>
-        <div style="font-size:18px;font-weight:700;color:${eapm >= 30 ? 'var(--accent-red)' : eapm >= 20 ? 'var(--accent-blue)' : 'var(--accent-green)'};margin-top:2px;">${eapm > 0 ? eapm : '—'}</div>
-        <div style="font-size:10px;color:var(--text-muted);">${eapmLabel}</div>
-      </div>
-    </div>
-  </div>`;
 }
 
 function renderPredictionEngineCard(stats) {
@@ -1094,8 +1044,8 @@ function renderThreatsCard(stats) {
 }
 
 function renderDetailedAnalysisCard(stats) {
-  const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs'];
-  const tabLabels = [t('overview'), t('military'), t('economy'), t('openings'), t('maps'), t('civs')];
+  const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs', 'units-age', 'techs'];
+  const tabLabels = [t('overview'), t('military'), t('economy'), t('openings'), t('maps'), t('civs'), t('unitsByAge'), t('techs')];
 
   let html = `<div class="card">`;
   html += `<div class="tabs-nav">`;
@@ -1110,6 +1060,8 @@ function renderDetailedAnalysisCard(stats) {
   html += buildOpeningsPanel(stats, tabIds[3]);
   html += buildMapsPanel(stats, tabIds[4]);
   html += buildCivsPanel(stats, tabIds[5]);
+  html += buildUnitsByAgePanel(stats, tabIds[6]);
+  html += buildTechTimingsPanel(stats, tabIds[7]);
 
   html += `</div>`;
   return html;
@@ -1138,7 +1090,10 @@ function buildOverviewPanel(stats, id) {
 function buildMilitaryPanel(stats, id) {
   const unitCats = stats.unit_categories || {};
   const aggression = stats.archetype?.dimensions?.aggression || 0;
-  const totalUnits = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
+  const games = stats.analyzed || 1;
+
+  const totalCount = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
+  const totalAvg = Math.round((totalCount / games) * 100) / 100;
 
   const cats = [
     { key: 'cavalry', label: 'Cavalry', color: 'var(--accent-orange)' },
@@ -1151,7 +1106,7 @@ function buildMilitaryPanel(stats, id) {
   for (const cat of cats) {
     const data = unitCats[cat.key];
     if (!data || !data.count) continue;
-    const pct = Math.round((data.count / totalUnits) * 100);
+    const pct = Math.round((data.count / totalCount) * 100);
     compositionHtml += `<div class="opening-bar-row" style="margin-bottom:5px;">
       <div class="opening-bar-label" style="width:80px;">${cat.label}</div>
       <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
@@ -1162,7 +1117,7 @@ function buildMilitaryPanel(stats, id) {
   return `<div class="tab-panel" data-panel="${id}">
     <div class="tab-stat-grid" style="margin-bottom:12px;">
       <div class="tab-stat-item"><div class="tab-stat-label">${t('aggressionScore')}</div><div class="tab-stat-value">${aggression}/100</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('games')}</div><div class="tab-stat-value">${totalUnits}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('avgUnitsPerGame')}</div><div class="tab-stat-value">${totalAvg}</div></div>
     </div>
     ${compositionHtml ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">${t('armyComposition')}</div>${compositionHtml}</div>` : `<div class="card-subtitle" style="padding:10px 0;">${t('noData')}</div>`}
   </div>`;
@@ -1203,6 +1158,73 @@ function buildOpeningsPanel(stats, id) {
     <div style="margin-bottom:8px;"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Opening Distribution</div>
     ${barsHtml || '<div class="card-subtitle">No opening data available.</div>'}</div>
     ${pp.primary_opening ? `<div class="card-subtitle">Primary: <strong>${formatOpeningName(pp.primary_opening)}</strong> (${Math.round((pp.opening_stability || 0) * 100)}% stability)</div>` : ''}
+  </div>`;
+}
+
+function buildUnitsByAgePanel(stats, id) {
+  const unitsByAge = stats.units_by_age_period || {};
+  const periods = [
+    { key: 'pre-feudal', label: 'Dark Age → Feudal' },
+    { key: 'pre-castle', label: 'Feudal → Castle' },
+    { key: 'pre-imperial', label: 'Castle → Imperial' },
+  ];
+
+  let html = '';
+  for (const period of periods) {
+    const units = unitsByAge[period.key] || {};
+    const entries = Object.entries(units).slice(0, 6);
+    if (entries.length === 0) continue;
+
+    html += `<div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${period.label}</div>`;
+    for (const [unitName, data] of entries) {
+      html += `<div class="opening-bar-row" style="margin-bottom:4px;">
+        <div class="opening-bar-label" style="width:120px;font-size:12px;">${techDisplayName(unitName)}</div>
+        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${Math.min(data.avg * 20, 100)}%;background:var(--accent-cyan)"></div></div>
+        <div class="opening-bar-pct" style="font-size:12px;">${data.avg.toFixed(1)} avg</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    ${html || '<div class="card-subtitle" style="padding:10px 0;">No unit data by age.</div>'}
+  </div>`;
+}
+
+function buildTechTimingsPanel(stats, id) {
+  const coreTechs = stats.core_tech_timings || {};
+  const categoryLabels = {
+    wood: 'Wood Upgrades',
+    farm: 'Farm Upgrades',
+    blacksmith: 'Blacksmith',
+    archery_range: 'Archery Range',
+    barracks: 'Barracks',
+    stable: 'Stable',
+    university: 'University',
+    other: 'Other',
+  };
+
+  let html = '';
+  for (const [cat, techs] of Object.entries(coreTechs)) {
+    const entries = Object.entries(techs);
+    if (entries.length === 0) continue;
+
+    html += `<div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${categoryLabels[cat] || cat}</div>`;
+    for (const [techName, data] of entries) {
+      const timeStr = data.avg_time != null ? formatHms(data.avg_time) : '—';
+      html += `<div class="opening-bar-row" style="margin-bottom:4px;">
+        <div class="opening-bar-label" style="width:120px;font-size:12px;">${techDisplayName(techName)}</div>
+        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${Math.min(data.frequency, 100)}%;background:var(--accent-green)"></div></div>
+        <div class="opening-bar-pct" style="font-size:12px;">${timeStr} · ${Math.round(data.frequency)}%</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    ${html || '<div class="card-subtitle" style="padding:10px 0;">No tech timing data.</div>'}
   </div>`;
 }
 

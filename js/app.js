@@ -1,18 +1,15 @@
 import { fetchRating, fetchMatches } from './api.js';
 import { analyzeMatches } from './stats.js';
 import {
-  computePlayerPrimaryOpenings,
-  classifyPlayerArchetype,
-  computeDangerScore,
   classifyPlaystyle,
   detectWeaknesses,
   detectThreats,
   generateDataDrivenRecommendations,
-  computeConfidence,
-  computeStreak,
-  interpretTimings,
   generatePrediction,
+  interpretTimings,
   computeConfidenceDetails,
+  computeStreak,
+  analyzeOpponentPatterns,
 } from './analysis.js';
 import { buildOverlay, restartOverlay } from './render.js';
 import { initWebSocket } from './websocket.js';
@@ -165,13 +162,13 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
 
   // NEW: Intelligence features
   stats.playstyle = classifyPlaystyle(stats.archetype);
-  stats.danger_score = computeDangerScore(stats, stats.rating);
   stats.confidence = computeConfidence(stats);
   stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
   stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
+  stats.opp_patterns = analyzeOpponentPatterns(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
@@ -289,7 +286,6 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
 
   // NEW: Intelligence features
   stats.playstyle = classifyPlaystyle(stats.archetype);
-  stats.danger_score = computeDangerScore(stats, stats.rating);
   stats.confidence = computeConfidence(stats);
   stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
