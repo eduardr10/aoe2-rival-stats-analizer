@@ -10,6 +10,7 @@ import {
   computeConfidenceDetails,
   computeStreak,
   analyzeOpponentPatterns,
+  computePlayerPrimaryOpenings,
 } from './analysis.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js';
 import { initWebSocket } from './websocket.js';

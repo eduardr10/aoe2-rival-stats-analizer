@@ -475,7 +475,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   for (const opp of allOppFeatures) {
     const oppOpening = classifyOpening(opp.features, baselines);
     stats.opp_openings[oppOpening] = (stats.opp_openings[oppOpening] || 0) + 1;
-    const resultKey = opp.winner ? 'losses' : 'wins'; // opp winner = our loss
+    // resultKey = our player's result when rival played this opening
+    const resultKey = opp.winner ? 'wins' : 'losses';
     stats.opp_openings_vs_result[resultKey][oppOpening] = (stats.opp_openings_vs_result[resultKey][oppOpening] || 0) + 1;
   }
 

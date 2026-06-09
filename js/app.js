@@ -10,6 +10,7 @@ import {
   computeConfidenceDetails,
   computeStreak,
   analyzeOpponentPatterns,
+  computePlayerPrimaryOpenings,
 } from './analysis.js';
 import { buildOverlay, restartOverlay } from './render.js';
 import { initWebSocket } from './websocket.js';
