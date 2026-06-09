@@ -3,52 +3,146 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AoE2 Rival Stats Analyzer</title>
-  <link rel="stylesheet" href="css/style.css">
+  <title>AoE2 Rival Stats Analyzer — Dashboard</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script>
+  <script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#72a4f2', 'V7V12KZ5U');kofiwidget2.draw();</script>
 </head>
 <body>
 
-  <div class="button-panel">
-    <button id="btn-autoanalyze" class="btn-overlay primary">Autoanalizar</button>
-    <button id="btn-toggle-overlay" class="btn-overlay">Toggle</button>
-    <button id="btn-clear-cache" class="btn-overlay">Limpiar cache</button>
-    <button id="btn-support" class="btn-overlay">Support</button>
-  </div>
-
-  <div id="aoe2-overlay">
-    <div class="loading-state">
-      <div class="loading-spinner"></div>
-      Cargando...
+  <!-- Header -->
+  <header class="dashboard-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <div class="brand-icon">⚔</div>
+        <div>
+          <div class="brand-title">AOE2 Rival Analyzer</div>
+          <div class="brand-subtitle">Decision Assistant</div>
+        </div>
+      </div>
+      <div class="header-player" id="header-player">
+        <div class="player-avatar" id="header-avatar">?</div>
+        <div class="player-info">
+          <div class="player-name" id="header-name">Cargando...</div>
+          <div class="player-meta" id="header-meta">—</div>
+        </div>
+        <div class="wr-badge" id="header-wr">—</div>
+      </div>
+      <div class="header-social">
+        <a href="#" target="_blank" class="social-icon" title="YouTube - EduardR10" data-social="youtube">▶</a>
+        <a href="#" target="_blank" class="social-icon" title="Twitch - EduardR10" data-social="twitch">◉</a>
+        <button class="btn-support" id="btn-support">❤ Support</button>
+      </div>
     </div>
-  </div>
+  </header>
+
+  <main class="dashboard-main">
+
+    <!-- Player Search -->
+    <div class="player-search-bar" id="player-search-bar">
+      <div class="search-box">
+        <input type="text" id="player-search-input" placeholder="Search player..." autocomplete="off" />
+        <button id="player-search-btn">🔍</button>
+      </div>
+      <div id="player-search-results" class="search-results hidden"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-bar" id="controls-bar">
+      <div class="control-group">
+        <label for="ctrl-ladder">Ladder</label>
+        <select id="ctrl-ladder">
+          <option value="rm_1v1" selected>Ranked 1v1</option>
+          <option value="unranked">Unranked</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="ctrl-date-from">Desde</label>
+        <input type="date" id="ctrl-date-from" />
+      </div>
+      <div class="control-group">
+        <label for="ctrl-date-to">Hasta</label>
+        <input type="date" id="ctrl-date-to" />
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button class="btn-apply" id="btn-apply">Aplicar</button>
+      </div>
+    </div>
+
+    <!-- LIVE MATCH SECTION (hidden by default, shows when websocket detects match) -->
+    <section id="live-match-section" class="live-section hidden">
+      <div class="section-header">
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span class="live-text">LIVE MATCH</span>
+        </div>
+        <div class="live-match-info" id="live-match-info">
+          <span>vs ...</span>
+        </div>
+        <div class="live-actions">
+          <button class="btn-analyze-rival" id="btn-analyze-rival">Analizar Rival</button>
+          <a class="btn-rival-profile" id="btn-rival-profile" href="#" target="_blank">Ver perfil ↗</a>
+        </div>
+      </div>
+
+      <div id="live-match-content">
+        <!-- Live Match Intelligence rendered here -->
+      </div>
+    </section>
+
+    <!-- HISTORICAL ANALYSIS SECTION -->
+    <section id="historical-section">
+      <div id="dashboard">
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          Cargando perfil...
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="dashboard-footer">
+    <div class="footer-inner">
+      <div class="footer-creator">Created by <strong>EduardR10</strong> · Helping AoE2 players make better decisions.</div>
+      <div class="footer-links">
+        <a href="#" target="_blank" class="footer-link" data-social="youtube">YouTube</a>
+        <a href="#" target="_blank" class="footer-link" data-social="twitch">Twitch</a>
+      </div>
+    </div>
+  </footer>
 
   <!-- Support Modal -->
   <div id="support-modal" class="modal-overlay">
-    <div class="modal-content" style="position: relative;">
-      <button class="modal-close" onclick="document.getElementById('support-modal').classList.remove('active')">&times;</button>
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close">&times;</button>
       <div class="modal-title">Support Project</div>
       <div class="modal-text">
-        <p style="margin-bottom: 12px;">This tool is free and maintained by <strong>EduardR10</strong>.</p>
-        <p style="margin-bottom: 16px;">If it helps you improve your games, consider supporting future development.</p>
-        <div style="margin-bottom: 16px;">
-          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Channels</div>
-          <div style="display: flex; gap: 8px;">
-            <a href="#" class="social-icon" style="width: auto; padding: 6px 12px; font-size: 12px; text-decoration: none;" data-social="youtube">🎥 YouTube</a>
-            <a href="#" class="social-icon" style="width: auto; padding: 6px 12px; font-size: 12px; text-decoration: none;" data-social="twitch">📺 Twitch</a>
+        <p>This tool is free and maintained by <strong>EduardR10</strong>.</p>
+        <p>If it helps you improve your games, consider supporting future development.</p>
+        <div class="modal-section">
+          <div class="modal-section-title">Channels</div>
+          <div class="modal-channels">
+            <a href="#" class="modal-channel" data-social="youtube">🎥 YouTube</a>
+            <a href="#" class="modal-channel" data-social="twitch">📺 Twitch</a>
           </div>
         </div>
-        <div id="donation-links" style="display: none;">
-          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Donations</div>
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <a href="#" class="social-icon" style="justify-content: flex-start; gap: 8px; font-size: 12px; text-decoration: none;" data-social="buymeacoffee">☕ Buy Me a Coffee</a>
-            <a href="#" class="social-icon" style="justify-content: flex-start; gap: 8px; font-size: 12px; text-decoration: none;" data-social="kofi">💛 Ko-fi</a>
-            <a href="#" class="social-icon" style="justify-content: flex-start; gap: 8px; font-size: 12px; text-decoration: none;" data-social="binance">₿ Binance</a>
+        <div class="modal-section" id="donation-links" style="display: none;">
+          <div class="modal-section-title">Donations</div>
+          <div class="modal-donations">
+            <a href="#" class="modal-channel" data-social="buymeacoffee">☕ Buy Me a Coffee</a>
+            <a href="#" class="modal-channel" data-social="kofi">💛 Ko-fi</a>
+            <a href="#" class="modal-channel" data-social="binance">₿ Binance</a>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module">
+    import { initDashboard } from './js/dashboard.js';
+    document.addEventListener('DOMContentLoaded', initDashboard);
+  </script>
 </body>
 </html>

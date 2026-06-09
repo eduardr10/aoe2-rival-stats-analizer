@@ -386,6 +386,129 @@ function setupEventListeners() {
   if (donationLinks && window.app_config?.support_enabled) {
     donationLinks.style.display = 'block';
   }
+
+  // Player search
+  setupPlayerSearch();
+}
+
+// ============================================================================
+// PLAYER SEARCH
+// ============================================================================
+
+function setupPlayerSearch() {
+  const input = document.getElementById('player-search-input');
+  const btn = document.getElementById('player-search-btn');
+  const results = document.getElementById('player-search-results');
+  if (!input || !results) return;
+
+  let debounceTimer = null;
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const query = input.value.trim();
+    if (query.length < 2) {
+      results.classList.add('hidden');
+      return;
+    }
+    debounceTimer = setTimeout(() => searchPlayers(query), 400);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      clearTimeout(debounceTimer);
+      const query = input.value.trim();
+      if (query.length >= 2) searchPlayers(query);
+    }
+  });
+
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const query = input.value.trim();
+      if (query.length >= 2) searchPlayers(query);
+    });
+  }
+
+  // Close results on outside click
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !results.contains(e.target) && !btn?.contains(e.target)) {
+      results.classList.add('hidden');
+    }
+  });
+}
+
+let searchAbortController = null;
+
+async function searchPlayers(query) {
+  const results = document.getElementById('player-search-results');
+  if (!results) return;
+
+  // Cancel previous search
+  if (searchAbortController) searchAbortController.abort();
+  searchAbortController = new AbortController();
+
+  results.innerHTML = '<div class="search-loading">Searching...</div>';
+  results.classList.remove('hidden');
+
+  try {
+    const url = `https://data.aoe2companion.com/api/profiles?search=${encodeURIComponent(query)}&extend=profiles.avatar_medium_url,profiles.avatar_full_url&language=es&page=1`;
+    const res = await fetch(url, {
+      signal: searchAbortController.signal,
+      headers: { 'User-Agent': 'eduardr10-stats-script' },
+    });
+    if (!res.ok) throw new Error('Search failed');
+    const data = await res.json();
+    const profiles = data.profiles || [];
+    renderSearchResults(profiles);
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    results.innerHTML = '<div class="search-no-results">Error searching. Try again.</div>';
+  }
+}
+
+function renderSearchResults(profiles) {
+  const results = document.getElementById('player-search-results');
+  if (!results) return;
+
+  if (profiles.length === 0) {
+    results.innerHTML = '<div class="search-no-results">No players found.</div>';
+    return;
+  }
+
+  let html = '';
+  for (const p of profiles.slice(0, 8)) {
+    const name = p.name || 'Unknown';
+    const profileId = p.profileId;
+    const rating = p.rating || p.ratings?.[0]?.rating || '—';
+    const avatarUrl = p.avatar_medium_url || p.avatar_full_url || '';
+    const initial = name.charAt(0).toUpperCase();
+
+    html += `<a href="?player_id=${profileId}" class="search-result-item" data-profile-id="${profileId}">`;
+    if (avatarUrl) {
+      html += `<div class="search-result-avatar"><img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy"></div>`;
+    } else {
+      html += `<div class="search-result-avatar">${initial}</div>`;
+    }
+    html += `<div class="search-result-info">
+      <div class="search-result-name">${escapeHtml(name)}</div>
+      <div class="search-result-meta">ID: ${profileId}</div>
+    </div>`;
+    html += `<div class="search-result-rating">${rating}</div>`;
+    html += `</a>`;
+  }
+
+  results.innerHTML = html;
+
+  // Handle clicks
+  results.querySelectorAll('.search-result-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const profileId = item.dataset.profileId;
+      if (!profileId) return;
+      const url = new URL(window.location.href);
+      url.search = `?player_id=${profileId}`;
+      window.location.href = url.toString();
+    });
+  });
 }
 
 function setupSocialLinks() {
@@ -534,7 +657,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
-  stats.recommendations = generateRecommendations(stats);
+  stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
