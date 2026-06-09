@@ -106,6 +106,16 @@ export function extractEarlyFeatures(playerData) {
     return count;
   }
 
+  function countUnitsInRange(names, minTime, maxTime) {
+    let count = 0;
+    for (const e of events) {
+      if (e.type === 'unit' && e.time >= minTime && e.time <= maxTime && names.includes(e.name)) {
+        count += e.amount;
+      }
+    }
+    return count;
+  }
+
   features.t_first_barracks = findFirstBuilding('barracks');
   features.t_first_archery_range = findFirstBuilding('archery_range');
   features.t_first_stable = findFirstBuilding('stable');
@@ -116,6 +126,7 @@ export function extractEarlyFeatures(playerData) {
 
   features.villagers_by_feudal = countUnits(['villager'], windowDark);
   features.militia_by_feudal = countUnits(['militia', 'men-at-arms'], windowDark);
+  features.maa_in_feudal = countUnitsInRange(['militia', 'men-at-arms'], features.t_feudal || 0, features.t_castle || Number.MAX_SAFE_INTEGER);
   features.scouts_by_early = countUnits(['scout_cavalry'], windowEarly);
   features.archers_by_early = countUnits(['archer'], windowEarly);
   features.skirmishers_by_early = countUnits(['skirmisher'], windowEarly);
@@ -192,6 +203,23 @@ export function classifyOpening(features, baselines) {
   }
   if (drushScore >= 0.6) {
     openings.push({ label: 'drush', score: Math.round(drushScore * 100) / 100, matched: drushCriteria });
+  }
+
+  let maaScore = 0;
+  const maaCriteria = [];
+  if (features.maa_in_feudal >= 3) {
+    maaScore += 0.6;
+    maaCriteria.push(['MAA Count', '>= 3 in Feudal', '+0.6', features.maa_in_feudal]);
+  } else if (features.maa_in_feudal >= 1) {
+    maaScore += 0.3;
+    maaCriteria.push(['MAA Count', '>= 1 in Feudal', '+0.3', features.maa_in_feudal]);
+  }
+  if (features.t_first_barracks <= 480) {
+    maaScore += 0.25;
+    maaCriteria.push(['Barracks Time', '<= 480s', '+0.25', formatHms(features.t_first_barracks)]);
+  }
+  if (maaScore >= 0.6) {
+    openings.push({ label: 'maa_rush', score: Math.round(maaScore * 100) / 100, matched: maaCriteria });
   }
 
   let scoutScore = 0;
@@ -1092,6 +1120,7 @@ function formatOpeningName(label) {
   if (!label) return 'Unknown';
   const map = {
     'drush': 'Drush',
+    'maa_rush': 'MAA Rush',
     'scout_rush': 'Scout Rush',
     'archer_rush': 'Archer Rush',
     'fast_feudal_aggressive': 'Fast Feudal Aggro',

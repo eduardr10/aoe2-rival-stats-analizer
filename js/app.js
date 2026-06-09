@@ -15,6 +15,8 @@ import {
   computePlayerPrimaryOpenings,
   generateDeepInsights,
 } from './analysis.js';
+import { loadKnowledgeBase, buildStrategicAnalysis } from './strategic_engine.js';
+import { analyzeMatchup } from './matchup_engine.js';
 import { buildOverlay, restartOverlay } from './render.js';
 import { initWebSocket } from './websocket.js';
 import { resolveCivNumber, sleep } from './utils.js';
@@ -177,6 +179,12 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
+  // Strategic engine
+  const mainCivEntry = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
+  const mainCivName = mainCivEntry ? mainCivEntry[0] : '';
+  await loadKnowledgeBase();
+  stats.strategic_analysis = buildStrategicAnalysis(stats, mainCivName);
+
   // Compute avg duration and enrich matches for historical data
   const featureMap = new Map();
   if (stats.all_match_features) {
@@ -299,6 +307,15 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   stats.prediction = generatePrediction(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(matches);
+
+  // Strategic engine for rival
+  const rivalMainCiv = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
+  const rivalCivName = rivalMainCiv ? rivalMainCiv[0] : '';
+  await loadKnowledgeBase();
+  stats.strategic_analysis = buildStrategicAnalysis(stats, rivalCivName);
+
+  // Matchup analysis (placeholder — requires player civ)
+  stats.matchup_analysis = null;
 
   // Compute avg duration and enrich matches for historical data
   const featureMap = new Map();

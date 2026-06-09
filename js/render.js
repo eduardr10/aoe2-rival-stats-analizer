@@ -152,6 +152,9 @@ function buildRivalIntelligence(stats) {
   let html = `<div class="block">`;
   html += `<div class="block-title">Rival Intelligence</div>`;
 
+  // Card 0: Strategic Identity (Knowledge base)
+  html += buildStrategicIdentityCard(stats);
+
   // Card 1: Expected Opening
   html += buildExpectedOpeningCard(stats);
 
@@ -168,6 +171,32 @@ function buildRivalIntelligence(stats) {
   return html;
 }
 
+function buildStrategicIdentityCard(stats) {
+  const sa = stats.strategic_analysis || {};
+  const identity = sa.strategic_identity || {};
+  const spike = sa.power_spike || {};
+  const weaknesses = sa.weaknesses || [];
+  const recs = sa.recommendations || [];
+
+  let weaknessHtml = '';
+  for (const w of weaknesses.slice(0, 3)) {
+    weaknessHtml += `<span style="display:inline-block;padding:2px 8px;background:rgba(220,38,38,0.08);color:var(--accent-red);border-radius:10px;font-size:10px;margin-right:4px;margin-bottom:3px;">${w}</span>`;
+  }
+
+  let recsHtml = '';
+  for (const r of recs.slice(0, 3)) {
+    recsHtml += `<div style="font-size:11px;color:var(--text-primary);padding:2px 0;">→ ${r}</div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-label">Strategic Identity</div>
+    <div class="card-value" style="font-size:16px;">${identity.identity || 'Unknown'}</div>
+    <div class="card-subtitle">${identity.civilization || ''} · ${spike.timing || ''}</div>
+    ${weaknessHtml ? `<div style="margin-top:6px;">${weaknessHtml}</div>` : ''}
+    ${recsHtml ? `<div style="margin-top:6px;border-top:1px solid var(--border-subtle);padding-top:6px;">${recsHtml}</div>` : ''}
+  </div>`;
+}
+
 function buildExpectedOpeningCard(stats) {
   const pp = stats.player_profile || {};
   const primary = pp.primary_opening || 'Unknown';
@@ -177,6 +206,7 @@ function buildExpectedOpeningCard(stats) {
 
   const openingIcons = {
     'drush': '⚔️',
+    'maa_rush': '🛡️',
     'scout_rush': '🐴',
     'archer_rush': '🏹',
     'fast_feudal_aggressive': '⚡',
@@ -772,6 +802,7 @@ function formatOpeningName(label) {
   if (!label) return 'Unknown';
   const map = {
     'drush': 'Drush',
+    'maa_rush': 'MAA Rush',
     'scout_rush': 'Scout Rush',
     'archer_rush': 'Archer Rush',
     'fast_feudal_aggressive': 'Fast Feudal Aggro',

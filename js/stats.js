@@ -553,7 +553,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
 
   // Clasificar openings del oponente usando los mismos baselines
   for (const opp of allOppFeatures) {
-    const oppOpening = classifyOpening(opp.features, baselines);
+    const oppOpeningObj = classifyOpening(opp.features, baselines);
+    const oppOpening = oppOpeningObj.chosen_opening || 'Standard/Unknown';
     stats.opp_openings[oppOpening] = (stats.opp_openings[oppOpening] || 0) + 1;
     // resultKey = our player's result when rival played this opening
     const resultKey = opp.winner ? 'wins' : 'losses';

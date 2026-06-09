@@ -1,0 +1,512 @@
+{
+  "Armenians": {
+    "archetype": "infantry_siege",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["militia", "composite_bowman", " infantry", "siege"],
+    "expected_transitions": ["infantry", "siege"],
+    "weaknesses": ["cavalry", "archers"],
+    "economy_rating": 7,
+    "mobility_rating": 4,
+    "late_game_rating": 6
+  },
+  "Aztecs": {
+    "archetype": "infantry_monk",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["eagle_warrior", "monk", "jaguar_warrior"],
+    "expected_transitions": ["eagle", "monk", "jaguar"],
+    "weaknesses": ["hand_cannoneer", "cavalry"],
+    "economy_rating": 9,
+    "mobility_rating": 5,
+    "late_game_rating": 7
+  },
+  "Bengalis": {
+    "archetype": "elephant_cavalry",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["ratha", "elephant", "cavalry"],
+    "expected_transitions": ["ratha", "elephant", "cavalry"],
+    "weaknesses": ["halberdier", "monk"],
+    "economy_rating": 10,
+    "mobility_rating": 4,
+    "late_game_rating": 9
+  },
+  "Berbers": {
+    "archetype": "cavalry_naval",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["camel", "cavalry_archer", "genitour"],
+    "expected_transitions": ["camel", "cavalry_archer", "genitour"],
+    "weaknesses": ["halberdier", "archers"],
+    "economy_rating": 7,
+    "mobility_rating": 10,
+    "late_game_rating": 7
+  },
+  "Bohemians": {
+    "archetype": "gunpowder_siege",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["hand_cannoneer", "bombard_cannon", "houfnice"],
+    "expected_transitions": ["crossbow", "hand_cannoneer", "siege"],
+    "weaknesses": ["cavalry", "eagle"],
+    "economy_rating": 8,
+    "mobility_rating": 3,
+    "late_game_rating": 9
+  },
+  "Britons": {
+    "archetype": "archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["crossbow", "longbowman"],
+    "expected_transitions": ["archer", "crossbow", "longbowman"],
+    "weaknesses": ["siege", "cavalry"],
+    "economy_rating": 7,
+    "mobility_rating": 4,
+    "late_game_rating": 7
+  },
+  "Bulgarians": {
+    "archetype": "infantry_cavalry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["militia", "konnik", "cavalry"],
+    "expected_transitions": ["militia", "konnik", "cavalry"],
+    "weaknesses": ["archers", "monk"],
+    "economy_rating": 6,
+    "mobility_rating": 6,
+    "late_game_rating": 7
+  },
+  "Burgundians": {
+    "archetype": "cavalry_gunpowder",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["knight", "coustillier", "bombard_cannon"],
+    "expected_transitions": ["knight", "coustillier", "gunpowder"],
+    "weaknesses": ["archers", "monk"],
+    "economy_rating": 9,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Burmese": {
+    "archetype": "infantry_elephant",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["militia", "arambai", "elephant"],
+    "expected_transitions": ["militia", "arambai", "elephant"],
+    "weaknesses": ["archers", "cavalry"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 7
+  },
+  "Byzantines": {
+    "archetype": "defensive_camel",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["camel", "cataphract", "defensive"],
+    "expected_transitions": ["camel", "cataphract", "trash"],
+    "weaknesses": ["cavalry_archer", "siege"],
+    "economy_rating": 6,
+    "mobility_rating": 6,
+    "late_game_rating": 8
+  },
+  "Celts": {
+    "archetype": "infantry_siege",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["militia", "woad_raider", "siege"],
+    "expected_transitions": ["militia", "woad_raider", "siege"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 6,
+    "mobility_rating": 7,
+    "late_game_rating": 7
+  },
+  "Chinese": {
+    "archetype": "archer_siege",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["crossbow", "chu_ko_nu", "siege"],
+    "expected_transitions": ["archer", "crossbow", "chu_ko_nu"],
+    "weaknesses": ["cavalry", "eagle"],
+    "economy_rating": 10,
+    "mobility_rating": 5,
+    "late_game_rating": 9
+  },
+  "Cumans": {
+    "archetype": "cavalry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["scout", "keshik", "steppe_lancer"],
+    "expected_transitions": ["scout", "keshik", "cavalry"],
+    "weaknesses": ["camels", "halberdier"],
+    "economy_rating": 8,
+    "mobility_rating": 10,
+    "late_game_rating": 6
+  },
+  "Dravidians": {
+    "archetype": "infantry_elephant",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["militia", "urumi", "elephant_archer"],
+    "expected_transitions": ["militia", "urumi", "elephant_archer"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 3,
+    "late_game_rating": 7
+  },
+  "Ethiopians": {
+    "archetype": "archer_siege",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["archer", "shotel_warrior", "siege"],
+    "expected_transitions": ["archer", "shotel", "siege"],
+    "weaknesses": ["cavalry", "hand_cannoneer"],
+    "economy_rating": 6,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Franks": {
+    "archetype": "cavalry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["scout", "knight", "throwing_axeman"],
+    "expected_transitions": ["scout", "knight", "axeman"],
+    "weaknesses": ["camel", "halberdier"],
+    "economy_rating": 7,
+    "mobility_rating": 8,
+    "late_game_rating": 7
+  },
+  "Georgians": {
+    "archetype": "cavalry_defensive",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["knight", "monaspa", "defensive"],
+    "expected_transitions": ["knight", "monaspa", "defensive"],
+    "weaknesses": ["archers", "siege"],
+    "economy_rating": 8,
+    "mobility_rating": 6,
+    "late_game_rating": 8
+  },
+  "Goths": {
+    "archetype": "infantry",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["militia", "huskarl"],
+    "expected_transitions": ["militia", "huskarl"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 6,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Gurjaras": {
+    "archetype": "camel_cavalry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["camel", "chakram", "shrivamsha"],
+    "expected_transitions": ["camel", "shrivamsha", "cavalry"],
+    "weaknesses": ["halberdier", "archers"],
+    "economy_rating": 8,
+    "mobility_rating": 8,
+    "late_game_rating": 8
+  },
+  "Hindustanis": {
+    "archetype": "camel_gunpowder",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["camel", "ghulam", "hand_cannoneer"],
+    "expected_transitions": ["camel", "ghulam", "hand_cannoneer"],
+    "weaknesses": ["cavalry", "archers"],
+    "economy_rating": 8,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Huns": {
+    "archetype": "cavalry_archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["scout", "cavalry_archer", "tarkan"],
+    "expected_transitions": ["scout", "cavalry_archer", "tarkan"],
+    "weaknesses": ["halberdier", "camels"],
+    "economy_rating": 6,
+    "mobility_rating": 10,
+    "late_game_rating": 6
+  },
+  "Incas": {
+    "archetype": "infantry_sling",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["eagle", "slinger", "kamayuk"],
+    "expected_transitions": ["eagle", "slinger", "kamayuk"],
+    "weaknesses": ["cavalry", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 4,
+    "late_game_rating": 6
+  },
+  "Indians": {
+    "archetype": "camel_gunpowder",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["camel", "elephant_archer", "hand_cannoneer"],
+    "expected_transitions": ["camel", "elephant_archer", "hand_cannoneer"],
+    "weaknesses": ["cavalry", "archers"],
+    "economy_rating": 8,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Italians": {
+    "archetype": "archer_naval",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["archer", "genoese", "bombard_cannon"],
+    "expected_transitions": ["archer", "genoese", "gunpowder"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 7
+  },
+  "Japanese": {
+    "archetype": "infantry_archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["militia", "samurai", "archer"],
+    "expected_transitions": ["militia", "samurai", "archer"],
+    "weaknesses": ["cavalry", "hand_cannoneer"],
+    "economy_rating": 6,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Jurchens": {
+    "archetype": "cavalry_gunpowder",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["cavalry", "fire_lancer", "grenadier"],
+    "expected_transitions": ["cavalry", "fire_lancer", "grenadier"],
+    "weaknesses": ["archers", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Khitans": {
+    "archetype": "cavalry_archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["cavalry", "lancer", "archer"],
+    "expected_transitions": ["cavalry", "lancer", "archer"],
+    "weaknesses": ["halberdier", "camels"],
+    "economy_rating": 7,
+    "mobility_rating": 8,
+    "late_game_rating": 7
+  },
+  "Khmer": {
+    "archetype": "elephant_siege",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["elephant", "ballista", "siege"],
+    "expected_transitions": ["elephant", "ballista", "siege"],
+    "weaknesses": ["halberdier", "monk"],
+    "economy_rating": 8,
+    "mobility_rating": 5,
+    "late_game_rating": 8
+  },
+  "Koreans": {
+    "archetype": "defensive_siege",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["archer", "war_wagon", "turtle_ship"],
+    "expected_transitions": ["archer", "war_wagon", "siege"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 4,
+    "late_game_rating": 7
+  },
+  "Lithuanians": {
+    "archetype": "cavalry_monk",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["knight", "leitis", "monk"],
+    "expected_transitions": ["knight", "leitis", "monk"],
+    "weaknesses": ["archers", "camels"],
+    "economy_rating": 7,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Magyars": {
+    "archetype": "cavalry_archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["scout", "magyar_huszar", "cavalry_archer"],
+    "expected_transitions": ["scout", "magyar_huszar", "cavalry_archer"],
+    "weaknesses": ["halberdier", "camels"],
+    "economy_rating": 6,
+    "mobility_rating": 9,
+    "late_game_rating": 6
+  },
+  "Malay": {
+    "archetype": "naval_elephant",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["elephant", "karambit", "naval"],
+    "expected_transitions": ["elephant", "karambit", "naval"],
+    "weaknesses": ["monk", "hand_cannoneer"],
+    "economy_rating": 8,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Malians": {
+    "archetype": "infantry_cavalry",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["militia", "gbeto", "farimba_cavalry"],
+    "expected_transitions": ["militia", "gbeto", "cavalry"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 6,
+    "late_game_rating": 7
+  },
+  "Mayans": {
+    "archetype": "archer_eagle",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["archer", "plumed", "eagle"],
+    "expected_transitions": ["archer", "plumed", "eagle"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 9,
+    "mobility_rating": 5,
+    "late_game_rating": 8
+  },
+  "Mongols": {
+    "archetype": "cavalry_archer_siege",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["mangudai", "hussar", "siege"],
+    "expected_transitions": ["scout", "mangudai", "siege"],
+    "weaknesses": ["halberdier", "camels"],
+    "economy_rating": 7,
+    "mobility_rating": 10,
+    "late_game_rating": 9
+  },
+  "Persians": {
+    "archetype": "cavalry_elephant",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["knight", "elephant", "cavalry_archer"],
+    "expected_transitions": ["knight", "elephant", "cavalry_archer"],
+    "weaknesses": ["halberdier", "monk"],
+    "economy_rating": 8,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Poles": {
+    "archetype": "cavalry_infantry",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["knight", "winged_hussar", "obuch"],
+    "expected_transitions": ["knight", "winged_hussar", "obuch"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 7,
+    "late_game_rating": 7
+  },
+  "Portuguese": {
+    "archetype": "gunpowder_naval",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["hand_cannoneer", "organ_gun", "carrack"],
+    "expected_transitions": ["archer", "organ_gun", "naval"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 8,
+    "mobility_rating": 5,
+    "late_game_rating": 8
+  },
+  "Romans": {
+    "archetype": "infantry_siege",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["militia", "legionary", "ballista"],
+    "expected_transitions": ["militia", "legionary", "ballista"],
+    "weaknesses": ["cavalry", "archers"],
+    "economy_rating": 6,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Saracens": {
+    "archetype": "camel_archer_siege",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["camel", "mameluke", "siege"],
+    "expected_transitions": ["camel", "mameluke", "siege"],
+    "weaknesses": ["halberdier", "archers"],
+    "economy_rating": 7,
+    "mobility_rating": 7,
+    "late_game_rating": 8
+  },
+  "Shu": {
+    "archetype": "archer_infantry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["archer", "militia", "crossbow"],
+    "expected_transitions": ["archer", "militia", "crossbow"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 7
+  },
+  "Sicilians": {
+    "archetype": "infantry_cavalry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["militia", "serjeant", "cavalry"],
+    "expected_transitions": ["militia", "serjeant", "cavalry"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Slavs": {
+    "archetype": "infantry_siege",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["militia", "boyar", "siege"],
+    "expected_transitions": ["militia", "boyar", "siege"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 7
+  },
+  "Spanish": {
+    "archetype": "cavalry_monk_gunpowder",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["knight", "conquistador", "monk"],
+    "expected_transitions": ["knight", "conquistador", "monk"],
+    "weaknesses": ["halberdier", "archers"],
+    "economy_rating": 7,
+    "mobility_rating": 6,
+    "late_game_rating": 8
+  },
+  "Tatars": {
+    "archetype": "cavalry_archer_siege",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["keshik", "flaming_camel", "cavalry_archer"],
+    "expected_transitions": ["scout", "keshik", "cavalry_archer"],
+    "weaknesses": ["halberdier", "camels"],
+    "economy_rating": 7,
+    "mobility_rating": 9,
+    "late_game_rating": 8
+  },
+  "Teutons": {
+    "archetype": "infantry_siege",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["militia", "teutonic_knight", "siege"],
+    "expected_transitions": ["militia", "teutonic_knight", "siege"],
+    "weaknesses": ["archers", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 3,
+    "late_game_rating": 8
+  },
+  "Turks": {
+    "archetype": "gunpowder_cavalry",
+    "strong_ages": ["castle", "imperial"],
+    "power_spikes": ["hand_cannoneer", "janissary", "bombard_cannon"],
+    "expected_transitions": ["scout", "janissary", "bombard_cannon"],
+    "weaknesses": ["halberdier", "archers"],
+    "economy_rating": 7,
+    "mobility_rating": 6,
+    "late_game_rating": 8
+  },
+  "Vietnamese": {
+    "archetype": "archer_elephant",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["archer", "rattan", "elephant"],
+    "expected_transitions": ["archer", "rattan", "elephant"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 4,
+    "late_game_rating": 7
+  },
+  "Vikings": {
+    "archetype": "infantry_naval",
+    "strong_ages": ["feudal", "imperial"],
+    "power_spikes": ["militia", "berserk", "naval"],
+    "expected_transitions": ["militia", "berserk", "naval"],
+    "weaknesses": ["cavalry", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 7
+  },
+  "Wei": {
+    "archetype": "cavalry_infantry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["cavalry", "militia", "xianbei"],
+    "expected_transitions": ["cavalry", "militia", "xianbei"],
+    "weaknesses": ["archers", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 7,
+    "late_game_rating": 7
+  },
+  "Wu": {
+    "archetype": "naval_archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["archer", "naval", "fire_ship"],
+    "expected_transitions": ["archer", "naval", "fire_ship"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 6,
+    "late_game_rating": 7
+  }
+}

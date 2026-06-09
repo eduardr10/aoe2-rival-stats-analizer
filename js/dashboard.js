@@ -15,6 +15,8 @@ import {
   computePlayerPrimaryOpenings,
   generateDeepInsights,
 } from './analysis.js';
+import { loadKnowledgeBase, buildStrategicAnalysis } from './strategic_engine.js';
+import { analyzeMatchup } from './matchup_engine.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js';
 import { initWebSocket } from './websocket.js';
 
@@ -662,6 +664,12 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
+  // Strategic engine integration
+  const mainCivEntry = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
+  const mainCivName = mainCivEntry ? mainCivEntry[0] : '';
+  await loadKnowledgeBase();
+  stats.strategic_analysis = buildStrategicAnalysis(stats, mainCivName);
+
   // Enrich matches for historical data
   const featureMap = new Map();
   if (stats.all_match_features) {
@@ -826,7 +834,13 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderPlayerSummaryBanner(stats);
   html += `</div>`;
 
-  // BLOCK 2: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
+  // BLOCK 2: STRATEGIC IDENTITY (Knowledge base enriched)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Strategic Identity</div>`;
+  html += renderStrategicIdentityCard(stats);
+  html += `</div>`;
+
+  // BLOCK 3: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
   html += `<div class="block">`;
   html += `<div class="section-title">${t('expectedStrategy')}</div>`;
   html += `<div class="block-grid block-grid-2">`;
@@ -834,7 +848,7 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderRecommendationsCard(stats);
   html += `</div></div>`;
 
-  // BLOCK 3: RIVAL PROFILE (Playstyle + Intelligence)
+  // BLOCK 4: RIVAL PROFILE (Playstyle + Intelligence)
   html += `<div class="block">`;
   html += `<div class="section-title">${t('rival')} ${t('player').toLowerCase()}</div>`;
   html += `<div class="block-grid block-grid-3">`;
@@ -868,6 +882,70 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += `</div>`;
 
   return html;
+}
+
+function renderStrategicIdentityCard(stats) {
+  const sa = stats.strategic_analysis || {};
+  const identity = sa.strategic_identity || {};
+  const behaviour = sa.expected_behaviour || [];
+  const spike = sa.power_spike || {};
+  const transitions = sa.transition_forecast || [];
+  const weaknesses = sa.weaknesses || [];
+  const recs = sa.recommendations || [];
+
+  let behaviourHtml = '';
+  for (const b of behaviour) {
+    behaviourHtml += `<div style="font-size:13px;color:var(--text-secondary);padding:3px 0;">• ${escapeHtml(b)}</div>`;
+  }
+
+  let transitionHtml = '';
+  for (const t of transitions) {
+    transitionHtml += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-subtle);">
+      <span style="color:var(--text-primary);">${escapeHtml(t.name)}</span>
+      <span style="color:var(--accent-blue);font-weight:600;">${t.probability}%</span>
+    </div>`;
+  }
+
+  let weaknessHtml = '';
+  for (const w of weaknesses) {
+    weaknessHtml += `<span style="display:inline-block;padding:3px 10px;background:rgba(220,38,38,0.06);color:var(--accent-red);border-radius:12px;font-size:11px;margin-right:6px;margin-bottom:4px;">${escapeHtml(w)}</span>`;
+  }
+
+  let recsHtml = '';
+  for (const r of recs) {
+    recsHtml += `<div style="font-size:13px;color:var(--text-primary);padding:4px 0;border-bottom:1px solid var(--border-subtle);">→ ${escapeHtml(r)}</div>`;
+  }
+
+  return `<div class="card" style="padding:20px;background:linear-gradient(135deg, var(--bg-card) 0%, #f0f4ff 100%);">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Identity</div>
+        <div style="font-size:20px;font-weight:800;color:var(--accent-blue);margin-bottom:12px;">${escapeHtml(identity.identity || 'Unknown')}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Civ: ${escapeHtml(identity.civilization || '—')}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Base: ${escapeHtml(identity.base_archetype || '—')}</div>
+
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Power Spike</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">${escapeHtml(spike.timing || '—')}</div>
+        ${spike.civ_spikes?.length ? `<div style="font-size:12px;color:var(--text-muted);">${spike.civ_spikes.join(', ')}</div>` : ''}
+      </div>
+
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Expected Behaviour</div>
+        ${behaviourHtml || '<div class="card-subtitle">No data</div>'}
+
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:14px;margin-bottom:6px;">Likely Transitions</div>
+        ${transitionHtml || '<div class="card-subtitle">No data</div>'}
+      </div>
+
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Weaknesses</div>
+        ${weaknessHtml || '<div class="card-subtitle">No data</div>'}
+
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:14px;margin-bottom:6px;">Recommendations</div>
+        ${recsHtml || '<div class="card-subtitle">No data</div>'}
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderPredictionEngineCard(stats) {
