@@ -7,7 +7,7 @@ import {
   classifyPlaystyle,
   detectWeaknesses,
   detectThreats,
-  generateRecommendations,
+  generateDataDrivenRecommendations,
   computeConfidence,
   computeStreak,
   interpretTimings,
@@ -20,6 +20,175 @@ import { initWebSocket } from './websocket.js';
 const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
 const PAGES = 1;
+
+// ============================================================================
+// INTERNATIONALIZATION
+// ============================================================================
+
+const i18n = {
+  en: {
+    dangerScore: 'Danger Score',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    rating: 'Rating',
+    winrate: 'Winrate',
+    games: 'Games',
+    streak: 'Streak',
+    expectedStrategy: 'Expected Strategy',
+    probability: 'Probability',
+    recommendedCounter: 'Recommended Counter',
+    preferredPlaystyle: 'Preferred Playstyle',
+    mostPlayedCivs: 'Most Played Civs',
+    expectedOpening: 'Expected Opening',
+    analysisConfidence: 'Analysis Confidence',
+    timingAnalysis: 'Timing Analysis',
+    ageTimeline: 'Age Timeline',
+    interpretation: 'Interpretation',
+    weaknessesDetected: 'Weaknesses Detected',
+    majorThreats: 'Major Threats',
+    strategicRecommendations: 'Strategic Recommendations',
+    detailedAnalysis: 'Detailed Analysis',
+    historicalData: 'Historical Data',
+    overview: 'Overview',
+    military: 'Military',
+    economy: 'Economy',
+    openings: 'Openings',
+    maps: 'Maps',
+    civs: 'Civs',
+    liveMatch: 'Live Match',
+    vs: 'vs',
+    currentGame: 'Current Game',
+    player: 'Player',
+    rival: 'Rival',
+    liveAdvantage: 'Live Advantage',
+    styleComparison: 'Style Comparison',
+    criticalTimings: 'Critical Timings',
+    expectedTransitions: 'Expected Transitions',
+    detailedMetrics: 'Detailed Metrics',
+    loading: 'Loading profile...',
+    error: 'Error loading data.',
+    noData: 'No data available',
+    avgEapm: 'Avg EAPM',
+    aggressionScore: 'Aggression Score',
+    armyComposition: 'Army Composition',
+    feudal: 'Feudal',
+    castle: 'Castle',
+    imperial: 'Imperial',
+    pattern: 'Pattern',
+    apply: 'Apply',
+    analyzeRival: 'Analyze Rival',
+    viewProfile: 'View profile',
+    support: 'Support',
+    createdBy: 'Created by',
+    helpingText: 'Helping AoE2 players make better decisions.',
+    youtube: 'YouTube',
+    twitch: 'Twitch',
+    ladder: 'Ladder',
+    from: 'From',
+    to: 'To',
+    ranked1v1: 'Ranked 1v1',
+    unranked: 'Unranked',
+  },
+  es: {
+    dangerScore: 'Nivel de Peligro',
+    low: 'Bajo',
+    medium: 'Medio',
+    high: 'Alto',
+    rating: 'ELO',
+    winrate: 'Winrate',
+    games: 'Partidas',
+    streak: 'Racha',
+    expectedStrategy: 'Estrategia Esperada',
+    probability: 'Probabilidad',
+    recommendedCounter: 'Contra-recomendación',
+    preferredPlaystyle: 'Estilo de Juego',
+    mostPlayedCivs: 'Civs Frecuentes',
+    expectedOpening: 'Apertura Esperada',
+    analysisConfidence: 'Confianza del Análisis',
+    timingAnalysis: 'Análisis de Tiempos',
+    ageTimeline: 'Timeline de Edades',
+    interpretation: 'Interpretación',
+    weaknessesDetected: 'Debilidades Detectadas',
+    majorThreats: 'Amenazas Mayores',
+    strategicRecommendations: 'Recomendaciones Estratégicas',
+    detailedAnalysis: 'Análisis Detallado',
+    historicalData: 'Datos Históricos',
+    overview: 'Resumen',
+    military: 'Militar',
+    economy: 'Economía',
+    openings: 'Aperturas',
+    maps: 'Mapas',
+    civs: 'Civilizaciones',
+    liveMatch: 'Partida en Vivo',
+    vs: 'vs',
+    currentGame: 'Partida Actual',
+    player: 'Jugador',
+    rival: 'Rival',
+    liveAdvantage: 'Ventaja en Vivo',
+    styleComparison: 'Comparación de Estilos',
+    criticalTimings: 'Tiempos Críticos',
+    expectedTransitions: 'Transiciones Esperadas',
+    detailedMetrics: 'Métricas Detalladas',
+    loading: 'Cargando perfil...',
+    error: 'Error cargando datos.',
+    noData: 'Sin datos disponibles',
+    avgEapm: 'EAPM Promedio',
+    aggressionScore: 'Puntuación de Agresión',
+    armyComposition: 'Composición del Ejército',
+    feudal: 'Feudal',
+    castle: 'Castillos',
+    imperial: 'Imperial',
+    pattern: 'Patrón',
+    apply: 'Aplicar',
+    analyzeRival: 'Analizar Rival',
+    viewProfile: 'Ver perfil',
+    support: 'Apoyar',
+    createdBy: 'Creado por',
+    helpingText: 'Ayudando a jugadores de AoE2 a tomar mejores decisiones.',
+    youtube: 'YouTube',
+    twitch: 'Twitch',
+    ladder: 'Ladder',
+    from: 'Desde',
+    to: 'Hasta',
+    ranked1v1: 'Ranked 1v1',
+    unranked: 'No rankeado',
+  },
+};
+
+let currentLang = 'en';
+
+function t(key) {
+  return i18n[currentLang]?.[key] || i18n.en[key] || key;
+}
+
+function detectLanguage() {
+  const saved = localStorage.getItem('aoe2-lang');
+  if (saved && i18n[saved]) return saved;
+  const navLang = navigator.language || navigator.userLanguage || 'en';
+  if (navLang.startsWith('es')) return 'es';
+  return 'en';
+}
+
+function setLanguage(lang) {
+  if (i18n[lang]) {
+    currentLang = lang;
+    localStorage.setItem('aoe2-lang', lang);
+  }
+}
+
+// Detect on load
+currentLang = detectLanguage();
+
+// Try IP-based detection (GitHub Pages friendly — free API)
+try {
+  fetch('https://ipapi.co/json/').then(r => r.json()).then(data => {
+    const country = data.country_code;
+    if (country === 'ES' || country === 'MX' || country === 'AR' || country === 'CL' || country === 'CO' || country === 'PE' || country === 'VE' || country === 'UY' || country === 'EC' || country === 'BO' || country === 'PY' || country === 'PA' || country === 'CR' || country === 'NI' || country === 'HN' || country === 'GT' || country === 'SV' || country === 'DO' || country === 'PR' || country === 'CU') {
+      setLanguage('es');
+    }
+  }).catch(() => {});
+} catch (e) {}
 
 // App configuration for creator links
 window.app_config = {
@@ -459,7 +628,7 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 
   // BLOCK 2: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
   html += `<div class="block">`;
-  html += `<div class="section-title">Strategic Intelligence</div>`;
+  html += `<div class="section-title">${t('expectedStrategy')}</div>`;
   html += `<div class="block-grid block-grid-2">`;
   html += renderPredictionEngineCard(stats);
   html += renderRecommendationsCard(stats);
@@ -467,7 +636,7 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 
   // BLOCK 3: RIVAL PROFILE (Playstyle + Intelligence)
   html += `<div class="block">`;
-  html += `<div class="section-title">Rival Profile</div>`;
+  html += `<div class="section-title">${t('rival')} ${t('player').toLowerCase()}</div>`;
   html += `<div class="block-grid block-grid-3">`;
   html += renderPlaystyleWithCivsCard(stats);
   html += renderExpectedOpeningCard(stats);
@@ -476,7 +645,7 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 
   // BLOCK 4: TIMING ANALYSIS (Visual timeline + interpretations)
   html += `<div class="block">`;
-  html += `<div class="section-title">Timing Analysis</div>`;
+  html += `<div class="section-title">${t('timingAnalysis')}</div>`;
   html += renderTimingAnalysisCard(stats);
   html += `</div>`;
 
@@ -489,13 +658,13 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 
   // BLOCK 6: Detailed Analysis with tabs
   html += `<div class="block">`;
-  html += `<div class="section-title">Detailed Analysis</div>`;
+  html += `<div class="section-title">${t('detailedAnalysis')}</div>`;
   html += renderDetailedAnalysisCard(stats);
   html += `</div>`;
 
   // BLOCK 7: Historical Data
   html += `<div class="block">`;
-  html += `<div class="section-title">Historical Data</div>`;
+  html += `<div class="section-title">${t('historicalData')}</div>`;
   html += renderHistoricalDataCard(stats);
   html += `</div>`;
 
@@ -509,38 +678,34 @@ function renderDangerScoreDominant(stats) {
   const streak = stats.current_streak || { type: 'none', count: 0 };
   const streakText = streak.type === 'win' ? `+${streak.count} wins` :
                        streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
+  const eapm = stats.avg_eapm || 0;
+  const eapmLabel = eapm >= 30 ? 'Fast' : eapm >= 20 ? 'Average' : 'Relaxed';
 
-  // Calculate expected matchup
-  let matchupText = 'Even Matchup';
-  if (typeof stats.rating === 'number' && typeof stats.rival_rating === 'number') {
-    const diff = stats.rival_rating - stats.rating;
-    if (diff > 150) matchupText = 'Very Difficult';
-    else if (diff > 50) matchupText = 'Difficult';
-    else if (diff < -150) matchupText = 'Very Favorable';
-    else if (diff < -50) matchupText = 'Favorable';
-  }
-
-  return `<div class="card danger-card" style="padding:24px;text-align:center;">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px;">Danger Score</div>
-    <div style="font-size:48px;font-weight:800;color:var(--danger-${dangerColorClass === 'low' ? 'low' : dangerColorClass === 'medium' ? 'mid' : 'high'});line-height:1;">${danger.score}</div>
-    <div style="font-size:20px;font-weight:700;color:var(--danger-${dangerColorClass === 'low' ? 'low' : dangerColorClass === 'medium' ? 'mid' : 'high'});margin-top:8px;">${danger.label.toUpperCase()}</div>
-    <div style="font-size:13px;color:var(--text-secondary);margin-top:12px;">Expected Matchup: <strong style="color:var(--text-primary);">${matchupText}</strong></div>
-    <div style="display:flex;justify-content:center;gap:16px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border-subtle);">
-      <div style="text-align:center;">
-        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Rating</div>
+  return `<div class="card danger-card" style="padding:28px;text-align:center;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px;">${t('dangerScore')}</div>
+    <div style="font-size:56px;font-weight:800;color:var(--danger-${dangerColorClass === 'low' ? 'low' : dangerColorClass === 'medium' ? 'mid' : 'high'});line-height:1;">${danger.score}</div>
+    <div style="font-size:22px;font-weight:700;color:var(--danger-${dangerColorClass === 'low' ? 'low' : dangerColorClass === 'medium' ? 'mid' : 'high'});margin-top:8px;">${danger.label.toUpperCase()}</div>
+    <div style="display:flex;justify-content:center;gap:16px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle);flex-wrap:wrap;">
+      <div style="text-align:center;min-width:80px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('rating')}</div>
         <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${stats.rating || '—'}</div>
       </div>
-      <div style="text-align:center;">
-        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Winrate</div>
+      <div style="text-align:center;min-width:80px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('winrate')}</div>
         <div style="font-size:18px;font-weight:700;color:${wr >= 50 ? 'var(--accent-green)' : 'var(--accent-red)'};margin-top:2px;">${wr}%</div>
       </div>
-      <div style="text-align:center;">
-        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Games</div>
+      <div style="text-align:center;min-width:80px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('games')}</div>
         <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${stats.analyzed}</div>
       </div>
-      <div style="text-align:center;">
-        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Streak</div>
+      <div style="text-align:center;min-width:80px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('streak')}</div>
         <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${streakText}</div>
+      </div>
+      <div style="text-align:center;min-width:80px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('avgEapm')}</div>
+        <div style="font-size:18px;font-weight:700;color:${eapm >= 30 ? 'var(--accent-red)' : eapm >= 20 ? 'var(--accent-blue)' : 'var(--accent-green)'};margin-top:2px;">${eapm > 0 ? eapm : '—'}</div>
+        <div style="font-size:10px;color:var(--text-muted);">${eapmLabel}</div>
       </div>
     </div>
   </div>`;
@@ -577,13 +742,13 @@ function renderPredictionEngineCard(stats) {
   }
 
   return `<div class="card" style="padding:20px;">
-    <div class="card-label">Expected Strategy</div>
+    <div class="card-label">${t('expectedStrategy')}</div>
     <div style="font-size:22px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">${escapeHtml(expected)}</div>
-    ${prob > 0 ? `<div class="card-subtitle">Probability: ${prob}%</div>` : ''}
+    ${prob > 0 ? `<div class="card-subtitle">${t('probability')}: ${prob}%</div>` : ''}
     ${barsHtml ? `<div style="margin-top:12px;margin-bottom:16px;">${barsHtml}</div>` : ''}
     <div style="border-top:1px solid var(--border-subtle);padding-top:12px;">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;">Recommended Counter</div>
-      <ul class="recommendation-list">${counterHtml || '<li><span class="check">✓</span> Analyze rival for specific counters</li>'}</ul>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;">${t('recommendedCounter')}</div>
+      <ul class="recommendation-list">${counterHtml || `<li><span class="check">✓</span> ${t('noData')}</li>`}</ul>
     </div>
   </div>`;
 }
@@ -594,12 +759,12 @@ function renderConfidenceCard(stats) {
   const dims = arch.dimensions || {};
 
   return `<div class="card">
-    <div class="card-label">Analysis Confidence</div>
+    <div class="card-label">${t('analysisConfidence')}</div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
       <div style="font-size:28px;font-weight:800;color:var(--text-primary);">${cd.percentage}%</div>
       <div>
         <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${cd.level}</div>
-        <div style="font-size:11px;color:var(--text-muted);">${cd.games_analyzed} games analyzed</div>
+        <div style="font-size:11px;color:var(--text-muted);">${cd.games_analyzed} ${t('games').toLowerCase()}</div>
       </div>
     </div>
     <div style="width:100%;height:8px;background:rgba(30,30,46,0.06);border-radius:4px;overflow:hidden;margin-bottom:10px;">
@@ -671,7 +836,7 @@ function renderPlaystyleWithCivsCard(stats) {
   let civsHtml = '';
   if (sortedCivs.length > 0) {
     civsHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle);">
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">Most Played Civs</div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">${t('mostPlayedCivs')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;">`;
     for (const [civ, pct] of sortedCivs) {
       civsHtml += `<span style="background:rgba(30,30,46,0.04);border:1px solid var(--border-subtle);padding:3px 10px;border-radius:10px;font-size:12px;color:var(--text-secondary);">${escapeHtml(civ)} <span style="color:var(--accent-blue);font-weight:600;">${pct}%</span></span>`;
@@ -680,9 +845,9 @@ function renderPlaystyleWithCivsCard(stats) {
   }
 
   return `<div class="card">
-    <div class="card-label">Preferred Playstyle</div>
+    <div class="card-label">${t('preferredPlaystyle')}</div>
     <div class="playstyle-badge ${playstyle.label.toLowerCase().replace(/\s+/g, '')}">${playstyle.label}</div>
-    <div class="playstyle-score">Average Feudal aggression: ${aggression}/100</div>
+    <div class="playstyle-score">${t('aggressionScore')}: ${aggression}/100</div>
     ${arch.description ? `<div class="card-subtitle" style="margin-top:8px;">${arch.description}</div>` : ''}
     ${civsHtml}
   </div>`;
@@ -702,7 +867,7 @@ function renderTimingAnalysisCard(stats) {
   if (feudal > 0) {
     const fPct = (feudal / maxTime) * 100;
     timelineHtml += `<div class="timeline-track">
-      <div class="timeline-label">Feudal</div>
+      <div class="timeline-label">${t('feudal')}</div>
       <div class="timeline-bar-track"><div class="timeline-bar" style="width:${fPct}%;background:var(--accent-green)"></div></div>
       <div class="timeline-time">${stats.avg_feudal_hms}</div>
     </div>`;
@@ -710,7 +875,7 @@ function renderTimingAnalysisCard(stats) {
   if (castle > 0) {
     const cPct = (castle / maxTime) * 100;
     timelineHtml += `<div class="timeline-track">
-      <div class="timeline-label">Castle</div>
+      <div class="timeline-label">${t('castle')}</div>
       <div class="timeline-bar-track"><div class="timeline-bar" style="width:${cPct}%;background:var(--accent-blue)"></div></div>
       <div class="timeline-time">${stats.avg_castle_hms}</div>
     </div>`;
@@ -718,7 +883,7 @@ function renderTimingAnalysisCard(stats) {
   if (imperial > 0) {
     const iPct = (imperial / maxTime) * 100;
     timelineHtml += `<div class="timeline-track">
-      <div class="timeline-label">Imperial</div>
+      <div class="timeline-label">${t('imperial')}</div>
       <div class="timeline-bar-track"><div class="timeline-bar" style="width:${iPct}%;background:var(--accent-purple)"></div></div>
       <div class="timeline-time">${stats.avg_imperial_hms}</div>
     </div>`;
@@ -736,12 +901,12 @@ function renderTimingAnalysisCard(stats) {
 
   return `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div class="card-label" style="margin:0;">Age Timeline</div>
-      <div style="font-size:12px;color:var(--text-muted);">Avg Game: ${duration}</div>
+      <div class="card-label" style="margin:0;">${t('ageTimeline')}</div>
+      <div style="font-size:12px;color:var(--text-muted);">${duration}</div>
     </div>
     <div style="margin-bottom:16px;">${timelineHtml}</div>
     ${interpHtml ? `<div style="border-top:1px solid var(--border-subtle);padding-top:8px;">
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">Interpretation</div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">${t('interpretation')}</div>
       ${interpHtml}
     </div>` : ''}
   </div>`;
@@ -751,7 +916,7 @@ function renderRecommendationsCard(stats) {
   const recs = stats.recommendations || [];
 
   let html = `<div class="card" style="padding:20px;">`;
-  html += `<div class="card-label">Strategic Recommendations</div>`;
+  html += `<div class="card-label">${t('strategicRecommendations')}</div>`;
   html += `<ul class="recommendation-list">`;
 
   if (recs.length > 0) {
@@ -762,7 +927,7 @@ function renderRecommendationsCard(stats) {
       html += `<li>${icon} ${escapeHtml(rec.text)}</li>`;
     }
   } else {
-    html += `<li><span class="check">✓</span> Analyze rival matches for specific recommendations</li>`;
+    html += `<li><span class="check">✓</span> ${t('noData')}</li>`;
   }
 
   html += `</ul></div>`;
@@ -774,13 +939,13 @@ function renderWeaknessesCard(stats) {
 
   if (weaknesses.length === 0) {
     return `<div class="card">
-      <div class="card-label">Weaknesses Detected</div>
-      <div class="card-subtitle">No clear weaknesses identified yet.</div>
+      <div class="card-label">${t('weaknessesDetected')}</div>
+      <div class="card-subtitle">${t('noData')}</div>
     </div>`;
   }
 
   return `<div class="card">
-    <div class="card-label">Weaknesses Detected</div>
+    <div class="card-label">${t('weaknessesDetected')}</div>
     <ul class="weakness-list">
       ${weaknesses.map(w => `<li>${escapeHtml(w)}</li>`).join('')}
     </ul>
@@ -792,13 +957,13 @@ function renderThreatsCard(stats) {
 
   if (threats.length === 0) {
     return `<div class="card">
-      <div class="card-label">Major Threats</div>
-      <div class="card-subtitle">No extreme threats detected.</div>
+      <div class="card-label">${t('majorThreats')}</div>
+      <div class="card-subtitle">${t('noData')}</div>
     </div>`;
   }
 
   return `<div class="card">
-    <div class="card-label">Major Threats</div>
+    <div class="card-label">${t('majorThreats')}</div>
     <ul class="threat-list">
       ${threats.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
     </ul>
@@ -807,7 +972,7 @@ function renderThreatsCard(stats) {
 
 function renderDetailedAnalysisCard(stats) {
   const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs'];
-  const tabLabels = ['Overview', 'Military', 'Economy', 'Openings', 'Maps', 'Civs'];
+  const tabLabels = [t('overview'), t('military'), t('economy'), t('openings'), t('maps'), t('civs')];
 
   let html = `<div class="card">`;
   html += `<div class="tabs-nav">`;
@@ -832,17 +997,17 @@ function buildOverviewPanel(stats, id) {
   const games = stats.analyzed || 0;
   const wins = stats.total_wins || 0;
   const streak = stats.current_streak || { type: 'none', count: 0 };
-  const streakText = streak.type === 'win' ? `+${streak.count} wins` :
-                       streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
+  const streakText = streak.type === 'win' ? `+${streak.count}` :
+                       streak.type === 'loss' ? `-${streak.count}` : '—';
 
   return `<div class="tab-panel active" data-panel="${id}">
     <div class="tab-stat-grid">
-      <div class="tab-stat-item"><div class="tab-stat-label">Games</div><div class="tab-stat-value">${games}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Winrate</div><div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Wins / Losses</div><div class="tab-stat-value">${wins} / ${games - wins}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Current Streak</div><div class="tab-stat-value">${streakText}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Avg ELO</div><div class="tab-stat-value">${stats.rating || '—'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Avg EAPM</div><div class="tab-stat-value">${stats.avg_eapm || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('games')}</div><div class="tab-stat-value">${games}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('winrate')}</div><div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">W/L</div><div class="tab-stat-value">${wins} / ${games - wins}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('streak')}</div><div class="tab-stat-value">${streakText}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('rating')}</div><div class="tab-stat-value">${stats.rating || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('avgEapm')}</div><div class="tab-stat-value">${stats.avg_eapm || '—'}</div></div>
     </div>
   </div>`;
 }
@@ -873,10 +1038,10 @@ function buildMilitaryPanel(stats, id) {
 
   return `<div class="tab-panel" data-panel="${id}">
     <div class="tab-stat-grid" style="margin-bottom:12px;">
-      <div class="tab-stat-item"><div class="tab-stat-label">Aggression Score</div><div class="tab-stat-value">${aggression}/100</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Total Units</div><div class="tab-stat-value">${totalUnits}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('aggressionScore')}</div><div class="tab-stat-value">${aggression}/100</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('games')}</div><div class="tab-stat-value">${totalUnits}</div></div>
     </div>
-    ${compositionHtml ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Army Composition</div>${compositionHtml}</div>` : '<div class="card-subtitle" style="padding:10px 0;">No military data available.</div>'}
+    ${compositionHtml ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">${t('armyComposition')}</div>${compositionHtml}</div>` : `<div class="card-subtitle" style="padding:10px 0;">${t('noData')}</div>`}
   </div>`;
 }
 

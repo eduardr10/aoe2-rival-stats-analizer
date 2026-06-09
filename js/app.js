@@ -7,7 +7,7 @@ import {
   classifyPlaystyle,
   detectWeaknesses,
   detectThreats,
-  generateRecommendations,
+  generateDataDrivenRecommendations,
   computeConfidence,
   computeStreak,
   interpretTimings,
@@ -170,7 +170,7 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
   stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
-  stats.recommendations = generateRecommendations(stats);
+  stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
@@ -294,7 +294,7 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
-  stats.recommendations = generateRecommendations(stats);
+  stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(matches);

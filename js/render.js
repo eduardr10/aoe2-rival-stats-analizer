@@ -121,19 +121,11 @@ function buildMatchSummary(stats, isRivalMode, playerName, rivalName) {
   const rivalRating = stats.rival_rating || '—';
   const danger = stats.danger_score || { score: 0, level: 'low', label: 'Unknown' };
   const confidence = stats.confidence || 'Low';
+  const eapm = stats.avg_eapm || 0;
 
-  // Expected matchup text
-  let matchupText = 'Even Matchup';
-  if (typeof playerRating === 'number' && typeof rivalRating === 'number') {
-    const diff = rivalRating - playerRating;
-    if (diff > 150) matchupText = 'Very Difficult';
-    else if (diff > 50) matchupText = 'Difficult';
-    else if (diff < -150) matchupText = 'Very Favorable';
-    else if (diff < -50) matchupText = 'Favorable';
-  }
-
-  const confidenceClass = confidence.toLowerCase();
   const dangerColorClass = danger.level || 'low';
+  const eapmLabel = eapm >= 30 ? 'Fast' : eapm >= 20 ? 'Avg' : 'Relaxed';
+  const eapmColor = eapm >= 30 ? 'var(--accent-red)' : eapm >= 20 ? 'var(--accent-blue)' : 'var(--accent-green)';
 
   return `<div class="block">
     <div class="block-title">Match Summary</div>
@@ -153,8 +145,8 @@ function buildMatchSummary(stats, isRivalMode, playerName, rivalName) {
         <div class="danger-indicator ${dangerColorClass}"></div>
         <span class="danger-text ${dangerColorClass}">Danger: ${danger.label}</span>
         <span class="confidence-badge">Confidence: ${confidence}</span>
+        <span style="font-size:10px;font-weight:600;color:${eapmColor};margin-left:auto;">APM: ${eapm > 0 ? eapm : '—'} ${eapmLabel}</span>
       </div>
-      <div class="expected-matchup">Expected Matchup: <strong>${matchupText}</strong></div>
     </div>
   </div>`;
 }
@@ -269,29 +261,35 @@ function buildCivTendenciesCard(stats) {
 }
 
 function buildTimingTendenciesCard(stats) {
+  const interpretations = stats.timing_interpretation || [];
   const feudalTime = stats.avg_feudal_hms || 'N/A';
   const castleTime = stats.avg_castle_hms || 'N/A';
   const imperialTime = stats.avg_imperial_hms || 'N/A';
-  const avgDuration = stats.avg_duration_hms || 'N/A';
+
+  let interpHtml = '';
+  for (const interp of interpretations.slice(0, 3)) {
+    const iconColor = interp.type === 'positive' ? 'var(--accent-green)' : interp.type === 'warning' ? 'var(--accent-yellow)' : 'var(--accent-blue)';
+    interpHtml += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;">
+      <span style="color:${iconColor};font-weight:700;">${interp.icon}</span>
+      <span style="color:var(--text-secondary);"><strong>${interp.timing}</strong> — ${interp.conclusion}</span>
+    </div>`;
+  }
 
   return `<div class="card">
-    <div class="card-label">Timing Tendencies</div>
+    <div class="card-label">Timing Analysis</div>
     <div class="timing-row">
-      <span class="timing-label">Avg Feudal</span>
+      <span class="timing-label">Feudal</span>
       <span class="timing-value">${feudalTime}</span>
     </div>
     <div class="timing-row">
-      <span class="timing-label">Avg Castle</span>
+      <span class="timing-label">Castle</span>
       <span class="timing-value">${castleTime}</span>
     </div>
     <div class="timing-row">
-      <span class="timing-label">Avg Imperial</span>
+      <span class="timing-label">Imperial</span>
       <span class="timing-value">${imperialTime}</span>
     </div>
-    <div class="timing-row">
-      <span class="timing-label">Avg Game Length</span>
-      <span class="timing-value">${avgDuration}</span>
-    </div>
+    ${interpHtml ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle);">${interpHtml}</div>` : ''}
   </div>`;
 }
 
@@ -300,20 +298,29 @@ function buildTimingTendenciesCard(stats) {
 // ============================================================================
 
 function buildStrategicRecommendations(stats) {
+  const pred = stats.prediction || {};
   const recs = stats.recommendations || [];
   const weaknesses = stats.weaknesses || [];
   const threats = stats.threats || [];
 
   let html = `<div class="block">`;
-  html += `<div class="block-title">Strategic Recommendations</div>`;
+  html += `<div class="block-title">Strategic Intelligence</div>`;
+
+  // Prediction engine card
+  html += `<div class="card">
+    <div class="card-label">Expected Strategy</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:3px;">${escapeHtml(pred.expected_strategy || 'Analyzing...')}</div>
+    ${pred.strategy_probability > 0 ? `<div class="card-subtitle">${pred.strategy_probability}% probability</div>` : ''}
+    ${pred.secondary_strategy ? `<div class="card-subtitle">Backup: ${formatOpeningName(pred.secondary_strategy)}</div>` : ''}
+  </div>`;
 
   // Main recommendation card
   html += `<div class="card">
-    <div class="card-label">Recommended Strategy</div>
+    <div class="card-label">Recommended Counter</div>
     <ul class="recommendation-list">`;
 
   if (recs.length > 0) {
-    for (const rec of recs) {
+    for (const rec of recs.slice(0, 5)) {
       const icon = rec.type === 'must' ? '<span class="check">✓</span>' :
                    rec.type === 'warn' ? '<span class="warn">⚠</span>' :
                    '<span class="danger">✗</span>';
