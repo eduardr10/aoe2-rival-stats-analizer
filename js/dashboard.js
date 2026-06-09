@@ -1,6 +1,16 @@
 import { fetchRating, fetchMatches } from './api.js';
 import { analyzeMatches } from './stats.js';
-import { computePlayerPrimaryOpenings, classifyPlayerArchetype } from './analysis.js';
+import {
+  computePlayerPrimaryOpenings,
+  classifyPlayerArchetype,
+  computeDangerScore,
+  classifyPlaystyle,
+  detectWeaknesses,
+  detectThreats,
+  generateRecommendations,
+  computeConfidence,
+  computeStreak,
+} from './analysis.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js';
 import { initWebSocket } from './websocket.js';
 
@@ -8,10 +18,23 @@ const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
 const PAGES = 1;
 
+// App configuration for creator links
+window.app_config = {
+  youtube_url: 'https://youtube.com/@EduardR10',
+  twitch_url: 'https://twitch.tv/EduardR10',
+  support_enabled: false,
+  buymeacoffee_url: '',
+  kofi_url: '',
+  patreon_url: '',
+  binance_id: '',
+};
+
 let currentPlayerStats = null;
+let currentRivalStats = null;
 let isAnalyzingRival = false;
 let currentRivalId = null;
 let currentRivalName = null;
+let liveMatchData = null;
 
 function readControls() {
   const params = new URLSearchParams(window.location.search);
@@ -53,9 +76,16 @@ function syncURLToControls(cfg) {
   if (dt) dt.value = cfg.dateTo;
 }
 
+// ============================================================================
+// INIT
+// ============================================================================
+
 export async function initDashboard() {
   let cfg = readControls();
   syncURLToControls(cfg);
+
+  setupEventListeners();
+  setupSocialLinks();
 
   const container = document.getElementById('dashboard');
   container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
@@ -68,57 +98,20 @@ export async function initDashboard() {
     container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
   }
 
-  // Botón Aplicar
-  const btnApply = document.getElementById('btn-apply');
-  if (btnApply) {
-    btnApply.addEventListener('click', async () => {
-      cfg = syncControlsToURL();
-      container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
-      try {
-        currentPlayerStats = await runSelfAnalysis(cfg.playerId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
-        renderDashboard(currentPlayerStats);
-      } catch (err) {
-        console.error(err);
-        container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
-      }
-    });
-  }
-
-  // Botón analizar rival
-  const btnAnalyze = document.getElementById('btn-analyze-rival');
-  if (btnAnalyze) {
-    btnAnalyze.addEventListener('click', async () => {
-      if (!currentRivalId || isAnalyzingRival) return;
-      isAnalyzingRival = true;
-      btnAnalyze.textContent = 'Analizando...';
-      btnAnalyze.disabled = true;
-
-      try {
-        const rivalStats = await runSelfAnalysis(currentRivalId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
-        renderComparative(currentPlayerStats, rivalStats, currentRivalName);
-        btnAnalyze.textContent = 'Análisis listo';
-      } catch (err) {
-        console.error('Error analizando rival:', err);
-        btnAnalyze.textContent = 'Error, reintentar';
-        btnAnalyze.disabled = false;
-      } finally {
-        isAnalyzingRival = false;
-      }
-    });
-  }
-
-  // Iniciar WebSocket para detectar partidas 1v1
+  // WebSocket for live match detection
   initWebSocket(cfg.playerId, 'self', async ({ matchData, rivalProfileId }) => {
-    const banner = document.getElementById('live-match-banner');
-    const rivalName = matchData.players.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
+    const banner = document.getElementById('live-match-section');
+    const info = document.getElementById('live-match-info');
+    const rivalName = matchData.players?.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
 
     currentRivalId = rivalProfileId;
     currentRivalName = rivalName;
+    liveMatchData = matchData;
 
-    banner.querySelector('.live-match-vs').textContent = `vs ${rivalName}`;
-    banner.classList.add('active');
+    if (info) info.innerHTML = `<span>vs ${escapeHtml(rivalName)}</span><span style="font-size:12px;color:var(--text-muted);margin-left:8px;">en ${escapeHtml(matchData.mapName || '???')}</span>`;
+    if (banner) banner.classList.remove('hidden');
 
-    // Actualizar link "Ver perfil del rival"
+    // Update rival profile link
     const btnProfile = document.getElementById('btn-rival-profile');
     if (btnProfile) {
       const url = new URL(window.location.href);
@@ -126,13 +119,127 @@ export async function initDashboard() {
       btnProfile.href = url.toString();
     }
 
-    // Resetear botón
+    // Reset analyze button
+    const btnAnalyze = document.getElementById('btn-analyze-rival');
     if (btnAnalyze) {
       btnAnalyze.textContent = 'Analizar Rival';
       btnAnalyze.disabled = false;
     }
+
+    // Auto-analyze rival for live view
+    if (!isAnalyzingRival && currentRivalId) {
+      await analyzeAndShowRival(cfg, rivalProfileId);
+    }
   });
 }
+
+async function analyzeAndShowRival(cfg, rivalId) {
+  const btnAnalyze = document.getElementById('btn-analyze-rival');
+  isAnalyzingRival = true;
+  if (btnAnalyze) {
+    btnAnalyze.textContent = 'Analizando...';
+    btnAnalyze.disabled = true;
+  }
+
+  try {
+    currentRivalStats = await runSelfAnalysis(rivalId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
+    currentRivalStats.rival_name = currentRivalName;
+    currentRivalStats.rival_id = rivalId;
+    renderLiveMatch(currentPlayerStats, currentRivalStats, liveMatchData);
+    if (btnAnalyze) btnAnalyze.textContent = 'Actualizado';
+  } catch (err) {
+    console.error('Error analizando rival:', err);
+    if (btnAnalyze) {
+      btnAnalyze.textContent = 'Error, reintentar';
+      btnAnalyze.disabled = false;
+    }
+  } finally {
+    isAnalyzingRival = false;
+  }
+}
+
+// ============================================================================
+// EVENT LISTENERS
+// ============================================================================
+
+function setupEventListeners() {
+  const btnApply = document.getElementById('btn-apply');
+  if (btnApply) {
+    btnApply.addEventListener('click', async () => {
+      const cfg = syncControlsToURL();
+      const container = document.getElementById('dashboard');
+      container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
+      try {
+        currentPlayerStats = await runSelfAnalysis(cfg.playerId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
+        renderDashboard(currentPlayerStats);
+        // If live match is active, re-analyze rival too
+        if (currentRivalId && !document.getElementById('live-match-section')?.classList.contains('hidden')) {
+          await analyzeAndShowRival(cfg, currentRivalId);
+        }
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
+      }
+    });
+  }
+
+  const btnAnalyze = document.getElementById('btn-analyze-rival');
+  if (btnAnalyze) {
+    btnAnalyze.addEventListener('click', async () => {
+      if (!currentRivalId || isAnalyzingRival) return;
+      const cfg = readControls();
+      await analyzeAndShowRival(cfg, currentRivalId);
+    });
+  }
+
+  // Support modal
+  const btnSupport = document.getElementById('btn-support');
+  const supportModal = document.getElementById('support-modal');
+  const modalClose = document.getElementById('modal-close');
+
+  if (btnSupport && supportModal) {
+    btnSupport.addEventListener('click', () => supportModal.classList.add('active'));
+  }
+  if (modalClose && supportModal) {
+    modalClose.addEventListener('click', () => supportModal.classList.remove('active'));
+  }
+  if (supportModal) {
+    supportModal.addEventListener('click', (e) => {
+      if (e.target === supportModal) supportModal.classList.remove('active');
+    });
+  }
+
+  // Show donation links if support enabled
+  const donationLinks = document.getElementById('donation-links');
+  if (donationLinks && window.app_config?.support_enabled) {
+    donationLinks.style.display = 'block';
+  }
+}
+
+function setupSocialLinks() {
+  document.querySelectorAll('[data-social]').forEach(link => {
+    const social = link.dataset.social;
+    let url = '';
+    switch (social) {
+      case 'youtube': url = window.app_config?.youtube_url || ''; break;
+      case 'twitch': url = window.app_config?.twitch_url || ''; break;
+      case 'buymeacoffee': url = window.app_config?.buymeacoffee_url || ''; break;
+      case 'kofi': url = window.app_config?.kofi_url || ''; break;
+      case 'binance': url = window.app_config?.binance_id || ''; break;
+    }
+    if (url) {
+      link.href = url;
+      if (link.tagName === 'A') link.target = '_blank';
+    } else {
+      link.style.opacity = '0.4';
+      link.style.pointerEvents = 'none';
+    }
+  });
+}
+
+// ============================================================================
+// DATA FETCHING
+// ============================================================================
 
 function is1v1Match(m) {
   if (!m.teams || m.teams.length !== 2) return false;
@@ -173,11 +280,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   const opponentCivNum = null;
   const effPages = pages || PAGES;
   const effPerPage = perPage || PER_PAGE;
-
-  // Leaderboards a consultar
-  const leaderboards = leaderboardParam
-    ? [leaderboardParam]
-    : ['rm_1v1'];
+  const leaderboards = leaderboardParam ? [leaderboardParam] : ['rm_1v1'];
 
   let allMatches = [];
 
@@ -188,13 +291,9 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
       if (pageMatches.length === 0) break;
 
       const processed = pageMatches.map(m => {
-        // Para unranked, solo analizar 1v1
         if (lb === 'unranked' && !is1v1Match(m)) return null;
-
         const found = findPlayerInMatch(m, playerId);
         if (!found) return null;
-
-        // Filtro por fecha
         if (!matchInDateRange(m.started, dateFrom, dateTo)) return null;
 
         const profileTeamIndex = found.teamIndex;
@@ -222,7 +321,6 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
     }
   }
 
-  // Ordenar por fecha más reciente y limitar al total esperado
   allMatches.sort((a, b) => new Date(b.started) - new Date(a.started));
   const maxMatches = effPages * effPerPage;
   if (allMatches.length > maxMatches) {
@@ -233,10 +331,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
     throw new Error('No se encontraron partidas.');
   }
 
-  const dataMainPlayer = {
-    player_id: playerId,
-    match_id: 'self',
-  };
+  const dataMainPlayer = { player_id: playerId, match_id: 'self' };
 
   let stats = await analyzeMatches(allMatches, parseInt(playerId), playedCivNum, opponentCivNum, dataMainPlayer, (progress) => {
     const container = document.getElementById('dashboard');
@@ -250,25 +345,78 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
       </div>`;
     }
   });
+
   stats.total_wins = allMatches.filter(m => m.won).length;
   stats.win_percent = stats.total ? Math.round(stats.total_wins * 100 / stats.total * 100) / 100 : 0;
   stats.player_id = playerId;
   stats.match_id = 'self';
+  stats.player_name = allMatches[0]?.player_name || 'Player';
   stats.rating = await fetchRating(playerId);
   stats.player_profile = computePlayerPrimaryOpenings(parseInt(playerId), stats.all_match_features || []);
   stats.archetype = classifyPlayerArchetype(stats);
 
+  // NEW: Intelligence features
+  stats.playstyle = classifyPlaystyle(stats.archetype);
+  stats.danger_score = computeDangerScore(stats, stats.rating);
+  stats.confidence = computeConfidence(stats);
+  stats.weaknesses = detectWeaknesses(stats);
+  stats.threats = detectThreats(stats);
+  stats.recommendations = generateRecommendations(stats);
+  stats.current_streak = computeStreak(allMatches);
+
+  // Enrich matches for historical data
+  const featureMap = new Map();
+  if (stats.all_match_features) {
+    for (const f of stats.all_match_features) {
+      if (f.match_id) featureMap.set(f.match_id, f);
+    }
+  }
+  for (const m of allMatches) {
+    const feat = featureMap.get(m.match_id);
+    if (feat && feat.opening) m.opening = feat.opening.chosen_opening;
+    if (m.started && m.finished) {
+      const dur = (new Date(m.finished) - new Date(m.started)) / 1000;
+      if (dur > 0 && dur < 7200) m.duration_hms = formatDurationHms(dur);
+    }
+  }
+  stats.matches = allMatches;
+
   return stats;
 }
 
+function formatDurationHms(seconds) {
+  const m = Math.floor(seconds / 60);
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h > 0) return `${h}:${String(rm).padStart(2, '0')}`;
+  return `${rm} min`;
+}
+
 // ============================================================================
-// RENDER DASHBOARD
+// RENDER DISPATCH
 // ============================================================================
 
 function renderDashboard(stats) {
-  const container = document.getElementById('dashboard');
+  updateHeader(stats);
 
-  // Header info
+  const liveSection = document.getElementById('live-match-section');
+  const historicalSection = document.getElementById('historical-section');
+  const dashboard = document.getElementById('dashboard');
+
+  // If live match is active, show both: live on top, compressed historical below
+  if (liveSection && !liveSection.classList.contains('hidden') && currentRivalStats) {
+    renderLiveMatch(currentPlayerStats, currentRivalStats, liveMatchData);
+    // Render historical but compressed
+    dashboard.innerHTML = renderHistoricalAnalysisHTML(stats, true);
+  } else {
+    // Only historical analysis
+    dashboard.innerHTML = renderHistoricalAnalysisHTML(stats, false);
+  }
+
+  setupTabs(dashboard);
+}
+
+function updateHeader(stats) {
   const headerName = document.getElementById('header-name');
   const headerMeta = document.getElementById('header-meta');
   const headerBadge = document.getElementById('header-wr');
@@ -289,770 +437,875 @@ function renderDashboard(stats) {
     headerBadge.className = `wr-badge ${(stats.win_percent || 0) >= 50 ? 'good' : 'bad'}`;
   }
   if (headerAvatar) headerAvatar.textContent = (stats.player_name || '?').charAt(0).toUpperCase();
+}
 
+// ============================================================================
+// HISTORICAL ANALYSIS (5 Blocks)
+// ============================================================================
+
+function renderHistoricalAnalysisHTML(stats, compressed) {
   let html = '';
 
-  // Row 1: Opening + Quick Stats + Age Timings
-  html += '<div class="grid grid-3">';
-  html += renderOpeningCard(stats);
+  // Block 1: Match Summary (20%)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Match Summary</div>`;
+  html += `<div class="block-grid block-grid-3">`;
+  html += renderMatchSummaryCard(stats);
   html += renderQuickStatsCard(stats);
-  html += renderAgeTimingsCard(stats);
-  html += '</div>';
+  html += renderConfidenceCard(stats);
+  html += `</div></div>`;
 
-  // Row 2: Civs + Maps + Economy + Units
-  html += '<div class="grid grid-3">';
-  html += renderCivsCard(stats);
-  html += renderMapsCard(stats);
-  html += renderEconomyCard(stats);
-  html += '</div>';
-
-  // Row 3: Units by Age + Unit Detail + Techs
-  html += '<div class="grid grid-3">';
-  html += renderUnitsByAgeCard(stats);
-  html += renderUnitDetailCard(stats);
-  html += renderTechsCard(stats);
-  html += '</div>';
-
-  // Row 3b: Unit Upgrades
-  html += '<div class="grid">';
-  html += renderUnitUpgradesCard(stats);
-  html += '</div>';
-
-  // Row 4: Market + Tech Context
-  html += '<div class="grid grid-2">';
-  html += renderMarketCard(stats);
-  html += renderTechContextCard(stats);
-  html += '</div>';
-
-  // Row 5: Playstyle (full width)
-  html += '<div class="grid">';
+  // Block 2: Rival Intelligence (30%)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Rival Intelligence</div>`;
+  html += `<div class="block-grid block-grid-4">`;
+  html += renderExpectedOpeningCard(stats);
   html += renderPlaystyleCard(stats);
-  html += '</div>';
+  html += renderCivTendenciesCard(stats);
+  html += renderTimingTendenciesCard(stats);
+  html += `</div></div>`;
 
-  container.innerHTML = html;
-}
+  // Block 3: Strategic Recommendations (25%)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Strategic Recommendations</div>`;
+  html += `<div class="block-grid block-grid-3">`;
+  html += renderRecommendationsCard(stats);
+  html += renderWeaknessesCard(stats);
+  html += renderThreatsCard(stats);
+  html += `</div></div>`;
 
-// ============================================================================
-// COMPARATIVE RENDER (Live Match)
-// ============================================================================
+  // Block 4: Detailed Analysis with tabs (20%)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Detailed Analysis</div>`;
+  html += renderDetailedAnalysisCard(stats);
+  html += `</div>`;
 
-function renderComparative(playerStats, rivalStats, rivalName) {
-  const container = document.getElementById('comparative');
-  if (!container) return;
+  // Block 5: Historical Data (5%)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Historical Data</div>`;
+  html += renderHistoricalDataCard(stats);
+  html += `</div>`;
 
-  let html = '<div class="comparative-grid">';
-
-  // Player column
-  html += '<div class="card">';
-  html += `<div class="comparative-header">
-    <div>
-      <div class="comparative-name">${playerStats.player_name}</div>
-      <div class="comparative-rating">Rating: ${playerStats.rating || '—'}</div>
-    </div>
-    <div class="wr-badge ${(playerStats.win_percent || 0) >= 50 ? 'good' : 'bad'}">${playerStats.win_percent || 0}% WR</div>
-  </div>`;
-  html += renderMiniOpening(playerStats.player_profile);
-  html += renderMiniStats(playerStats);
-  html += '</div>';
-
-  // Rival column
-  html += '<div class="card">';
-  html += `<div class="comparative-header">
-    <div>
-      <div class="comparative-name">${rivalStats.player_name || rivalName}</div>
-      <div class="comparative-rating">Rating: ${rivalStats.rating || '—'}</div>
-    </div>
-    <div class="wr-badge ${(rivalStats.win_percent || 0) >= 50 ? 'good' : 'bad'}">${rivalStats.win_percent || 0}% WR</div>
-  </div>`;
-  html += renderMiniOpening(rivalStats.player_profile);
-  html += renderMiniStats(rivalStats);
-  html += '</div>';
-
-  html += '</div>';
-  container.innerHTML = html;
-}
-
-function renderMiniOpening(pp) {
-  if (!pp) return '';
-  const label = pp.primary_opening || 'N/A';
-  const stability = Math.round((pp.opening_stability || 0) * 100);
-  return `<div style="margin-bottom:12px;">
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Apertura principal</div>
-    <div style="font-size:14px;font-weight:700;">${label}</div>
-    <div style="font-size:11px;color:var(--text-secondary);">Estabilidad: ${stability}%</div>
-  </div>`;
-}
-
-function renderMiniStats(stats) {
-  return `<div class="stats-row" style="grid-template-columns:repeat(3,1fr);gap:8px;">
-    <div class="stat-box"><div class="stat-label">Games</div><div class="stat-value">${stats.analyzed}</div></div>
-    <div class="stat-box"><div class="stat-label">Wins</div><div class="stat-value green">${stats.total_wins || 0}</div></div>
-    <div class="stat-box"><div class="stat-label">EAPM</div><div class="stat-value blue">${stats.avg_eapm || '—'}</div></div>
-  </div>`;
-}
-
-// ============================================================================
-// CARD BUILDERS
-// ============================================================================
-
-function renderUnitsCard(stats) {
-  const cats = stats.unit_categories || {};
-  const wins = stats.unit_categories_wins || {};
-  const losses = stats.unit_categories_losses || {};
-  const entries = Object.entries(cats);
-
-  if (entries.length === 0) {
-    return '<div class="card"><div class="card-title">Preferencia de Unidades</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  const catLabels = {
-    cavalry: 'Caballería',
-    archers: 'Arqueros',
-    infantry: 'Infantería',
-    siege: 'Asedio',
-  };
-  const catColors = {
-    cavalry: 'var(--accent-red)',
-    archers: 'var(--accent-blue)',
-    infantry: 'var(--accent-green)',
-    siege: 'var(--accent-orange)',
-  };
-
-  const enriched = entries.map(([cat, total]) => {
-    const w = wins[cat] || 0;
-    const l = losses[cat] || 0;
-    const games = w + l;
-    const wr = games > 0 ? Math.round((w * 100 / games) * 100) / 100 : 0;
-    return { cat, total, wr, games };
-  }).sort((a, b) => b.total - a.total);
-
-  const maxTotal = enriched[0]?.total || 1;
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Preferencia de Unidades</div>';
-  html += '<div class="unit-categories">';
-
-  for (const item of enriched) {
-    const color = catColors[item.cat] || 'var(--text-muted)';
-    const label = catLabels[item.cat] || item.cat;
-    const barWidth = (item.total / maxTotal) * 100;
-
-    html += `<div class="unit-cat-row">`;
-    html += `<div class="unit-cat-header">`;
-    html += `<span class="unit-cat-name" style="color:${color}">${label}</span>`;
-    html += `<span class="unit-cat-count">${item.total} unidades</span>`;
-    html += `</div>`;
-    html += `<div class="unit-cat-bar-track">`;
-    html += `<div class="unit-cat-bar" style="width:${barWidth}%;background:${color}"></div>`;
-    html += `</div>`;
-    html += `<div class="unit-cat-wr">WR ${item.wr}% <span style="font-size:10px;color:var(--text-muted);">(${item.games} games)</span></div>`;
-    html += `</div>`;
-  }
-
-  html += '</div></div>';
   return html;
 }
 
-function renderOpeningCard(stats) {
-  const pp = stats.player_profile;
-  if (!pp) return '<div class="card"><div class="card-title">Apertura</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
+function renderMatchSummaryCard(stats) {
+  const wr = stats.win_percent || 0;
+  const danger = stats.danger_score || { score: 0, level: 'low', label: 'Unknown' };
+  const dangerColorClass = danger.level || 'low';
 
-  const label = pp.primary_opening || 'N/A';
-  const stability = Math.round((pp.opening_stability || 0) * 100);
-  const cls = getOpeningClass(label);
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Apertura de Perfil</div>';
-  html += `<div class="opening-badge ${cls}">${label}</div>`;
-  html += `<div class="opening-meta">Estabilidad: <strong>${stability}%</strong></div>`;
-
-  if (pp.per_opening_frequency && Object.keys(pp.per_opening_frequency).length > 0) {
-    html += '<div class="opening-freq">';
-    for (const [lbl, pct] of Object.entries(pp.per_opening_frequency)) {
-      html += `<span class="opening-freq-item">${lbl} ${pct}%</span>`;
-    }
-    html += '</div>';
-  }
-
-  html += '</div>';
-  return html;
+  return `<div class="card">
+    <div class="card-label">Player Overview</div>
+    <div class="card-value">${stats.player_name || 'Player'}</div>
+    <div class="card-subtitle">Rating: ${stats.rating || '—'} · WR: ${wr}%</div>
+    <div class="danger-score">
+      <div class="danger-indicator ${dangerColorClass}"></div>
+      <span class="danger-text ${dangerColorClass}">Danger: ${danger.label}</span>
+      <span class="confidence-badge">Confidence: ${stats.confidence || 'Low'}</span>
+    </div>
+  </div>`;
 }
 
 function renderQuickStatsCard(stats) {
+  const streak = stats.current_streak || { type: 'none', count: 0 };
+  const streakText = streak.type === 'win' ? `+${streak.count} wins` :
+                       streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
+
   return `<div class="card">
-    <div class="card-title">Resumen</div>
-    <div class="stats-row">
-      <div class="stat-box"><div class="stat-label">Games</div><div class="stat-value">${stats.analyzed}</div></div>
-      <div class="stat-box"><div class="stat-label">Wins</div><div class="stat-value green">${stats.total_wins || 0}</div></div>
-      <div class="stat-box"><div class="stat-label">EAPM</div><div class="stat-value blue">${stats.avg_eapm || '—'}</div></div>
+    <div class="card-label">Quick Stats</div>
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Games</div>
+        <div class="tab-stat-value">${stats.analyzed}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Wins</div>
+        <div class="tab-stat-value text-green">${stats.total_wins || 0}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Winrate</div>
+        <div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${stats.win_percent || 0}%</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Streak</div>
+        <div class="tab-stat-value">${streakText}</div>
+      </div>
     </div>
   </div>`;
 }
 
-function renderAgeTimingsCard(stats) {
-  const ages = ['feudal', 'castle', 'imperial'];
-  const allTimes = [];
-  for (const age of ages) {
-    const p = stats['avg_' + age];
-    const o = stats['opp_avg_' + age];
-    if (p) allTimes.push(p);
-    if (o) allTimes.push(o);
-  }
-  const maxTime = Math.max(...allTimes, 1);
-  const playerName = stats.player_name || 'You';
-  const playerInitial = playerName.length > 8 ? playerName.substring(0, 6) + '..' : playerName;
+function renderConfidenceCard(stats) {
+  const confidence = stats.confidence || 'Low';
+  const arch = stats.archetype || {};
+  const dims = arch.dimensions || {};
 
-  let html = '<div class="card">';
-  html += '<div class="card-title">Age Timings</div>';
-
-  for (const age of ages) {
-    const pTime = stats['avg_' + age + '_hms'] || 'N/A';
-    const oTime = stats['opp_avg_' + age + '_hms'] || 'N/A';
-    const pSec = stats['avg_' + age];
-    const oSec = stats['opp_avg_' + age];
-
-    const pPct = pSec ? Math.min((pSec / maxTime) * 100, 100) : 0;
-    const oPct = oSec ? Math.min((oSec / maxTime) * 100, 100) : 0;
-
-    html += `<div class="age-row">
-      <div class="age-label">${age}</div>
-      <div class="age-bar-container"><div class="age-bar opponent" style="width:${oPct}%"></div></div>
-      <div class="age-time">${oTime}</div>
-    </div>`;
-    html += `<div class="age-row" style="margin-top:-2px;margin-bottom:8px;">
-      <div class="age-label" style="color:var(--accent-blue);font-size:10px;">${playerInitial}</div>
-      <div class="age-bar-container"><div class="age-bar player" style="width:${pPct}%"></div></div>
-      <div class="age-time" style="color:var(--accent-blue)">${pTime}</div>
-    </div>`;
-  }
-
-  html += '</div>';
-  return html;
+  return `<div class="card">
+    <div class="card-label">Playstyle Profile</div>
+    <div style="margin-bottom:8px;">
+      <span class="playstyle-badge ${(stats.playstyle?.label || 'adaptive').toLowerCase().replace(/\s+/g, '')}">${stats.playstyle?.label || 'Adaptive'}</span>
+    </div>
+    <div class="dimension-bars">
+      ${['aggression','economy','versatility'].map(key => {
+        const label = key.charAt(0).toUpperCase() + key.slice(1);
+        const val = dims[key] || 0;
+        const colors = { aggression: 'var(--accent-red)', economy: 'var(--accent-green)', versatility: 'var(--accent-purple)' };
+        return `<div class="dim-row">
+          <div class="dim-label">${label}</div>
+          <div class="dim-bar-track"><div class="dim-bar-fill" style="width:${val}%;background:${colors[key]}"></div></div>
+          <div class="dim-value">${val}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
 }
 
-function renderCivsCard(stats) {
-  const civs = stats.civ_played_percent || {};
-  const civCounts = stats.civ_played || {};
-  const civWins = stats.civ_win || {};
-  const civLosses = stats.civ_loss || {};
+function renderExpectedOpeningCard(stats) {
+  const pp = stats.player_profile || {};
+  const primary = pp.primary_opening || 'Unknown';
+  const freq = pp.per_opening_frequency || {};
+  const stability = Math.round((pp.opening_stability || 0) * 100);
+  const confidence = stability >= 60 ? 'High' : stability >= 30 ? 'Medium' : 'Low';
 
-  if (Object.keys(civs).length === 0) {
-    return '<div class="card"><div class="card-title">Civilizaciones</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
+  const openingIcons = {
+    'drush': '⚔️', 'scout_rush': '🐴', 'archer_rush': '🏹',
+    'fast_feudal_aggressive': '⚡', 'fast_castle': '🏰', 'tower_rush': '🏗️',
+    'Standard/Unknown': '❓', 'Mixed/No Data': '❓',
+  };
 
-  const sorted = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const maxPct = sorted[0][1];
+  const icon = openingIcons[primary] || '❓';
+  const displayName = formatOpeningName(primary);
 
-  let html = '<div class="card">';
-  html += '<div class="card-title">Civilizaciones</div>';
-  html += '<div class="civs-list-detailed">';
-  for (const [civ, pct] of sorted) {
-    const count = civCounts[civ] || 0;
-    const wins = civWins[civ] || 0;
-    const losses = civLosses[civ] || 0;
-    const games = wins + losses;
-    const wr = games > 0 ? Math.round((wins * 100 / games) * 100) / 100 : 0;
-    const wrClass = wr >= 55 ? 'good' : wr <= 40 ? 'bad' : 'neutral';
-    const barWidth = (pct / maxPct) * 100;
+  const sortedOpenings = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const maxPct = sortedOpenings.length > 0 ? sortedOpenings[0][1] : 100;
+  const barColors = ['var(--accent-blue)', 'var(--accent-purple)', 'var(--accent-orange)'];
 
-    html += `<div class="civ-detailed-row">`;
-    html += `<div class="civ-detailed-header">`;
-    html += `<span class="civ-detailed-name">${civ}</span>`;
-    html += `<span class="civ-detailed-meta">${count}g · ${wr}% WR</span>`;
-    html += `</div>`;
-    html += `<div class="civ-detailed-bar-track">`;
-    html += `<div class="civ-detailed-bar" style="width:${barWidth}%"></div>`;
-    html += `</div>`;
-    html += `<div class="civ-detailed-wr ${wrClass}">${wins}W / ${losses}L</div>`;
-    html += `</div>`;
-  }
-  html += '</div></div>';
-  return html;
-}
-
-function renderMapsCard(stats) {
-  const maps = stats.map_played_percent || {};
-  const mapCounts = stats.map_played || {};
-  if (Object.keys(maps).length === 0) {
-    return '<div class="card"><div class="card-title">Mapas</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  const sorted = Object.entries(maps).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const maxPct = sorted[0][1];
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Top Maps</div>';
-  for (const [map, pct] of sorted) {
-    const wr = stats.map_win_percent?.[map] ?? 0;
-    const wrClass = wr >= 55 ? 'good' : wr <= 40 ? 'bad' : 'neutral';
-    const count = mapCounts[map] || 0;
-    const barWidth = (pct / maxPct) * 100;
-
-    html += `<div class="map-detailed-row">`;
-    html += `<div class="map-detailed-header">`;
-    html += `<span class="map-detailed-name">${map}</span>`;
-    html += `<span class="map-detailed-meta">${count}g · ${wr}% WR</span>`;
-    html += `</div>`;
-    html += `<div class="map-detailed-bar-track">`;
-    html += `<div class="map-detailed-bar" style="width:${barWidth}%"></div>`;
-    html += `</div>`;
-    html += `<div class="map-detailed-wr ${wrClass}">${pct}% pick rate</div>`;
-    html += `</div>`;
-  }
-  html += '</div>';
-  return html;
-}
-
-function renderEconomyCard(stats) {
-  const wb = stats.wheel_barrow_avg;
-  const hc = stats.hand_cart_avg;
-  const tc2 = stats.tc2_time_avg;
-  const tc3 = stats.tc3_time_avg;
-  const tc2Pct = stats.tc2_pct;
-  const tc3Pct = stats.tc3_pct;
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Economía</div>';
-
-  if (wb != null) {
-    html += `<div class="economy-row"><div class="economy-label">Wheelbarrow</div><div class="economy-value">${formatHms(wb)}</div></div>`;
-  }
-  if (hc != null) {
-    html += `<div class="economy-row"><div class="economy-label">Hand Cart</div><div class="economy-value">${formatHms(hc)}</div></div>`;
-  }
-
-  // TC 2do
-  if (tc2 != null) {
-    html += `<div class="economy-row">
-      <div class="economy-label">2do TC <span style="font-size:10px;color:var(--text-muted);">(${tc2Pct}% games)</span></div>
-      <div class="economy-value">${formatHms(tc2)}</div>
-    </div>`;
-  }
-  // TC 3er
-  if (tc3 != null) {
-    html += `<div class="economy-row">
-      <div class="economy-label">3er TC <span style="font-size:10px;color:var(--text-muted);">(${tc3Pct}% games)</span></div>
-      <div class="economy-value">${formatHms(tc3)}</div>
+  let barsHtml = '';
+  for (let i = 0; i < sortedOpenings.length; i++) {
+    const [name, pct] = sortedOpenings[i];
+    const width = maxPct > 0 ? (pct / maxPct) * 100 : 0;
+    barsHtml += `<div class="opening-bar-row">
+      <div class="opening-bar-label">${formatOpeningName(name)}</div>
+      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:${barColors[i]}"></div></div>
+      <div class="opening-bar-pct">${pct}%</div>
     </div>`;
   }
 
-  if (wb == null && hc == null && tc2 == null) {
-    html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Sin datos de mejoras.</div>';
-  }
-
-  html += '</div>';
-  return html;
-}
-
-function renderTechsCard(stats) {
-  const keyTechs = stats.key_techs || {};
-  const entries = Object.entries(keyTechs);
-  if (entries.length === 0) {
-    return '<div class="card"><div class="card-title">Key Techs</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  // Ordenar por tiempo de partida (avg_time) ascendente
-  const allTechs = entries.map(([name, data]) => ({ name, ...data }));
-  allTechs.sort((a, b) => (a.avg_time || 99999) - (b.avg_time || 99999));
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Key Techs <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(por tiempo de partida)</span></div>';
-  html += '<div class="tech-list">';
-
-  for (const tech of allTechs.slice(0, 12)) {
-    const display = techDisplayName(tech.name);
-    const time = tech.avg_time != null ? formatHms(tech.avg_time) : '';
-
-    const catColors = {
-      military: 'var(--accent-red)',
-      economy: 'var(--accent-green)',
-      naval: 'var(--accent-blue)',
-      other: 'var(--text-muted)',
-    };
-    const color = catColors[tech.category] || 'var(--text-muted)';
-
-    html += `<div class="tech-list-row">`;
-    html += `<div class="tech-list-info">`;
-    html += `<span class="tech-list-name" style="color:${color};font-weight:600;">${display}</span>`;
-    html += `<span class="tech-list-time">${time}</span>`;
-    html += `</div>`;
-    html += `<div class="tech-list-freq">${Math.round(tech.frequency)}%</div>`;
-    html += `</div>`;
-  }
-
-  html += '</div></div>';
-  return html;
-}
-
-function renderMarketCard(stats) {
-  const marketAvg = stats.market_avg_by_age || {};
-  const marketTotals = stats.market_totals_by_age || {};
-  const marketTrans = stats.market_transactions_by_age || {};
-  let hasAny = false;
-  for (const age of ['feudal', 'castle', 'imperial']) {
-    const avg = marketAvg[age];
-    if (avg && (Object.keys(avg.buy || {}).length > 0 || Object.keys(avg.sell || {}).length > 0)) {
-      hasAny = true;
-      break;
-    }
-  }
-  if (!hasAny) {
-    return '<div class="card"><div class="card-title">Market</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Uso del Mercado</div>';
-  html += '<div style="display:flex;flex-direction:column;gap:12px;">';
-
-  for (const age of ['feudal', 'castle', 'imperial']) {
-    const avgByAge = marketAvg[age] || {};
-    const totalsByAge = marketTotals[age] || {};
-    const trans = marketTrans[age] || 0;
-    const buys = avgByAge.buy || {};
-    const sells = avgByAge.sell || {};
-    if (Object.keys(buys).length === 0 && Object.keys(sells).length === 0) continue;
-
-    html += `<div style="border-bottom:1px solid var(--border-subtle);padding-bottom:8px;">`;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">`;
-    html += `<span style="font-size:12px;font-weight:600;text-transform:capitalize;color:var(--text-primary);">${age}</span>`;
-    html += `<span style="font-size:10px;color:var(--text-muted);">${trans} transacciones</span>`;
-    html += `</div>`;
-
-    // Compras
-    const buyEntries = Object.entries(buys);
-    if (buyEntries.length > 0) {
-      html += `<div style="margin-bottom:4px;">`;
-      html += `<span style="font-size:10px;color:var(--accent-green);font-weight:600;">COMPRA </span>`;
-      const buyParts = buyEntries.map(([res, avg]) => {
-        const total = (totalsByAge.buy || {})[res] || 0;
-        return `<span style="font-size:11px;color:var(--text-secondary);">${res}: <strong>${Math.round(total)}</strong> total (~${Math.round(avg)} c/u)</span>`;
-      });
-      html += buyParts.join('<span style="color:var(--border-accent);margin:0 4px;">·</span>');
-      html += `</div>`;
-    }
-
-    // Ventas
-    const sellEntries = Object.entries(sells);
-    if (sellEntries.length > 0) {
-      html += `<div>`;
-      html += `<span style="font-size:10px;color:var(--accent-red);font-weight:600;">VENTA </span>`;
-      const sellParts = sellEntries.map(([res, avg]) => {
-        const total = (totalsByAge.sell || {})[res] || 0;
-        return `<span style="font-size:11px;color:var(--text-secondary);">${res}: <strong>${Math.round(total)}</strong> total (~${Math.round(avg)} c/u)</span>`;
-      });
-      html += sellParts.join('<span style="color:var(--border-accent);margin:0 4px;">·</span>');
-      html += `</div>`;
-    }
-
-    html += `</div>`;
-  }
-
-  html += '</div></div>';
-  return html;
-}
-
-function renderUnitsByAgeCard(stats) {
-  const byAge = stats.units_by_age_period || {};
-  const periods = ['pre-feudal', 'pre-castle', 'pre-imperial'];
-  const periodLabels = {
-    'pre-feudal': 'Antes de Feudal',
-    'pre-castle': 'Feudal → Castle',
-    'pre-imperial': 'Castle → Imperial',
-  };
-
-  let hasAny = false;
-  for (const p of periods) {
-    if (Object.keys(byAge[p] || {}).length > 0) { hasAny = true; break; }
-  }
-  if (!hasAny) {
-    return '<div class="card"><div class="card-title">Unidades por Edad</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Unidades por Edad</div>';
-  html += '<div class="age-units-container">';
-
-  for (const period of periods) {
-    const units = byAge[period] || {};
-    const entries = Object.entries(units).sort((a, b) => b[1].total - a[1].total);
-    if (entries.length === 0) continue;
-
-    html += `<div class="age-units-section">`;
-    html += `<div class="age-units-label">${periodLabels[period]}</div>`;
-    html += `<div class="age-units-list">`;
-    for (const [unitName, data] of entries.slice(0, 8)) {
-      const display = unitName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      html += `<div class="age-unit-row">`;
-      html += `<span class="age-unit-name">${display}</span>`;
-      html += `<span class="age-unit-count">${data.avg} <span style="font-size:10px;color:var(--text-muted);">avg (${data.total} tot)</span></span>`;
-      html += `</div>`;
-    }
-    html += `</div></div>`;
-  }
-
-  html += '</div></div>';
-  return html;
-}
-
-function renderUnitDetailCard(stats) {
-  const units = stats.unit_stats || {};
-  const entries = Object.entries(units).slice(0, 12); // Top 12
-  if (entries.length === 0) {
-    return '<div class="card"><div class="card-title">Unidades Preferidas</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  const catColors = {
-    cavalry: 'var(--accent-red)',
-    archers: 'var(--accent-blue)',
-    infantry: 'var(--accent-green)',
-    siege: 'var(--accent-orange)',
-  };
-
-  // Para saber la categoría de una unidad individual, reutilizamos la lógica de stats.js
-  // Pero como no exportamos categorizeUnit, hacemos una versión local simple
-  function getUnitCat(unitName) {
-    const cats = {
-      cavalry: ['scout_cavalry','knight','cavalier','paladin','camel_rider','heavy_camel_rider','imperial_camel_rider','camel','savar','battle_elephant','elite_battle_elephant','steppe_lancer','elite_steppe_lancer','hussar','light_cavalry','winged_hussar','tarkan','elite_tarkan','konnik','keshik','leitis','boyar','magyar_huszar','war_elephant','mameluke','cataphract','shrivamsha_rider','sosso_guard','monaspa'],
-      archers: ['archer','crossbowman','arbalester','skirmisher','elite_skirmisher','cavalry_archer','heavy_cavalry_archer','hand_cannoneer','genoese_crossbowman','plumed_archer','chu_ko_nu','longbowman','war_wagon','elephant_archer','rattan_archer','arambai','genitour','elite_genitour','camel_archer','elite_camel_archer','slinger'],
-      infantry: ['militia','men-at-arms','long_swordsman','two-handed_swordsman','champion','spearman','pikeman','halberdier','eagle_warrior','elite_eagle_warrior','ghulam','teutonic_knight','berserk','jaguar_warrior','samurai','woad_raider','throwing_axeman','huskarl','shotel_warrior','condottiero','karambit_warrior','elite_karambit_warrior','serjeant','flemish_militia','obuch','urumi_swordsman','elite_urumi_swordsman','chakram_thrower','elite_chakram_thrower'],
-      siege: ['battering_ram','capped_ram','siege_ram','mangonel','onager','siege_onager','scorpion','heavy_scorpion','bombard_cannon','trebuchet','siege_tower','petard','flaming_camel','organ_gun','ballista_elephant','houfnice'],
-    };
-    for (const [cat, list] of Object.entries(cats)) {
-      if (list.includes(unitName)) return cat;
-    }
-    return 'other';
-  }
-
-  const maxTotal = entries[0][1].total || 1;
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Unidades Preferidas</div>';
-  html += '<div class="unit-detail-list">';
-
-  for (const [unitName, data] of entries) {
-    const cat = getUnitCat(unitName);
-    const color = catColors[cat] || 'var(--text-muted)';
-    const display = unitName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const barWidth = (data.total / maxTotal) * 100;
-
-    html += `<div class="unit-detail-row">`;
-    html += `<div class="unit-detail-header">`;
-    html += `<span class="unit-detail-name" style="color:${color}">${display}</span>`;
-    html += `<span class="unit-detail-count">${data.avg} avg <span style="font-size:10px;color:var(--text-muted);">(${data.total} tot)</span></span>`;
-    html += `</div>`;
-    html += `<div class="unit-detail-bar-track">`;
-    html += `<div class="unit-detail-bar" style="width:${barWidth}%;background:${color}"></div>`;
-    html += `</div>`;
-    html += `<div class="unit-detail-wr">WR ${data.wr}% <span style="font-size:10px;color:var(--text-muted);">(${data.matches} games)</span></div>`;
-    html += `</div>`;
-  }
-
-  html += '</div></div>';
-  return html;
-}
-
-function renderUnitUpgradesCard(stats) {
-  const upgrades = stats.unit_upgrades || {};
-  const entries = Object.entries(upgrades);
-  if (entries.length === 0) {
-    return '<div class="card"><div class="card-title">Mejoras de Unidades</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  // Agrupar por categoría
-  const groups = {
-    'Ataque (Forja)': ['forging','iron casting','blast furnace'],
-    'Armadura Infantería': ['scale mail armor','chain mail armor','plate mail armor'],
-    'Armadura Caballería': ['scale barding armor','chain barding armor','plate barding armor'],
-    'Armadura Arqueros': ['padded archer armor','leather archer armor','ring archer armor'],
-    'Ataque a Distancia': ['fletching','bodkin arrow','bracer'],
-    'Caballería': ['bloodlines','husbandry'],
-    'Arqueros Especiales': ['thumb ring','ballistics'],
-    'Otros': ['chemistry','siege engineers'],
-  };
-
-  const groupColors = {
-    'Ataque (Forja)': 'var(--accent-red)',
-    'Armadura Infantería': 'var(--accent-green)',
-    'Armadura Caballería': 'var(--accent-orange)',
-    'Armadura Arqueros': 'var(--accent-blue)',
-    'Ataque a Distancia': 'var(--accent-purple)',
-    'Caballería': 'var(--accent-yellow)',
-    'Arqueros Especiales': 'var(--accent-cyan)',
-    'Otros': 'var(--text-muted)',
-  };
-
-  const displayNames = {
-    'forging': 'Forging',
-    'iron casting': 'Iron Casting',
-    'blast furnace': 'Blast Furnace',
-    'scale mail armor': 'Scale Mail',
-    'chain mail armor': 'Chain Mail',
-    'plate mail armor': 'Plate Mail',
-    'scale barding armor': 'Scale Barding',
-    'chain barding armor': 'Chain Barding',
-    'plate barding armor': 'Plate Barding',
-    'padded archer armor': 'Padded Archer',
-    'leather archer armor': 'Leather Archer',
-    'ring archer armor': 'Ring Archer',
-    'fletching': 'Fletching',
-    'bodkin arrow': 'Bodkin Arrow',
-    'bracer': 'Bracer',
-    'bloodlines': 'Bloodlines',
-    'husbandry': 'Husbandry',
-    'thumb ring': 'Thumb Ring',
-    'ballistics': 'Ballistics',
-    'chemistry': 'Chemistry',
-    'siege engineers': 'Siege Engineers',
-  };
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Mejoras de Unidades</div>';
-  html += '<div class="unit-upgrades-grid">';
-
-  for (const [groupName, techList] of Object.entries(groups)) {
-    const groupEntries = entries.filter(([name]) => techList.includes(name));
-    if (groupEntries.length === 0) continue;
-
-    const color = groupColors[groupName] || 'var(--text-muted)';
-
-    html += `<div class="unit-upgrade-group">`;
-    html += `<div class="unit-upgrade-group-title" style="color:${color}">${groupName}</div>`;
-    html += `<div class="unit-upgrade-items">`;
-
-    for (const [techName, data] of groupEntries) {
-      const label = displayNames[techName] || techName;
-      html += `<div class="unit-upgrade-item">`;
-      html += `<span class="unit-upgrade-name">${label}</span>`;
-      html += `<span class="unit-upgrade-value">${data.count}x <span style="font-size:10px;color:var(--text-muted);">WR ${data.wr}%</span></span>`;
-      html += `</div>`;
-    }
-
-    html += `</div></div>`;
-  }
-
-  html += '</div></div>';
-  return html;
-}
-
-function renderTechContextCard(stats) {
-  const ctx = stats.tech_context || {};
-  const entries = Object.entries(ctx);
-  if (entries.length === 0) {
-    return '<div class="card"><div class="card-title">Contexto de Techs</div><div style="font-size:12px;color:var(--text-muted);">Sin datos</div></div>';
-  }
-
-  const techLabels = {
-    'wheelbarrow': 'Wheelbarrow',
-    'hand cart': 'Hand Cart',
-    'fletching': 'Fletching',
-    'bodkin arrow': 'Bodkin Arrow',
-    'bloodlines': 'Bloodlines',
-    'scale barding armor': 'Scale Barding',
-    'forging': 'Forging',
-    'iron casting': 'Iron Casting',
-  };
-  const unitLabels = {
-    'villager': 'Aldeanos',
-    'archer': 'Arqueros',
-    'crossbowman': 'Arqueros',
-    'scout_cavalry': 'Scouts',
-    'knight': 'Caballería',
-    'light_cavalry': 'Caballería',
-    'militia': 'Infantería',
-    'men-at-arms': 'Infantería',
-    'long_swordsman': 'Infantería',
-    'cavalier': 'Caballería',
-    'spearman': 'Infantería',
-  };
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Contexto de Techs</div>';
-  html += '<div class="tech-context-list">';
-
-  for (const [techKey, data] of entries) {
-    const label = techLabels[techKey] || techKey;
-    const unitType = data.unit_types[0] || '';
-    const unitLabel = unitLabels[unitType] || unitType;
-
-    html += `<div class="tech-context-row">`;
-    html += `<div class="tech-context-header">`;
-    html += `<span class="tech-context-name">${label}</span>`;
-    html += `<span class="tech-context-value">${Math.round(data.avg_count * 10) / 10} ${unitLabel}</span>`;
-    html += `</div>`;
-    html += `<div style="font-size:10px;color:var(--text-muted);">Promedio en ${data.samples} partidas</div>`;
-    html += `</div>`;
-  }
-
-  html += '</div></div>';
-  return html;
+  return `<div class="card">
+    <div class="card-label">Expected Opening</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">${icon} ${displayName}</div>
+    <div class="card-subtitle">Probability: ${freq[primary] || 0}% · Confidence: ${confidence}</div>
+    ${barsHtml ? `<div style="margin-top:10px;">${barsHtml}</div>` : ''}
+  </div>`;
 }
 
 function renderPlaystyleCard(stats) {
-  const arch = stats.archetype;
-  if (!arch) {
-    return '<div class="card"><div class="card-title">Playstyle</div><div style="font-size:12px;color:var(--text-muted);">Analizando...</div></div>';
-  }
+  const playstyle = stats.playstyle || { label: 'Unknown', score: 0 };
+  const arch = stats.archetype || {};
+  const aggression = arch.dimensions?.aggression || 0;
 
-  const dims = arch.dimensions || {};
-  const dimLabels = [
-    { key: 'aggression', label: 'Aggression', color: 'var(--accent-red)' },
-    { key: 'economy', label: 'Economy', color: 'var(--accent-green)' },
-    { key: 'versatility', label: 'Versatility', color: 'var(--accent-purple)' },
-    { key: 'lateGame', label: 'Late Game', color: 'var(--accent-blue)' },
-    { key: 'speed', label: 'Speed', color: 'var(--accent-orange)' },
-  ];
+  return `<div class="card">
+    <div class="card-label">Preferred Playstyle</div>
+    <div class="playstyle-badge ${playstyle.label.toLowerCase().replace(/\s+/g, '')}">${playstyle.label}</div>
+    <div class="playstyle-score">Average Feudal aggression: ${aggression}/100</div>
+    ${arch.description ? `<div class="card-subtitle" style="margin-top:8px;">${arch.description}</div>` : ''}
+  </div>`;
+}
 
-  const archetypeColors = {
-    aggressive: 'var(--accent-red)',
-    boomer: 'var(--accent-green)',
-    onetrick: 'var(--accent-yellow)',
-    versatile: 'var(--accent-purple)',
-    balanced: 'var(--accent-blue)',
-    imperial: 'var(--accent-orange)',
-    cheese: 'var(--accent-red)',
-    feudal_allin: 'var(--accent-red)',
-    castle_pusher: 'var(--accent-orange)',
-    macro: 'var(--accent-green)',
-    turtle: 'var(--accent-blue)',
-    ineffective: 'var(--text-muted)',
-  };
+function renderCivTendenciesCard(stats) {
+  const civs = stats.civ_played_percent || {};
+  const sortedCivs = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-  const color = archetypeColors[arch.primary] || 'var(--accent-blue)';
-
-  let html = '<div class="card">';
-  html += '<div class="card-title">Playstyle</div>';
-  html += `<div class="archetype-badge" style="background:${color}15;color:${color};border-color:${color}30">${arch.title}</div>`;
-  html += `<div class="archetype-desc">${arch.description}</div>`;
-
-  if (arch.traits && arch.traits.length > 0) {
-    html += '<div class="archetype-traits">';
-    for (const trait of arch.traits) {
-      html += `<span class="archetype-trait">${trait}</span>`;
-    }
-    html += '</div>';
-  }
-
-  html += '<div class="dimension-bars">';
-  for (const dim of dimLabels) {
-    const val = dims[dim.key] || 0;
-    html += `<div class="dim-row">
-      <div class="dim-label">${dim.label}</div>
-      <div class="dim-bar-track"><div class="dim-bar-fill" style="width:${val}%;background:${dim.color}"></div></div>
-      <div class="dim-value">${val}</div>
+  if (sortedCivs.length === 0) {
+    return `<div class="card">
+      <div class="card-label">Civilization Tendencies</div>
+      <div class="card-subtitle">No data available</div>
     </div>`;
   }
-  html += '</div></div>';
+
+  let civsHtml = '';
+  for (let i = 0; i < sortedCivs.length; i++) {
+    const [civ, pct] = sortedCivs[i];
+    civsHtml += `<div class="civ-tendency-item">
+      <div class="civ-tendency-rank">${i + 1}</div>
+      <span>${escapeHtml(civ)} <span style="color:var(--text-muted);font-size:12px;">${pct}%</span></span>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-label">Civilization Tendencies</div>
+    <div class="civ-tendency-list">${civsHtml}</div>
+  </div>`;
+}
+
+function renderTimingTendenciesCard(stats) {
+  return `<div class="card">
+    <div class="card-label">Timing Tendencies</div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Feudal</span>
+      <span class="timing-value">${stats.avg_feudal_hms || 'N/A'}</span>
+    </div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Castle</span>
+      <span class="timing-value">${stats.avg_castle_hms || 'N/A'}</span>
+    </div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Imperial</span>
+      <span class="timing-value">${stats.avg_imperial_hms || 'N/A'}</span>
+    </div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Game Length</span>
+      <span class="timing-value">${stats.avg_duration_hms || 'N/A'}</span>
+    </div>
+  </div>`;
+}
+
+function renderRecommendationsCard(stats) {
+  const recs = stats.recommendations || [];
+
+  let html = `<div class="card">`;
+  html += `<div class="card-label">Recommended Strategy</div>`;
+  html += `<ul class="recommendation-list">`;
+
+  if (recs.length > 0) {
+    for (const rec of recs.slice(0, 6)) {
+      const icon = rec.type === 'must' ? '<span class="check">✓</span>' :
+                   rec.type === 'warn' ? '<span class="warn">⚠</span>' :
+                   '<span class="danger">✗</span>';
+      html += `<li>${icon} ${escapeHtml(rec.text)}</li>`;
+    }
+  } else {
+    html += `<li><span class="check">✓</span> Analyze rival matches for specific recommendations</li>`;
+  }
+
+  html += `</ul></div>`;
   return html;
 }
 
-function getOpeningClass(label) {
-  if (!label) return 'unknown';
-  const l = label.toLowerCase();
-  if (l.includes('drush')) return 'drush';
-  if (l.includes('scout')) return 'scout_rush';
-  if (l.includes('archer')) return 'archer_rush';
-  if (l.includes('fast_feudal')) return 'fast_feudal_aggressive';
-  if (l.includes('fast_castle') || l.includes('fc')) return 'fast_castle';
-  if (l.includes('tower')) return 'tower_rush';
-  return 'unknown';
+function renderWeaknessesCard(stats) {
+  const weaknesses = stats.weaknesses || [];
+
+  if (weaknesses.length === 0) {
+    return `<div class="card">
+      <div class="card-label">Weaknesses Detected</div>
+      <div class="card-subtitle">No clear weaknesses identified yet.</div>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-label">Weaknesses Detected</div>
+    <ul class="weakness-list">
+      ${weaknesses.map(w => `<li>${escapeHtml(w)}</li>`).join('')}
+    </ul>
+  </div>`;
+}
+
+function renderThreatsCard(stats) {
+  const threats = stats.threats || [];
+
+  if (threats.length === 0) {
+    return `<div class="card">
+      <div class="card-label">Major Threats</div>
+      <div class="card-subtitle">No extreme threats detected.</div>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-label">Major Threats</div>
+    <ul class="threat-list">
+      ${threats.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+    </ul>
+  </div>`;
+}
+
+function renderDetailedAnalysisCard(stats) {
+  const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs'];
+  const tabLabels = ['Overview', 'Military', 'Economy', 'Openings', 'Maps', 'Civs'];
+
+  let html = `<div class="card">`;
+  html += `<div class="tabs-nav">`;
+  for (let i = 0; i < tabIds.length; i++) {
+    html += `<button class="tab-btn ${i === 0 ? 'active' : ''}" data-tab="${tabIds[i]}">${tabLabels[i]}</button>`;
+  }
+  html += `</div>`;
+
+  html += buildOverviewPanel(stats, tabIds[0]);
+  html += buildMilitaryPanel(stats, tabIds[1]);
+  html += buildEconomyPanel(stats, tabIds[2]);
+  html += buildOpeningsPanel(stats, tabIds[3]);
+  html += buildMapsPanel(stats, tabIds[4]);
+  html += buildCivsPanel(stats, tabIds[5]);
+
+  html += `</div>`;
+  return html;
+}
+
+function buildOverviewPanel(stats, id) {
+  const wr = stats.win_percent || 0;
+  const games = stats.analyzed || 0;
+  const wins = stats.total_wins || 0;
+  const streak = stats.current_streak || { type: 'none', count: 0 };
+  const streakText = streak.type === 'win' ? `+${streak.count} wins` :
+                       streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
+
+  return `<div class="tab-panel active" data-panel="${id}">
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item"><div class="tab-stat-label">Games</div><div class="tab-stat-value">${games}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Winrate</div><div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Wins / Losses</div><div class="tab-stat-value">${wins} / ${games - wins}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Current Streak</div><div class="tab-stat-value">${streakText}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Avg ELO</div><div class="tab-stat-value">${stats.rating || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Avg EAPM</div><div class="tab-stat-value">${stats.avg_eapm || '—'}</div></div>
+    </div>
+  </div>`;
+}
+
+function buildMilitaryPanel(stats, id) {
+  const unitCats = stats.unit_categories || {};
+  const aggression = stats.archetype?.dimensions?.aggression || 0;
+  const totalUnits = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
+
+  const cats = [
+    { key: 'cavalry', label: 'Cavalry', color: 'var(--accent-orange)' },
+    { key: 'archers', label: 'Archers', color: 'var(--accent-yellow)' },
+    { key: 'infantry', label: 'Infantry', color: 'var(--accent-red)' },
+    { key: 'siege', label: 'Siege', color: 'var(--accent-purple)' },
+  ];
+
+  let compositionHtml = '';
+  for (const cat of cats) {
+    const data = unitCats[cat.key];
+    if (!data || !data.count) continue;
+    const pct = Math.round((data.count / totalUnits) * 100);
+    compositionHtml += `<div class="opening-bar-row" style="margin-bottom:5px;">
+      <div class="opening-bar-label" style="width:80px;">${cat.label}</div>
+      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
+      <div class="opening-bar-pct">${pct}%</div>
+    </div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div class="tab-stat-grid" style="margin-bottom:12px;">
+      <div class="tab-stat-item"><div class="tab-stat-label">Aggression Score</div><div class="tab-stat-value">${aggression}/100</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Total Units</div><div class="tab-stat-value">${totalUnits}</div></div>
+    </div>
+    ${compositionHtml ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Army Composition</div>${compositionHtml}</div>` : '<div class="card-subtitle" style="padding:10px 0;">No military data available.</div>'}
+  </div>`;
+}
+
+function buildEconomyPanel(stats, id) {
+  const tcTiming = stats.tc_timing || {};
+  return `<div class="tab-panel" data-panel="${id}">
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item"><div class="tab-stat-label">2nd TC Avg</div><div class="tab-stat-value">${tcTiming.tc2_avg_hms || 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">3rd TC Avg</div><div class="tab-stat-value">${tcTiming.tc3_avg_hms || 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Wheelbarrow</div><div class="tab-stat-value">${stats.wheel_barrow_avg != null ? formatHms(stats.wheel_barrow_avg) : 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Hand Cart</div><div class="tab-stat-value">${stats.hand_cart_avg != null ? formatHms(stats.hand_cart_avg) : 'N/A'}</div></div>
+    </div>
+    ${stats.boom_tendency ? `<div class="card-subtitle" style="margin-top:10px;">Boom tendency: <strong>${stats.boom_tendency}</strong></div>` : ''}
+  </div>`;
+}
+
+function buildOpeningsPanel(stats, id) {
+  const pp = stats.player_profile || {};
+  const freq = pp.per_opening_frequency || {};
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  const maxPct = sorted.length > 0 ? sorted[0][1] : 100;
+
+  let barsHtml = '';
+  const colors = ['var(--accent-blue)', 'var(--accent-purple)', 'var(--accent-orange)', 'var(--accent-green)', 'var(--accent-red)', 'var(--accent-cyan)'];
+  for (let i = 0; i < sorted.length; i++) {
+    const [name, pct] = sorted[i];
+    const width = maxPct > 0 ? (pct / maxPct) * 100 : 0;
+    barsHtml += `<div class="opening-bar-row">
+      <div class="opening-bar-label">${formatOpeningName(name)}</div>
+      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:${colors[i % colors.length]}"></div></div>
+      <div class="opening-bar-pct">${pct}%</div>
+    </div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div style="margin-bottom:8px;"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Opening Distribution</div>
+    ${barsHtml || '<div class="card-subtitle">No opening data available.</div>'}</div>
+    ${pp.primary_opening ? `<div class="card-subtitle">Primary: <strong>${formatOpeningName(pp.primary_opening)}</strong> (${Math.round((pp.opening_stability || 0) * 100)}% stability)</div>` : ''}
+  </div>`;
+}
+
+function buildMapsPanel(stats, id) {
+  const maps = stats.map_played_percent || {};
+  const sorted = Object.entries(maps).sort((a, b) => b[1] - a[1]);
+
+  let topMaps = '';
+  const top3 = sorted.slice(0, 3);
+  for (const [map, pct] of top3) {
+    const wr = stats.map_win_percent?.[map] ?? 0;
+    const wrClass = wr >= 55 ? 'text-green' : wr <= 40 ? 'text-red' : '';
+    topMaps += `<div class="timing-row">
+      <span class="timing-label">${escapeHtml(map)}</span>
+      <span class="timing-value ${wrClass}">${pct}% · ${wr}% WR</span>
+    </div>`;
+  }
+
+  const worst3 = sorted
+    .filter(([m]) => (stats.map_win_percent?.[m] ?? 50) < 45)
+    .sort((a, b) => (stats.map_win_percent?.[a[0]] ?? 50) - (stats.map_win_percent?.[b[0]] ?? 50))
+    .slice(0, 3);
+
+  let worstMaps = '';
+  for (const [map, pct] of worst3) {
+    const wr = stats.map_win_percent?.[map] ?? 0;
+    worstMaps += `<div class="timing-row">
+      <span class="timing-label">${escapeHtml(map)}</span>
+      <span class="timing-value text-red">${wr}% WR</span>
+    </div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Top Maps</div>
+      ${topMaps || '<div class="card-subtitle">No map data.</div>'}
+    </div>
+    ${worstMaps ? `<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Worst Maps</div>${worstMaps}</div>` : ''}
+  </div>`;
+}
+
+function buildCivsPanel(stats, id) {
+  const civs = stats.civ_played_percent || {};
+  const sorted = Object.entries(civs).sort((a, b) => b[1] - a[1]);
+
+  let civsHtml = '';
+  for (const [civ, pct] of sorted) {
+    const wr = stats.civ_win_percent?.[civ] ?? 0;
+    const wrClass = wr >= 55 ? 'text-green' : wr <= 40 ? 'text-red' : '';
+    civsHtml += `<div class="timing-row">
+      <span class="timing-label">${escapeHtml(civ)}</span>
+      <span class="timing-value ${wrClass}">${pct}% · ${wr}% WR</span>
+    </div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Civilizations</div>
+    ${civsHtml || '<div class="card-subtitle">No civilization data.</div>'}
+  </div>`;
+}
+
+function renderHistoricalDataCard(stats) {
+  const matches = stats.matches || [];
+  const recent = matches.slice(0, 10);
+
+  if (recent.length === 0) {
+    return `<div class="card"><div class="card-subtitle">No match history available.</div></div>`;
+  }
+
+  let rows = '';
+  for (const m of recent) {
+    const date = m.started ? new Date(m.started).toLocaleDateString('es', { month: 'short', day: 'numeric' }) : '—';
+    const result = m.won ? '<span class="win">W</span>' : '<span class="loss">L</span>';
+    const opening = m.opening ? formatOpeningName(m.opening) : '—';
+
+    rows += `<tr>
+      <td>${date}</td>
+      <td>${escapeHtml(m.map_name || '—')}</td>
+      <td>${escapeHtml(m.player_civ || '?')} vs ${escapeHtml(m.opponent_civ || '?')}</td>
+      <td>${result}</td>
+      <td>${opening}</td>
+      <td>${m.duration_hms || '—'}</td>
+    </tr>`;
+  }
+
+  return `<div class="card" style="padding:12px;">
+    <table class="history-table">
+      <thead><tr><th>Date</th><th>Map</th><th>Civs</th><th>Res</th><th>Opening</th><th>Dur</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ============================================================================
+// LIVE MATCH INTELLIGENCE
+// ============================================================================
+
+function renderLiveMatch(playerStats, rivalStats, matchData) {
+  const container = document.getElementById('live-match-content');
+  if (!container) return;
+
+  const playerName = playerStats.player_name || 'Player';
+  const rivalName = rivalStats.rival_name || currentRivalName || 'Rival';
+  const mapName = matchData?.mapName || 'Unknown Map';
+
+  let html = '';
+
+  // Block 1: Match Status
+  html += `<div class="block">`;
+  html += `<div class="section-title">Match Status</div>`;
+  html += `<div class="block-grid block-grid-3">`;
+  html += `<div class="card">
+    <div class="card-label">Current Game</div>
+    <div class="card-value">${escapeHtml(mapName)}</div>
+    <div class="card-subtitle">Live match detected</div>
+  </div>`;
+  html += `<div class="card">
+    <div class="card-label">Player</div>
+    <div class="card-value">${escapeHtml(playerName)}</div>
+    <div class="card-subtitle">Rating: ${playerStats.rating || '—'}</div>
+  </div>`;
+  html += `<div class="card">
+    <div class="card-label">Rival</div>
+    <div class="card-value">${escapeHtml(rivalName)}</div>
+    <div class="card-subtitle">Rating: ${rivalStats.rating || '—'}</div>
+  </div>`;
+  html += `</div></div>`;
+
+  // Block 2: Live Advantage
+  html += `<div class="block">`;
+  html += `<div class="section-title">Live Advantage</div>`;
+  html += renderLiveAdvantage(playerStats, rivalStats);
+  html += `</div>`;
+
+  // Block 3: Style Comparison
+  html += `<div class="block">`;
+  html += `<div class="section-title">Style Comparison</div>`;
+  html += `<div class="block-grid block-grid-2">`;
+  html += renderStyleComparison(playerStats, rivalStats);
+  html += renderTempoAnalysis(playerStats, rivalStats);
+  html += `</div></div>`;
+
+  // Block 4: Critical Timings
+  html += `<div class="block">`;
+  html += `<div class="section-title">Critical Timings</div>`;
+  html += `<div class="block-grid block-grid-2">`;
+  html += renderCriticalTimings(playerStats, rivalStats);
+  html += renderTimingInsights(playerStats, rivalStats);
+  html += `</div></div>`;
+
+  // Block 5: Expected Transitions
+  html += `<div class="block">`;
+  html += `<div class="section-title">Expected Transitions</div>`;
+  html += renderExpectedTransitions(rivalStats);
+  html += `</div>`;
+
+  // Block 6: Detailed Metrics (collapsible-like tabs)
+  html += `<div class="block">`;
+  html += `<div class="section-title">Detailed Metrics</div>`;
+  html += renderLiveDetailedMetrics(playerStats, rivalStats);
+  html += `</div>`;
+
+  container.innerHTML = html;
+  setupTabs(container);
+}
+
+function renderLiveAdvantage(playerStats, rivalStats) {
+  // Estimate advantage based on historical data (placeholder for live data integration)
+  const playerElo = playerStats.rating || 1000;
+  const rivalElo = rivalStats.rating || 1000;
+  const playerWR = playerStats.win_percent || 50;
+  const rivalWR = rivalStats.win_percent || 50;
+
+  // Simple heuristic for demo (would use live data in full implementation)
+  const eloDiff = playerElo - rivalElo;
+  const wrDiff = playerWR - rivalWR;
+  let advantage = 50 + (eloDiff / 30) + (wrDiff / 2);
+  advantage = Math.max(5, Math.min(95, advantage));
+
+  const playerPct = Math.round(advantage);
+  const rivalPct = 100 - playerPct;
+
+  const advantageText = playerPct > 55 ? 'Player Advantage' :
+                        playerPct < 45 ? 'Rival Advantage' : 'Even';
+  const advantageColor = playerPct > 55 ? 'text-green' : playerPct < 45 ? 'text-red' : 'text-yellow';
+
+  return `<div class="card">
+    <div class="card-label">Current Advantage Estimate (Historical-based)</div>
+    <div class="advantage-comparison">
+      <div class="advantage-row">
+        <div class="advantage-label">Player</div>
+        <div class="advantage-track"><div class="advantage-fill-player" style="width:${playerPct}%"></div></div>
+        <div class="advantage-pct">${playerPct}%</div>
+      </div>
+      <div class="advantage-row">
+        <div class="advantage-label">Rival</div>
+        <div class="advantage-track"><div class="advantage-fill-rival" style="width:${rivalPct}%"></div></div>
+        <div class="advantage-pct">${rivalPct}%</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:16px;font-weight:700;" class="${advantageColor}">${advantageText}</div>
+    <div class="card-subtitle" style="text-align:center;">Based on ELO differential and historical winrates. Live data will refine this.</div>
+  </div>`;
+}
+
+function renderStyleComparison(playerStats, rivalStats) {
+  const pDims = playerStats.archetype?.dimensions || {};
+  const rDims = rivalStats.archetype?.dimensions || {};
+
+  const dimensions = [
+    { key: 'aggression', label: 'Aggression' },
+    { key: 'economy', label: 'Economy Focus' },
+    { key: 'versatility', label: 'Versatility' },
+    { key: 'lateGame', label: 'Late Game' },
+    { key: 'speed', label: 'Speed' },
+  ];
+
+  let html = `<div class="card">`;
+  html += `<div class="card-label">Dimension Comparison</div>`;
+
+  for (const dim of dimensions) {
+    const pVal = pDims[dim.key] || 0;
+    const rVal = rDims[dim.key] || 0;
+    const maxVal = Math.max(pVal, rVal, 1);
+    const pWidth = (pVal / maxVal) * 100;
+    const rWidth = (rVal / maxVal) * 100;
+
+    html += `<div style="margin-bottom:10px;">`;
+    html += `<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">${dim.label}</div>`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">`;
+    html += `<span style="font-size:11px;width:50px;text-align:right;color:var(--accent-blue);font-weight:600;">${pVal}</span>`;
+    html += `<div style="flex:1;height:8px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${pWidth}%;background:linear-gradient(90deg,var(--accent-blue),rgba(59,130,246,0.5));border-radius:4px;"></div></div>`;
+    html += `</div>`;
+    html += `<div style="display:flex;align-items:center;gap:8px;">`;
+    html += `<span style="font-size:11px;width:50px;text-align:right;color:var(--accent-red);font-weight:600;">${rVal}</span>`;
+    html += `<div style="flex:1;height:8px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${rWidth}%;background:linear-gradient(90deg,var(--accent-red),rgba(239,68,68,0.5));border-radius:4px;"></div></div>`;
+    html += `</div>`;
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function renderTempoAnalysis(playerStats, rivalStats) {
+  const pArch = playerStats.archetype || {};
+  const rArch = rivalStats.archetype || {};
+  const pDims = pArch.dimensions || {};
+  const rDims = rArch.dimensions || {};
+
+  function getStars(val) {
+    const filled = Math.round(val / 20);
+    return '★'.repeat(filled) + '☆'.repeat(5 - filled);
+  }
+
+  function getTempoLabel(econ, mil) {
+    if (econ > 60 && mil < 30) return 'Greedy boom';
+    if (econ > 50 && mil > 40) return 'Macro play';
+    if (mil > 60 && econ < 40) return 'Aggressive';
+    if (mil < 30 && econ < 40) return 'Defensive / Turtle';
+    return 'Balanced';
+  }
+
+  return `<div class="card">
+    <div class="card-label">Tempo Analysis</div>
+    <div class="tempo-grid">
+      <div class="tempo-section">
+        <div class="tempo-title">${escapeHtml(playerStats.player_name || 'Player')}</div>
+        <div class="tempo-item"><span class="tempo-label">Economic Tempo</span><span class="tempo-stars">${getStars(pDims.economy || 0)}</span></div>
+        <div class="tempo-item"><span class="tempo-label">Military Tempo</span><span class="tempo-stars">${getStars(pDims.aggression || 0)}</span></div>
+        <div class="tempo-item"><span class="tempo-label">Expansion Tempo</span><span class="tempo-stars">${getStars(((pDims.economy || 0) + (pDims.lateGame || 0)) / 2)}</span></div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle);font-size:12px;color:var(--text-muted);">${getTempoLabel(pDims.economy || 0, pDims.aggression || 0)}</div>
+      </div>
+      <div class="tempo-section">
+        <div class="tempo-title">${escapeHtml(rivalStats.rival_name || 'Rival')}</div>
+        <div class="tempo-item"><span class="tempo-label">Economic Tempo</span><span class="tempo-stars">${getStars(rDims.economy || 0)}</span></div>
+        <div class="tempo-item"><span class="tempo-label">Military Tempo</span><span class="tempo-stars">${getStars(rDims.aggression || 0)}</span></div>
+        <div class="tempo-item"><span class="tempo-label">Expansion Tempo</span><span class="tempo-stars">${getStars(((rDims.economy || 0) + (rDims.lateGame || 0)) / 2)}</span></div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle);font-size:12px;color:var(--text-muted);">${getTempoLabel(rDims.economy || 0, rDims.aggression || 0)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCriticalTimings(playerStats, rivalStats) {
+  const pAges = {
+    feudal: playerStats.avg_feudal_hms || 'N/A',
+    castle: playerStats.avg_castle_hms || 'N/A',
+    imperial: playerStats.avg_imperial_hms || 'N/A',
+  };
+  const rAges = {
+    feudal: rivalStats.avg_feudal_hms || 'N/A',
+    castle: rivalStats.avg_castle_hms || 'N/A',
+    imperial: rivalStats.avg_imperial_hms || 'N/A',
+  };
+
+  let html = `<div class="card">`;
+  html += `<div class="card-label">Historical Timings</div>`;
+  html += `<div class="timeline-container">`;
+
+  const events = [
+    { age: 'feudal', label: 'Feudal Age' },
+    { age: 'castle', label: 'Castle Age' },
+    { age: 'imperial', label: 'Imperial Age' },
+  ];
+
+  for (const evt of events) {
+    html += `<div class="timeline-item">
+      <span class="timeline-time">${pAges[evt.age]}</span> <span class="timeline-event">${evt.label} (Player)</span>
+    </div>`;
+    html += `<div class="timeline-item">
+      <span class="timeline-time">${rAges[evt.age]}</span> <span class="timeline-event">${evt.label} (Rival)</span>
+    </div>`;
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+function renderTimingInsights(playerStats, rivalStats) {
+  const pFeudal = playerStats.avg_feudal || 0;
+  const rFeudal = rivalStats.avg_feudal || 0;
+  const pCastle = playerStats.avg_castle || 0;
+  const rCastle = rivalStats.avg_castle || 0;
+
+  const feudalDiff = pFeudal && rFeudal ? pFeudal - rFeudal : 0;
+  const castleDiff = pCastle && rCastle ? pCastle - rCastle : 0;
+
+  let insights = [];
+  if (feudalDiff < -20) insights.push({ type: 'positive', text: `Faster Feudal (${Math.abs(Math.round(feudalDiff))}s avg)` });
+  else if (feudalDiff > 20) insights.push({ type: 'negative', text: `Slower Feudal (${Math.round(feudalDiff)}s avg)` });
+
+  if (castleDiff < -20) insights.push({ type: 'positive', text: `Faster Castle (${Math.abs(Math.round(castleDiff))}s avg)` });
+  else if (castleDiff > 20) insights.push({ type: 'negative', text: `Slower Castle (${Math.round(castleDiff)}s avg)` });
+
+  const rAgg = rivalStats.archetype?.dimensions?.aggression || 0;
+  if (rAgg > 60) insights.push({ type: 'negative', text: 'Rival invests heavily into military' });
+  if (rAgg < 30) insights.push({ type: 'positive', text: 'Rival plays passive — eco lead likely' });
+
+  if (insights.length === 0) insights.push({ type: 'neutral', text: 'Historical timings are similar' });
+
+  let html = `<div class="card">`;
+  html += `<div class="card-label">Timing Analysis</div>`;
+  html += `<ul class="recommendation-list">`;
+  for (const insight of insights) {
+    const icon = insight.type === 'positive' ? '<span class="check">✓</span>' :
+                 insight.type === 'negative' ? '<span class="danger">⚠</span>' :
+                 '<span class="warn">•</span>';
+    html += `<li>${icon} ${escapeHtml(insight.text)}</li>`;
+  }
+  html += `</ul></div>`;
+  return html;
+}
+
+function renderExpectedTransitions(rivalStats) {
+  const pp = rivalStats.player_profile || {};
+  const freq = pp.per_opening_frequency || {};
+
+  // Map openings to expected transitions
+  const transitions = {
+    'scout_rush': { 'Knights': 60, 'Skirmishers': 20, 'Archers': 15, 'Siege': 5 },
+    'archer_rush': { 'Crossbows': 55, 'Knights': 25, 'Siege': 15, 'Monks': 5 },
+    'fast_castle': { 'Knights': 50, 'Boom': 30, 'Unique Unit': 15, 'Monks': 5 },
+    'drush': { 'Archers': 45, 'Fast Castle': 30, 'Scouts': 20, 'Tower': 5 },
+    'fast_feudal_aggressive': { 'Archers': 40, 'Scouts': 35, 'Tower': 15, 'Fast Castle': 10 },
+  };
+
+  const primary = pp.primary_opening || 'Unknown';
+  const transitionMap = transitions[primary] || { 'Standard follow-up': 100 };
+
+  const totalPct = Object.values(transitionMap).reduce((a, b) => a + b, 0);
+  const sortedTrans = Object.entries(transitionMap).sort((a, b) => b[1] - a[1]);
+
+  let barsHtml = '';
+  for (const [unit, pct] of sortedTrans) {
+    const width = totalPct > 0 ? (pct / totalPct) * 100 : 0;
+    barsHtml += `<div class="opening-bar-row">
+      <div class="opening-bar-label">${unit}</div>
+      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:var(--accent-blue)"></div></div>
+      <div class="opening-bar-pct">${pct}%</div>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-label">Expected Rival Transition</div>
+    <div class="card-subtitle">Based on primary opening: ${formatOpeningName(primary)}</div>
+    <div style="margin-top:10px;">${barsHtml}</div>
+  </div>`;
+}
+
+function renderLiveDetailedMetrics(playerStats, rivalStats) {
+  const tabIds = ['economy', 'military', 'production', 'openings'];
+  const tabLabels = ['Economy', 'Military', 'Production', 'Openings'];
+
+  let html = `<div class="card">`;
+  html += `<div class="tabs-nav">`;
+  for (let i = 0; i < tabIds.length; i++) {
+    html += `<button class="tab-btn ${i === 0 ? 'active' : ''}" data-tab="live-${tabIds[i]}">${tabLabels[i]}</button>`;
+  }
+  html += `</div>`;
+
+  // Economy tab
+  html += `<div class="tab-panel active" data-panel="live-economy">
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item"><div class="tab-stat-label">Player 2nd TC</div><div class="tab-stat-value">${playerStats.tc_timing?.tc2_avg_hms || 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Rival 2nd TC</div><div class="tab-stat-value">${rivalStats.tc_timing?.tc2_avg_hms || 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Player Wheelbarrow</div><div class="tab-stat-value">${playerStats.wheel_barrow_avg != null ? formatHms(playerStats.wheel_barrow_avg) : 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Rival Wheelbarrow</div><div class="tab-stat-value">${rivalStats.wheel_barrow_avg != null ? formatHms(rivalStats.wheel_barrow_avg) : 'N/A'}</div></div>
+    </div>
+  </div>`;
+
+  // Military tab
+  const pAgg = playerStats.archetype?.dimensions?.aggression || 0;
+  const rAgg = rivalStats.archetype?.dimensions?.aggression || 0;
+  html += `<div class="tab-panel" data-panel="live-military">
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item"><div class="tab-stat-label">Player Aggression</div><div class="tab-stat-value">${pAgg}/100</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Rival Aggression</div><div class="tab-stat-value">${rAgg}/100</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Player Units</div><div class="tab-stat-value">${Object.values(playerStats.unit_categories || {}).reduce((s, c) => s + (c.count || 0), 0)}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Rival Units</div><div class="tab-stat-value">${Object.values(rivalStats.unit_categories || {}).reduce((s, c) => s + (c.count || 0), 0)}</div></div>
+    </div>
+  </div>`;
+
+  // Production tab
+  html += `<div class="tab-panel" data-panel="live-production">
+    <div class="card-subtitle">Production data will appear here when live match data is available.</div>
+  </div>`;
+
+  // Openings tab
+  html += `<div class="tab-panel" data-panel="live-openings">
+    <div style="margin-bottom:8px;"><strong>Player:</strong> ${formatOpeningName(playerStats.player_profile?.primary_opening || 'Unknown')}</div>
+    <div><strong>Rival:</strong> ${formatOpeningName(rivalStats.player_profile?.primary_opening || 'Unknown')}</div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ============================================================================
+// TABS SETUP
+// ============================================================================
+
+function setupTabs(container) {
+  const tabBtns = container.querySelectorAll('.tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      if (!tabId) return;
+
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+      container.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.panel === tabId);
+      });
+    });
+  });
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function formatOpeningName(label) {
+  if (!label) return 'Unknown';
+  const map = {
+    'drush': 'Drush',
+    'scout_rush': 'Scout Rush',
+    'archer_rush': 'Archer Rush',
+    'fast_feudal_aggressive': 'Fast Feudal Aggro',
+    'fast_castle': 'Fast Castle',
+    'tower_rush': 'Tower Rush',
+    'Standard/Unknown': 'Standard',
+    'Mixed/No Data': 'Mixed',
+  };
+  return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
