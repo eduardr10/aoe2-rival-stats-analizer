@@ -738,89 +738,82 @@ export function generateDataDrivenRecommendations(stats) {
   const drushFreq = perFreq['drush'] || 0;
   const trushFreq = perFreq['tower_rush'] || 0;
 
-  // Build opening-based recommendations with DATA backing
+  // DATA-DRIVEN: opening frequencies observed
   if (scoutFreq >= 25 || scoutAvg > 2.0) {
-    recs.push({ type: 'must', text: `Expect Scout Rush (${scoutFreq}% / ${scoutAvg.toFixed(1)} scouts avg)` });
-    recs.push({ type: 'must', text: 'Build houses to wall berries before Feudal' });
+    recs.push({ type: 'must', text: `Scout Rush ${scoutFreq}% (${scoutAvg.toFixed(1)} scouts avg)` });
   }
-
   if (archerFreq >= 25 || archerAvg > 1.5) {
-    recs.push({ type: 'must', text: `Expect Archer Rush (${archerFreq}% / ${archerAvg.toFixed(1)} archers avg)` });
-    recs.push({ type: 'must', text: 'Get early skirmishers if civ allows' });
+    recs.push({ type: 'must', text: `Archer Rush ${archerFreq}% (${archerAvg.toFixed(1)} archers avg)` });
   }
-
   if (fcFreq >= 25) {
-    recs.push({ type: 'must', text: `Expect Fast Castle (${fcFreq}%) — deny relics` });
+    recs.push({ type: 'must', text: `Fast Castle ${fcFreq}%` });
   }
-
   if (ffaFreq >= 25) {
-    recs.push({ type: 'must', text: `Expect aggressive Feudal (${ffaFreq}%) — extra wood for walls` });
+    recs.push({ type: 'must', text: `Aggressive Feudal ${ffaFreq}%` });
   }
-
   if (drushFreq >= 15 || militiaAvg > 1.0) {
-    recs.push({ type: 'must', text: `Expect Drush (${drushFreq}% / ${militiaAvg.toFixed(1)} militia avg) — early palisade` });
+    recs.push({ type: 'must', text: `Drush ${drushFreq}% (${militiaAvg.toFixed(1)} militia avg)` });
   }
-
   if (trushFreq >= 10) {
-    recs.push({ type: 'must', text: `Expect Tower Rush (${trushFreq}%) — scout for villager forward` });
+    recs.push({ type: 'must', text: `Tower Rush ${trushFreq}%` });
   }
 
-  // DATA-DRIVEN: tech preferences
+  // DATA-DRIVEN: tech frequency + avg timing (only if significant)
   const fletchingData = keyTechs['fletching'];
-  if (fletchingData && fletchingData.frequency >= 60) {
-    recs.push({ type: 'warn', text: `Fletching in ${fletchingData.frequency}% games — archer threat real` });
+  if (fletchingData && fletchingData.frequency >= 60 && fletchingData.avg_time != null) {
+    recs.push({ type: 'warn', text: `Fletching ${fletchingData.frequency}% — avg ${formatHms(fletchingData.avg_time)}` });
   }
-
   const bloodlinesData = keyTechs['bloodlines'];
-  if (bloodlinesData && bloodlinesData.frequency >= 50) {
-    recs.push({ type: 'warn', text: `Bloodlines in ${bloodlinesData.frequency}% — knight switch incoming` });
+  if (bloodlinesData && bloodlinesData.frequency >= 50 && bloodlinesData.avg_time != null) {
+    recs.push({ type: 'warn', text: `Bloodlines ${bloodlinesData.frequency}% — avg ${formatHms(bloodlinesData.avg_time)}` });
   }
 
-  // DATA-DRIVEN: map preferences
+  // DATA-DRIVEN: map & civ preferences (only extreme concentration)
   const mapWR = stats.map_win_percent || {};
   const bestMap = Object.entries(mapWR).sort((a, b) => b[1] - a[1])[0];
   if (bestMap && bestMap[1] >= 65) {
-    recs.push({ type: 'warn', text: `Strong on ${bestMap[0]} (${bestMap[1]}% WR) — ban if possible` });
+    recs.push({ type: 'warn', text: `${bestMap[0]} ${bestMap[1]}% WR (${stats.map_played_percent[bestMap[0]] || '?'}% play)` });
   }
 
-  // DATA-DRIVEN: civ preferences
   const civPlayed = stats.civ_played_percent || {};
   const mainCiv = Object.entries(civPlayed).sort((a, b) => b[1] - a[1])[0];
   if (mainCiv && mainCiv[1] >= 60) {
-    recs.push({ type: 'warn', text: `Plays ${mainCiv[0]} ${mainCiv[1]}% — prepare civ counter` });
+    recs.push({ type: 'warn', text: `${mainCiv[0]} ${mainCiv[1]}% of games` });
   }
 
-  // DATA-DRIVEN: economy timing — compare wins vs losses, not fixed threshold
+  // DATA-DRIVEN: economy timing gaps (wins vs losses)
   if (stats.wheel_barrow_loss_avg != null && stats.wheel_barrow_win_avg != null) {
     const gap = stats.wheel_barrow_loss_avg - stats.wheel_barrow_win_avg;
     if (gap > 60) {
-      recs.push({ type: 'warn', text: `Wheelbarrow ${formatHms(gap)} slower in losses (${formatHms(stats.wheel_barrow_win_avg)} win avg) — punish delayed eco` });
+      recs.push({ type: 'warn', text: `Wheelbarrow ${formatHms(gap)} slower in losses (${formatHms(stats.wheel_barrow_win_avg)} in wins)` });
     }
   }
   if (stats.hand_cart_loss_avg != null && stats.hand_cart_win_avg != null) {
     const gap = stats.hand_cart_loss_avg - stats.hand_cart_win_avg;
     if (gap > 60) {
-      recs.push({ type: 'warn', text: `Hand Cart ${formatHms(gap)} slower in losses — late Castle eco` });
+      recs.push({ type: 'warn', text: `Hand Cart ${formatHms(gap)} slower in losses (${formatHms(stats.hand_cart_win_avg)} in wins)` });
     }
   }
 
-  // DATA-DRIVEN: opponent pattern analysis
+  // DATA-DRIVEN: opponent pattern analysis (our winrate vs rival patterns)
   const oppPatterns = analyzeOpponentPatterns(stats);
   for (const [opening, wr] of Object.entries(oppPatterns.opp_opening_wr)) {
     if (wr >= 70) {
-      recs.push({ type: 'must', text: `Strong vs ${formatOpeningName(opening)} (${wr}% WR in ${oppPatterns.opp_opening_freq[opening]} games)` });
+      recs.push({ type: 'must', text: `${wr}% WR when rival goes ${formatOpeningName(opening)} (${oppPatterns.opp_opening_freq[opening]} games)` });
     } else if (wr <= 35) {
-      recs.push({ type: 'warn', text: `Weak vs ${formatOpeningName(opening)} (${wr}% WR) — avoid direct counter` });
+      recs.push({ type: 'warn', text: `${wr}% WR when rival goes ${formatOpeningName(opening)}` });
     }
   }
   for (const [cat, wr] of Object.entries(oppPatterns.opp_unit_wr)) {
     if (wr <= 35) {
-      recs.push({ type: 'warn', text: `Struggles when rival goes ${cat} (${wr}% WR) — prepare counter` });
+      recs.push({ type: 'warn', text: `${wr}% WR when rival mass ${cat}` });
     }
   }
 
+  // Fallback: opening stability as pure data
   if (recs.length === 0) {
-    recs.push({ type: 'must', text: 'Mixed strategy — scout with first military unit' });
+    const stability = pp.opening_stability || 0;
+    recs.push({ type: 'must', text: `Opening stability ${Math.round(stability * 100)}% (${pp.primary_opening || 'mixed'})` });
   }
 
   return recs.slice(0, 7);

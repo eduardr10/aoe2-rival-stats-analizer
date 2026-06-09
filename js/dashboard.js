@@ -735,6 +735,83 @@ function updateHeader(stats) {
   if (headerAvatar) headerAvatar.textContent = (stats.player_name || '?').charAt(0).toUpperCase();
 }
 
+function renderPlayerSummaryBanner(stats) {
+  const wr = stats.win_percent || 0;
+  const games = stats.analyzed || 0;
+  const streak = stats.current_streak || { type: 'none', count: 0 };
+  const streakText = streak.type === 'win' ? `+${streak.count}` :
+                       streak.type === 'loss' ? `-${streak.count}` : '—';
+  const eapm = stats.avg_eapm || 0;
+  const pp = stats.player_profile || {};
+  const primaryOpening = pp.primary_opening || 'Unknown';
+  const stability = Math.round((pp.opening_stability || 0) * 100);
+
+  // Best map by winrate (min 3 games)
+  let bestMap = null;
+  const mapWR = stats.map_win_percent || {};
+  const mapPlayed = stats.map_played || {};
+  for (const [map, wrMap] of Object.entries(mapWR)) {
+    if ((mapPlayed[map] || 0) >= 3 && (!bestMap || wrMap > bestMap.wr)) {
+      bestMap = { name: map, wr: wrMap, count: mapPlayed[map] };
+    }
+  }
+
+  // Main civ by play%
+  let mainCiv = null;
+  const civPlayed = stats.civ_played_percent || {};
+  for (const [civ, pct] of Object.entries(civPlayed)) {
+    if (!mainCiv || pct > mainCiv.pct) mainCiv = { name: civ, pct };
+  }
+
+  // Feudal avg
+  const feudalAvg = stats.avg_feudal_hms || 'N/A';
+
+  return `<div class="card" style="padding:20px;">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:22px;font-weight:800;color:var(--text-primary);">${escapeHtml(stats.player_name || 'Player')}</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">
+          ${stats.rating ? `ELO ${stats.rating}` : ''}
+          ${eapm > 0 ? ` · APM ${eapm}` : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div style="text-align:center;min-width:60px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('winrate')}</div>
+          <div style="font-size:18px;font-weight:700;color:${wr >= 50 ? 'var(--accent-green)' : 'var(--accent-red)'};margin-top:2px;">${wr}%</div>
+        </div>
+        <div style="text-align:center;min-width:60px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('games')}</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${games}</div>
+        </div>
+        <div style="text-align:center;min-width:60px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('streak')}</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${streakText}</div>
+        </div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Main Opening</div>
+          <div style="font-size:14px;font-weight:700;color:var(--accent-blue);margin-top:2px;">${formatOpeningName(primaryOpening)}</div>
+          <div style="font-size:10px;color:var(--text-muted);">${stability}% stable</div>
+        </div>
+        ${bestMap ? `<div style="text-align:center;min-width:80px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Best Map</div>
+          <div style="font-size:14px;font-weight:700;color:var(--accent-green);margin-top:2px;">${escapeHtml(bestMap.name)}</div>
+          <div style="font-size:10px;color:var(--text-muted);">${bestMap.wr}% WR</div>
+        </div>` : ''}
+        ${mainCiv ? `<div style="text-align:center;min-width:80px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Main Civ</div>
+          <div style="font-size:14px;font-weight:700;color:var(--accent-orange);margin-top:2px;">${escapeHtml(mainCiv.name)}</div>
+          <div style="font-size:10px;color:var(--text-muted);">${mainCiv.pct}%</div>
+        </div>` : ''}
+        <div style="text-align:center;min-width:80px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Feudal Avg</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px;">${feudalAvg}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ============================================================================
 // HISTORICAL ANALYSIS (5 Blocks)
 // ============================================================================
@@ -742,7 +819,12 @@ function updateHeader(stats) {
 function renderHistoricalAnalysisHTML(stats, compressed) {
   let html = '';
 
-  // BLOCK 1: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
+  // BLOCK 1: PLAYER SUMMARY BANNER
+  html += `<div class="block">`;
+  html += renderPlayerSummaryBanner(stats);
+  html += `</div>`;
+
+  // BLOCK 2: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
   html += `<div class="block">`;
   html += `<div class="section-title">${t('expectedStrategy')}</div>`;
   html += `<div class="block-grid block-grid-2">`;
