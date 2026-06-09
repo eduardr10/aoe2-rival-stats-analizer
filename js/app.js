@@ -2,11 +2,13 @@ import { fetchRating, fetchMatches } from './api.js';
 import { analyzeMatches } from './stats.js';
 import {
   classifyPlaystyle,
+  classifyPlayerArchetype,
   detectWeaknesses,
   detectThreats,
   generateDataDrivenRecommendations,
   generatePrediction,
   interpretTimings,
+  computeConfidence,
   computeConfidenceDetails,
   computeStreak,
   analyzeOpponentPatterns,
