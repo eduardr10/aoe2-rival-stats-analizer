@@ -201,6 +201,11 @@ export function classifyOpening(features, baselines) {
     drushScore += 0.25;
     drushCriteria.push(['Barracks Time', '<= 480s', '+0.25', formatHms(features.t_first_barracks)]);
   }
+  // Drush that upgrades to MAA in Feudal
+  if (features.maa_in_feudal >= 1 && features.militia_by_feudal >= 1) {
+    drushScore += 0.35;
+    drushCriteria.push(['MAA transition in Feudal', '>= 1', '+0.35', features.maa_in_feudal]);
+  }
   if (drushScore >= 0.6) {
     openings.push({ label: 'drush', score: Math.round(drushScore * 100) / 100, matched: drushCriteria });
   }
@@ -656,26 +661,24 @@ export function detectWeaknesses(stats) {
     weaknesses.push('Low APM — struggles with multi-tasking');
   }
 
-  // DATA-DRIVEN: specific from openings
+  // DATA-DRIVEN: specific from openings (descriptive only, no generic counters)
   const fcFreq = perFreq['fast_castle'] || 0;
   if (fcFreq > 40) {
-    weaknesses.push(`Fast Castle ${fcFreq}% — punish with early military`);
+    weaknesses.push(`Fast Castle ${fcFreq}% — low military until Castle`);
   }
 
   const scoutFreq = perFreq['scout_rush'] || 0;
   if (scoutFreq > 40) {
-    weaknesses.push(`Scout rush ${scoutFreq}% — spear walls neutralize it`);
+    weaknesses.push(`Scout rush ${scoutFreq}% — heavy Feudal cav investment`);
   }
 
   const archerFreq = perFreq['archer_rush'] || 0;
   if (archerFreq > 40) {
-    weaknesses.push(`Archer rush ${archerFreq}% — skirmishers hard counter`);
+    weaknesses.push(`Archer rush ${archerFreq}% — commits to ranged Feudal`);
   }
 
   if (weaknesses.length === 0) {
-    if (dims.aggression > 60) weaknesses.push('May overextend with aggression');
-    else if (dims.economy > 60) weaknesses.push('May be vulnerable to early pressure');
-    else weaknesses.push('No clear pattern — scout and adapt');
+    weaknesses.push('No extreme patterns detected');
   }
 
   return weaknesses.slice(0, 4);
@@ -709,34 +712,42 @@ export function detectThreats(stats) {
     threats.push(`High APM (${stats.avg_eapm}) — out-micros in skirmishes`);
   }
 
-  // DATA-DRIVEN: opening-specific
+  // DATA-DRIVEN: opening-specific (observed frequencies)
   const scoutFreq = perFreq['scout_rush'] || 0;
   if (scoutFreq >= 30) {
-    threats.push(`Scout rush ${scoutFreq}% — expect early raid damage`);
+    threats.push(`Scout rush ${scoutFreq}%`);
   }
 
   const archerFreq = perFreq['archer_rush'] || 0;
   if (archerFreq >= 30) {
-    threats.push(`Archer rush ${archerFreq}% — forward ranges likely`);
+    threats.push(`Archer rush ${archerFreq}%`);
+  }
+
+  const maaFreq = perFreq['maa_rush'] || 0;
+  if (maaFreq >= 20) {
+    threats.push(`MAA rush ${maaFreq}%`);
   }
 
   const ffaFreq = perFreq['fast_feudal_aggressive'] || 0;
   if (ffaFreq >= 30) {
-    threats.push(`Fast Feudal aggression ${ffaFreq}% — immediate military`);
-  }
-
-  if (dims.economy >= 60) {
-    threats.push('Strong late-game scaling — close games are dangerous');
+    threats.push(`Aggressive Feudal ${ffaFreq}%`);
   }
 
   const trushFreq = perFreq['tower_rush'] || 0;
   const drushFreq = perFreq['drush'] || 0;
-  if (trushFreq >= 15 || drushFreq >= 15) {
-    threats.push(`Cheese potential — scout early for forwards`);
+  if (trushFreq >= 15) {
+    threats.push(`Tower rush ${trushFreq}%`);
+  }
+  if (drushFreq >= 15) {
+    threats.push(`Drush ${drushFreq}%`);
+  }
+
+  if (dims.economy >= 60) {
+    threats.push('Strong economy scaling');
   }
 
   if (threats.length === 0) {
-    threats.push('Standard play expected — no extreme threats');
+    threats.push('No dominant threats detected');
   }
 
   return threats.slice(0, 4);
@@ -896,53 +907,55 @@ export function generatePrediction(stats) {
     secondaryStrategy = formatOpeningName(sorted[1][0]);
   }
 
-  // Counter recs from actual data
+  // Counter recs: ONLY data-driven, no generic advice
   const counterRecs = [];
 
-  if (expectedStrategy.includes('Scout')) {
-    counterRecs.push('Build houses around berries before Feudal');
-    counterRecs.push('Spearmen production in Feudal');
-  }
-  if (expectedStrategy.includes('Archer')) {
-    counterRecs.push('Early skirmishers from archery range');
-    counterRecs.push('Get fletching if matching archers');
-  }
-  if (expectedStrategy.includes('Fast Castle')) {
-    counterRecs.push('Apply Feudal pressure immediately');
-    counterRecs.push('Deny relics and map control');
-  }
-  if (expectedStrategy.includes('Aggressive Feudal')) {
-    counterRecs.push('Extra villagers on wood for walls');
-    counterRecs.push('Do not try to match aggression');
-  }
-  if (expectedStrategy.includes('Drush')) {
-    counterRecs.push('Early palisade around wood/gold');
-    counterRecs.push('Keep scout near base until Feudal');
-  }
-  if (expectedStrategy.includes('Tower')) {
-    counterRecs.push('Scout for villager forward at 8:00');
-    counterRecs.push('Pre-wall strategic resources');
-  }
-
-  // Add data-backed counters
+  // DATA-DRIVEN: tech frequency confirms transitions
   const fletchingData = keyTechs['fletching'];
   if (fletchingData && fletchingData.frequency >= 60) {
-    counterRecs.push('Expect early fletching — wall vulnerable areas');
+    counterRecs.push(`Fletching ${fletchingData.frequency}% — confirms archer investment`);
   }
-
   const bloodlinesData = keyTechs['bloodlines'];
   if (bloodlinesData && bloodlinesData.frequency >= 50) {
-    counterRecs.push('Bloodlines player — prepare pikemen transition');
+    counterRecs.push(`Bloodlines ${bloodlinesData.frequency}% — confirms cavalry transition`);
+  }
+  const bodkinData = keyTechs['bodkin arrow'];
+  if (bodkinData && bodkinData.frequency >= 40) {
+    counterRecs.push(`Bodkin Arrow ${bodkinData.frequency}% — xbow timing ${formatHms(bodkinData.avg_time)}`);
   }
 
-  if (counterRecs.length < 3) {
-    counterRecs.push('Scout with first military unit');
-    counterRecs.push('Play reactive until pattern identified');
+  // DATA-DRIVEN: actual unit averages observed
+  if ((unitStats['knight']?.avg || 0) > 1.0) {
+    counterRecs.push(`${unitStats['knight'].avg.toFixed(1)} knights avg — cavalry transition confirmed`);
+  }
+  if ((unitStats['crossbowman']?.avg || 0) > 1.0) {
+    counterRecs.push(`${unitStats['crossbowman'].avg.toFixed(1)} xbows avg — archer follow-up`);
+  }
+  if ((unitStats['skirmisher']?.avg || 0) > 1.5) {
+    counterRecs.push(`${unitStats['skirmisher'].avg.toFixed(1)} skirms avg — defensive archer response`);
+  }
+
+  // DATA-DRIVEN: map & civ preferences
+  const mapWR = stats.map_win_percent || {};
+  const bestMap = Object.entries(mapWR).sort((a, b) => b[1] - a[1])[0];
+  if (bestMap && bestMap[1] >= 65) {
+    counterRecs.push(`${bestMap[0]} ${bestMap[1]}% WR (${stats.map_played_percent?.[bestMap[0]] || '?'}% play)`);
+  }
+
+  const civPlayed = stats.civ_played_percent || {};
+  const mainCiv = Object.entries(civPlayed).sort((a, b) => b[1] - a[1])[0];
+  if (mainCiv && mainCiv[1] >= 60) {
+    counterRecs.push(`${mainCiv[0]} ${mainCiv[1]}% of games`);
+  }
+
+  // Fallback: if no data, say so honestly
+  if (counterRecs.length === 0) {
+    counterRecs.push('Insufficient data for predictions');
   }
 
   return {
     expected_strategy: expectedStrategy,
-    strategy_probability: strategyProb,
+    strategy_probability: Math.round(strategyProb),
     secondary_strategy: secondaryStrategy,
     counter_recommendations: counterRecs.slice(0, 5),
   };
