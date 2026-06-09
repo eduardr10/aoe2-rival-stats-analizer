@@ -524,7 +524,7 @@ function renderQuickStatsCard(stats) {
       </div>
       <div class="tab-stat-item">
         <div class="tab-stat-label">Winrate</div>
-        <div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${stats.win_percent || 0}%</div>
+        <div class="tab-stat-value ${(stats.win_percent || 0) >= 50 ? 'text-green' : 'text-red'}">${stats.win_percent || 0}%</div>
       </div>
       <div class="tab-stat-item">
         <div class="tab-stat-label">Streak</div>
