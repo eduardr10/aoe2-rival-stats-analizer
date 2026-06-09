@@ -813,3 +813,199 @@ export function computeStreak(matches) {
 
   return { type: currentType || 'none', count };
 }
+
+// ============================================================================
+// TIMING INTERPRETATION
+// ============================================================================
+
+export function interpretTimings(stats) {
+  const interpretations = [];
+  const feudal = stats.avg_feudal || 0;
+  const castle = stats.avg_castle || 0;
+  const imperial = stats.avg_imperial || 0;
+
+  // Feudal analysis
+  if (feudal > 0) {
+    if (feudal < 600) {
+      interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: 'Fast Feudal', icon: '✓', type: 'positive' });
+    } else if (feudal < 720) {
+      interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: 'Typical timing', icon: '✓', type: 'positive' });
+    } else {
+      interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: 'Delayed Feudal', icon: '⚠', type: 'warning' });
+    }
+  }
+
+  // Castle analysis
+  if (castle > 0) {
+    if (castle < 1080) {
+      interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: 'Fast Castle', icon: '✓', type: 'positive' });
+    } else if (castle < 1260) {
+      interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: 'Typical timing', icon: '✓', type: 'positive' });
+    } else {
+      interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: 'Delayed Castle', icon: '⚠', type: 'warning' });
+    }
+  }
+
+  // Imperial analysis
+  if (imperial > 0) {
+    if (imperial < 1500) {
+      interpretations.push({ timing: 'Imperial', value: formatHms(imperial), conclusion: 'Fast Imperial transitions', icon: '✓', type: 'positive' });
+    } else if (imperial < 1800) {
+      interpretations.push({ timing: 'Imperial', value: formatHms(imperial), conclusion: 'Typical timing', icon: '✓', type: 'positive' });
+    } else {
+      interpretations.push({ timing: 'Imperial', value: formatHms(imperial), conclusion: 'Late Imperial player', icon: '⚠', type: 'warning' });
+    }
+  }
+
+  // Overall pattern
+  if (feudal < 600 && castle > 1080) {
+    interpretations.push({ timing: 'Pattern', value: '', conclusion: 'Fast Feudal + Slow Castle = Extended aggression', icon: '⚠', type: 'warning' });
+  } else if (castle < 1080 && imperial < 1500) {
+    interpretations.push({ timing: 'Pattern', value: '', conclusion: 'Rapid aging — expect macro/boom', icon: '✓', type: 'positive' });
+  } else if (imperial > 1800 && stats.avg_duration_hms && stats.avg_duration_hms.includes('min') && parseInt(stats.avg_duration_hms) > 30) {
+    interpretations.push({ timing: 'Pattern', value: '', conclusion: 'Long games preferred — late game specialist', icon: '✓', type: 'positive' });
+  }
+
+  return interpretations;
+}
+
+// ============================================================================
+// PREDICTION ENGINE
+// ============================================================================
+
+export function generatePrediction(stats) {
+  const pp = stats.player_profile || {};
+  const perFreq = pp.per_opening_frequency || {};
+  const primary = pp.primary_opening || 'Unknown';
+  const arch = stats.archetype || {};
+  const dims = arch.dimensions || {};
+
+  // Expected strategy
+  let expectedStrategy = '';
+  let strategyProb = 0;
+
+  if (primary === 'scout_rush' || perFreq['scout_rush'] >= 30) {
+    expectedStrategy = 'Scout Rush → Knights/Skirms';
+    strategyProb = perFreq['scout_rush'] || 50;
+  } else if (primary === 'archer_rush' || perFreq['archer_rush'] >= 30) {
+    expectedStrategy = 'Archer Rush → Crossbows/Knights';
+    strategyProb = perFreq['archer_rush'] || 50;
+  } else if (primary === 'fast_castle' || perFreq['fast_castle'] >= 30) {
+    expectedStrategy = 'Fast Castle → Boom/Relic control';
+    strategyProb = perFreq['fast_castle'] || 50;
+  } else if (primary === 'fast_feudal_aggressive' || perFreq['fast_feudal_aggressive'] >= 30) {
+    expectedStrategy = 'Aggressive Feudal → Military pressure';
+    strategyProb = perFreq['fast_feudal_aggressive'] || 50;
+  } else if (primary === 'drush' || perFreq['drush'] >= 20) {
+    expectedStrategy = 'Drush → Archer/Scout transition';
+    strategyProb = perFreq['drush'] || 40;
+  } else if (primary === 'tower_rush' || perFreq['tower_rush'] >= 15) {
+    expectedStrategy = 'Tower Rush → Economic damage';
+    strategyProb = perFreq['tower_rush'] || 35;
+  } else {
+    expectedStrategy = 'Mixed strategy — scout carefully';
+    strategyProb = 0;
+  }
+
+  // Secondary strategy
+  let secondaryStrategy = '';
+  const sorted = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+  if (sorted.length > 1) {
+    secondaryStrategy = formatOpeningName(sorted[1][0]);
+  }
+
+  // Generate counter recommendations based on expected strategy
+  const counterRecs = [];
+
+  if (expectedStrategy.includes('Scout')) {
+    counterRecs.push('Wall early with houses/palisade');
+    counterRecs.push('Protect berries — scout rush target');
+    counterRecs.push('Prioritize spearmen in Feudal');
+    counterRecs.push('Get loom before Feudal if late');
+  } else if (expectedStrategy.includes('Archer')) {
+    counterRecs.push('Early skirmishers from archery range');
+    counterRecs.push('Get fletching quickly if matching');
+    counterRecs.push('Wall vulnerable eco areas');
+    counterRecs.push('Scout for forward archery ranges');
+  } else if (expectedStrategy.includes('Fast Castle')) {
+    counterRecs.push('Apply Feudal pressure immediately');
+    counterRecs.push('Deny relics and map control');
+    counterRecs.push('Scout for forward buildings');
+    counterRecs.push('Prevent Castle drop positions');
+  } else if (expectedStrategy.includes('Aggressive Feudal')) {
+    counterRecs.push('Prepare defense before clicking up');
+    counterRecs.push('Extra villagers on wood for walls');
+    counterRecs.push('Do not try to match aggression');
+  } else if (expectedStrategy.includes('Drush')) {
+    counterRecs.push('Early palisade around wood/gold');
+    counterRecs.push('Keep scout near base until Feudal');
+    counterRecs.push('Walled lumber camps');
+  } else if (expectedStrategy.includes('Tower')) {
+    counterRecs.push('Scout for villager forward at 8:00');
+    counterRecs.push('Pre-wall strategic resources');
+    counterRecs.push('Build outposts on woodlines');
+  } else {
+    counterRecs.push('Scout with first military unit');
+    counterRecs.push('Play reactive until pattern identified');
+    counterRecs.push('Standard opening — adapt accordingly');
+  }
+
+  // Add playstyle-based counters
+  if (dims.aggression >= 60) {
+    counterRecs.push('Play defensively, let them overextend');
+  }
+  if (dims.economy >= 60) {
+    counterRecs.push('Apply constant pressure, deny boom');
+  }
+  if (pp.opening_stability >= 0.7) {
+    counterRecs.push('Rival is predictable — prepare hard counter');
+  }
+
+  return {
+    expected_strategy: expectedStrategy,
+    strategy_probability: strategyProb,
+    secondary_strategy: secondaryStrategy,
+    counter_recommendations: counterRecs.slice(0, 5),
+  };
+}
+
+// ============================================================================
+// CONFIDENCE VISUAL
+// ============================================================================
+
+export function computeConfidenceDetails(stats) {
+  const analyzed = stats.analyzed || 0;
+  let level = 'Low';
+  let pct = 30;
+
+  if (analyzed >= 30) { level = 'High'; pct = 90; }
+  else if (analyzed >= 15) { level = 'Medium'; pct = 65; }
+  else if (analyzed >= 8) { level = 'Medium'; pct = 50; }
+  else { level = 'Low'; pct = Math.max(20, analyzed * 4); }
+
+  return {
+    level,
+    percentage: pct,
+    games_analyzed: analyzed,
+    message: analyzed >= 20
+      ? 'Strong statistical foundation'
+      : analyzed >= 8
+        ? 'Moderate sample size'
+        : 'Limited data — patterns may change',
+  };
+}
+
+function formatOpeningName(label) {
+  if (!label) return 'Unknown';
+  const map = {
+    'drush': 'Drush',
+    'scout_rush': 'Scout Rush',
+    'archer_rush': 'Archer Rush',
+    'fast_feudal_aggressive': 'Fast Feudal Aggro',
+    'fast_castle': 'Fast Castle',
+    'tower_rush': 'Tower Rush',
+    'Standard/Unknown': 'Standard',
+    'Mixed/No Data': 'Mixed',
+  };
+  return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}

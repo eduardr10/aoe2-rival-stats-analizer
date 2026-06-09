@@ -978,6 +978,58 @@ body {
 }
 
 /* ==========================================================================
+   TIMELINE VISUAL
+   ========================================================================== */
+
+.timeline-track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.timeline-label {
+  width: 60px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.timeline-bar-track {
+  flex: 1;
+  height: 14px;
+  background: rgba(30, 30, 46, 0.05);
+  border-radius: 7px;
+  overflow: hidden;
+  position: relative;
+}
+
+.timeline-bar {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.8s ease;
+  min-width: 2px;
+}
+
+.timeline-time {
+  width: 60px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Danger card dominant */
+.danger-card {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.03), rgba(124, 58, 237, 0.03));
+  border-color: var(--border-accent);
+}
+
+/* ==========================================================================
    AGE TIMINGS
    ========================================================================== */
 

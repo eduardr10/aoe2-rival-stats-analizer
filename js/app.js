@@ -10,6 +10,9 @@ import {
   generateRecommendations,
   computeConfidence,
   computeStreak,
+  interpretTimings,
+  generatePrediction,
+  computeConfidenceDetails,
 } from './analysis.js';
 import { buildOverlay, restartOverlay } from './render.js';
 import { initWebSocket } from './websocket.js';
@@ -164,9 +167,12 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
   stats.playstyle = classifyPlaystyle(stats.archetype);
   stats.danger_score = computeDangerScore(stats, stats.rating);
   stats.confidence = computeConfidence(stats);
+  stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
   stats.recommendations = generateRecommendations(stats);
+  stats.prediction = generatePrediction(stats);
+  stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
   // Compute avg duration and enrich matches for historical data
@@ -285,9 +291,12 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   stats.playstyle = classifyPlaystyle(stats.archetype);
   stats.danger_score = computeDangerScore(stats, stats.rating);
   stats.confidence = computeConfidence(stats);
+  stats.confidence_details = computeConfidenceDetails(stats);
   stats.weaknesses = detectWeaknesses(stats);
   stats.threats = detectThreats(stats);
   stats.recommendations = generateRecommendations(stats);
+  stats.prediction = generatePrediction(stats);
+  stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(matches);
 
   // Compute avg duration and enrich matches for historical data
