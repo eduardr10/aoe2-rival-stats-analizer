@@ -648,18 +648,18 @@ function buildUnitsByAgePanel(stats, id) {
     { key: 'pre-imperial', label: 'Castle → Imperial' },
   ];
 
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
+  let html = '<div class="data-grid">';
   for (const period of periods) {
     const units = unitsByAge[period.key] || {};
     const entries = Object.entries(units).slice(0, 5);
     if (entries.length === 0) continue;
 
-    html += `<div>
-      <div style="font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;border-bottom:1px solid var(--border-subtle);padding-bottom:3px;">${period.label}</div>`;
+    html += `<div class="data-grid-col">
+      <div class="data-grid-col-title">${period.label}</div>`;
     for (const [unitName, data] of entries) {
-      html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+      html += `<div class="data-grid-row">
         <span>${techDisplayName(unitName)}</span>
-        <span style="color:var(--text-muted);">${data.avg.toFixed(1)}</span>
+        <span class="data-grid-value">${data.avg.toFixed(1)}</span>
       </div>`;
     }
     html += `</div>`;
@@ -679,18 +679,18 @@ function buildTechTimingsPanel(stats, id) {
     university: 'University', other: 'Other',
   };
 
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
+  let html = '<div class="data-grid">';
   for (const [cat, techs] of Object.entries(coreTechs)) {
     const entries = Object.entries(techs);
     if (entries.length === 0) continue;
 
-    html += `<div>
-      <div style="font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;border-bottom:1px solid var(--border-subtle);padding-bottom:3px;">${categoryLabels[cat] || cat}</div>`;
+    html += `<div class="data-grid-col">
+      <div class="data-grid-col-title">${categoryLabels[cat] || cat}</div>`;
     for (const [techName, data] of entries) {
       const timeStr = data.avg_time != null ? formatHms(data.avg_time) : '—';
-      html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+      html += `<div class="data-grid-row">
         <span>${techDisplayName(techName)}</span>
-        <span style="color:var(--text-muted);">${timeStr} · ${Math.round(data.frequency)}%</span>
+        <span class="data-grid-value">${timeStr} · ${Math.round(data.frequency)}%</span>
       </div>`;
     }
     html += `</div>`;
@@ -709,10 +709,11 @@ function buildFooter() {
   const twUrl = getConfig('twitch_url');
 
   return `<div class="overlay-footer">
-    <div class="footer-creator">Created by EduardR10 · Helping AoE2 players make better decisions.</div>
+    <div class="footer-creator">Created by EduardR10 · Data by <a href="https://aoe2companion.com" target="_blank" style="color:var(--accent-blue);text-decoration:none;">AoE2 Companion</a></div>
     <div class="footer-links">
       ${ytUrl ? `<a href="${ytUrl}" target="_blank" class="footer-link">YouTube</a>` : ''}
       ${twUrl ? `<a href="${twUrl}" target="_blank" class="footer-link">Twitch</a>` : ''}
+      <a href="https://ko-fi.com/V7V12KZ5U" target="_blank" class="footer-link" style="color:var(--accent-red);">Ko-fi</a>
     </div>
   </div>`;
 }

@@ -913,6 +913,44 @@
   }
 }
 
+/* Data Grid (shared with dashboard) */
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.data-grid-col {
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  padding: 8px;
+}
+.data-grid-col-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.data-grid-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+.data-grid-row:last-child { border-bottom: none; }
+.data-grid-value { color: var(--text-muted); }
+
+.analysis-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
 /* Utility classes */
 .text-green { color: var(--accent-green); }
 .text-yellow { color: var(--accent-yellow); }

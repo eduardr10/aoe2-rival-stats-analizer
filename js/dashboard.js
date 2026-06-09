@@ -1019,55 +1019,58 @@ function renderTimingAnalysisCard(stats) {
   const imperial = stats.avg_imperial || 0;
   const duration = stats.avg_duration_hms || 'N/A';
 
-  // Build visual timeline
-  let timelineHtml = '';
-  const maxTime = Math.max(feudal, castle, imperial, 1);
-
-  if (feudal > 0) {
-    const fPct = (feudal / maxTime) * 100;
-    timelineHtml += `<div class="timeline-track">
-      <div class="timeline-label">${t('feudal')}</div>
-      <div class="timeline-bar-track"><div class="timeline-bar" style="width:${fPct}%;background:var(--accent-green)"></div></div>
-      <div class="timeline-time">${stats.avg_feudal_hms}</div>
-    </div>`;
-  }
-  if (castle > 0) {
-    const cPct = (castle / maxTime) * 100;
-    timelineHtml += `<div class="timeline-track">
-      <div class="timeline-label">${t('castle')}</div>
-      <div class="timeline-bar-track"><div class="timeline-bar" style="width:${cPct}%;background:var(--accent-blue)"></div></div>
-      <div class="timeline-time">${stats.avg_castle_hms}</div>
-    </div>`;
-  }
-  if (imperial > 0) {
-    const iPct = (imperial / maxTime) * 100;
-    timelineHtml += `<div class="timeline-track">
-      <div class="timeline-label">${t('imperial')}</div>
-      <div class="timeline-bar-track"><div class="timeline-bar" style="width:${iPct}%;background:var(--accent-purple)"></div></div>
-      <div class="timeline-time">${stats.avg_imperial_hms}</div>
-    </div>`;
-  }
-
-  // Build interpretations
-  let interpHtml = '';
-  for (const interp of interpretations) {
-    const colorClass = interp.type === 'positive' ? 'text-green' : interp.type === 'warning' ? 'text-yellow' : 'text-blue';
-    interpHtml += `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;">
-      <span style="font-weight:700;${colorClass === 'text-green' ? 'color:var(--accent-green);' : colorClass === 'text-yellow' ? 'color:var(--accent-yellow);' : 'color:var(--accent-blue);'}flex-shrink:0;">${interp.icon}</span>
-      <span><strong>${interp.timing}${interp.value ? ` (${interp.value})` : ''}</strong> — ${interp.conclusion}</span>
+  // Left column: raw times + win/loss differentials
+  let leftHtml = '';
+  const ages = [
+    { key: 'feudal', label: t('feudal'), color: 'var(--accent-green)' },
+    { key: 'castle', label: t('castle'), color: 'var(--accent-blue)' },
+    { key: 'imperial', label: t('imperial'), color: 'var(--accent-purple)' },
+  ];
+  for (const age of ages) {
+    const avg = stats['avg_' + age.key + '_hms'] || 'N/A';
+    const winAvg = stats.age_time_win_avg?.[age.key];
+    const lossAvg = stats.age_time_loss_avg?.[age.key];
+    let diffHtml = '';
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 30) {
+        diffHtml = `<div style="font-size:11px;color:var(--accent-red);margin-top:2px;">+${formatHms(gap)} in losses</div>`;
+      }
+    }
+    leftHtml += `<div style="padding:10px 0;border-bottom:1px solid var(--border-subtle);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:${age.color};">${age.label}</span>
+        <span style="font-size:16px;font-weight:700;color:var(--text-primary);">${avg}</span>
+      </div>
+      ${diffHtml}
     </div>`;
   }
 
-  return `<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  // Right column: interpretations
+  let rightHtml = '';
+  for (const interp of interpretations.slice(0, 5)) {
+    const iconColor = interp.type === 'positive' ? 'var(--accent-green)' : interp.type === 'warning' ? 'var(--accent-yellow)' : 'var(--accent-blue)';
+    rightHtml += `<div style="padding:10px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;color:var(--text-primary);">
+      <span style="color:${iconColor};font-weight:700;margin-right:6px;">${interp.icon}</span>
+      <strong>${interp.timing}${interp.value ? ` (${interp.value})` : ''}</strong> — ${interp.conclusion}
+    </div>`;
+  }
+
+  return `<div class="card" style="padding:16px 20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div class="card-label" style="margin:0;">${t('ageTimeline')}</div>
       <div style="font-size:12px;color:var(--text-muted);">${duration}</div>
     </div>
-    <div style="margin-bottom:16px;">${timelineHtml}</div>
-    ${interpHtml ? `<div style="border-top:1px solid var(--border-subtle);padding-top:8px;">
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">${t('interpretation')}</div>
-      ${interpHtml}
-    </div>` : ''}
+    <div class="analysis-two-col">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Average Times</div>
+        ${leftHtml}
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${t('interpretation')}</div>
+        ${rightHtml || '<div class="card-subtitle">No interpretations available.</div>'}
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1104,12 +1107,12 @@ function renderKeyInsightsCard(stats) {
 
   let rows = '';
   for (const insight of insights) {
-    rows += `<div style="padding:10px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;color:var(--text-primary);">
-      ${escapeHtml(insight)}
+    rows += `<div style="padding:12px 0;border-bottom:1px solid var(--border-subtle);font-size:14px;color:var(--text-primary);line-height:1.5;">
+      <span style="color:var(--accent-blue);font-weight:700;margin-right:6px;">•</span>${escapeHtml(insight)}
     </div>`;
   }
 
-  return `<div class="card" style="padding:16px 20px;">
+  return `<div class="card" style="padding:20px 24px;background:linear-gradient(135deg, var(--bg-card) 0%, #f0f4ff 100%);border-left:3px solid var(--accent-blue);">
     ${rows}
   </div>`;
 }
@@ -1276,18 +1279,18 @@ function buildUnitsByAgePanel(stats, id) {
     { key: 'pre-imperial', label: 'Castle → Imperial' },
   ];
 
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">';
+  let html = '<div class="data-grid">';
   for (const period of periods) {
     const units = unitsByAge[period.key] || {};
     const entries = Object.entries(units).slice(0, 5);
     if (entries.length === 0) continue;
 
-    html += `<div>
-      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;border-bottom:1px solid var(--border-subtle);padding-bottom:4px;">${period.label}</div>`;
+    html += `<div class="data-grid-col">
+      <div class="data-grid-col-title">${period.label}</div>`;
     for (const [unitName, data] of entries) {
-      html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+      html += `<div class="data-grid-row">
         <span>${techDisplayName(unitName)}</span>
-        <span style="color:var(--text-muted);">${data.avg.toFixed(1)}</span>
+        <span class="data-grid-value">${data.avg.toFixed(1)}</span>
       </div>`;
     }
     html += `</div>`;
@@ -1307,18 +1310,25 @@ function buildTechTimingsPanel(stats, id) {
     university: 'University', other: 'Other',
   };
 
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">';
+  let html = '<div class="data-grid">';
   for (const [cat, techs] of Object.entries(coreTechs)) {
     const entries = Object.entries(techs);
     if (entries.length === 0) continue;
 
-    html += `<div>
-      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;border-bottom:1px solid var(--border-subtle);padding-bottom:4px;">${categoryLabels[cat] || cat}</div>`;
+    html += `<div class="data-grid-col">
+      <div class="data-grid-col-title">${categoryLabels[cat] || cat}</div>`;
     for (const [techName, data] of entries) {
       const timeStr = data.avg_time != null ? formatHms(data.avg_time) : '—';
-      html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);">
+      const winAvg = stats.key_tech_win_avg?.[techName];
+      const lossAvg = stats.key_tech_loss_avg?.[techName];
+      let extra = '';
+      if (winAvg != null && lossAvg != null) {
+        const gap = lossAvg - winAvg;
+        if (gap > 45) extra = `<span style="color:var(--accent-red);font-size:11px;margin-left:4px;">+${formatHms(gap)} in losses</span>`;
+      }
+      html += `<div class="data-grid-row">
         <span>${techDisplayName(techName)}</span>
-        <span style="color:var(--text-muted);">${timeStr} · ${Math.round(data.frequency)}%</span>
+        <span class="data-grid-value">${timeStr} · ${Math.round(data.frequency)}%${extra}</span>
       </div>`;
     }
     html += `</div>`;

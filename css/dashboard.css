@@ -1466,6 +1466,45 @@ body {
 
 .hidden { display: none !important; }
 
+/* Data Grid (used by Units by Age / Techs tabs) */
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.data-grid-col {
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.data-grid-col-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.data-grid-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+.data-grid-row:last-child { border-bottom: none; }
+.data-grid-value { color: var(--text-muted); }
+
+/* Two-column analysis layout */
+.analysis-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .dashboard-header { padding: 12px 16px; }
@@ -1475,4 +1514,9 @@ body {
   .dashboard-main { padding: 12px 16px 32px; }
   .footer-inner { flex-direction: column; text-align: center; }
   .section-header { flex-direction: column; align-items: flex-start; }
+  .tabs-nav { overflow-x: auto; gap: 0; padding-bottom: 2px; }
+  .tab-btn { padding: 6px 10px; font-size: 10px; }
+  .tab-stat-grid { grid-template-columns: 1fr; }
+  .data-grid { grid-template-columns: 1fr; }
+  .analysis-two-col { grid-template-columns: 1fr; }
 }
