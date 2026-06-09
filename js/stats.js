@@ -465,9 +465,12 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
 
   const totalCivs = Object.values(stats.civ_played).reduce((a, b) => a + b, 0);
   stats.civ_played_percent = {};
+  stats.civ_win_percent = {};
   for (const [civ, count] of Object.entries(stats.civ_played)) {
     if (count >= 2) {
       stats.civ_played_percent[civ] = totalCivs ? Math.round((count * 100 / totalCivs) * 100) / 100 : 0;
+      const wins = stats.civ_win[civ] || 0;
+      stats.civ_win_percent[civ] = count ? Math.round((wins * 100 / count) * 100) / 100 : 0;
     }
   }
 
@@ -495,6 +498,26 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   stats.tc3_time_avg = tc3Times.length ? tc3Times.reduce((a, b) => a + b, 0) / tc3Times.length : null;
   stats.tc2_pct = stats.analyzed > 0 ? Math.round((tc2Times.length * 100 / stats.analyzed) * 100) / 100 : null;
   stats.tc3_pct = stats.analyzed > 0 ? Math.round((tc3Times.length * 100 / stats.analyzed) * 100) / 100 : null;
+
+  stats.tc_timing = {
+    tc2_avg_hms: stats.tc2_time_avg != null ? formatHms(stats.tc2_time_avg) : 'N/A',
+    tc3_avg_hms: stats.tc3_time_avg != null ? formatHms(stats.tc3_time_avg) : 'N/A',
+    tc2_pct: stats.tc2_pct || 0,
+    tc3_pct: stats.tc3_pct || 0,
+  };
+
+  // Boom tendency based on FC % and TC count
+  const fcFreq = stats.all_match_features ? 
+    stats.all_match_features.filter(f => f.opening?.chosen_opening === 'fast_castle').length : 0;
+  const totalFeatures = stats.all_match_features?.length || 1;
+  const fcPct = (fcFreq * 100 / totalFeatures);
+  if (fcPct >= 40 || (stats.tc3_pct && stats.tc3_pct > 20)) {
+    stats.boom_tendency = 'High (FC + multi-TC)';
+  } else if (fcPct >= 20 || (stats.tc2_pct && stats.tc2_pct > 50)) {
+    stats.boom_tendency = 'Medium';
+  } else {
+    stats.boom_tendency = 'Low (aggression focused)';
+  }
 
   stats.key_techs = {};
   const totalMatchesAnalyzed = stats.analyzed || 1;

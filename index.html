@@ -12,12 +12,40 @@
     <button id="btn-autoanalyze" class="btn-overlay primary">Autoanalizar</button>
     <button id="btn-toggle-overlay" class="btn-overlay">Toggle</button>
     <button id="btn-clear-cache" class="btn-overlay">Limpiar cache</button>
+    <button id="btn-support" class="btn-overlay">Support</button>
   </div>
 
   <div id="aoe2-overlay">
     <div class="loading-state">
       <div class="loading-spinner"></div>
       Cargando...
+    </div>
+  </div>
+
+  <!-- Support Modal -->
+  <div id="support-modal" class="modal-overlay">
+    <div class="modal-content" style="position: relative;">
+      <button class="modal-close" onclick="document.getElementById('support-modal').classList.remove('active')">&times;</button>
+      <div class="modal-title">Support Project</div>
+      <div class="modal-text">
+        <p style="margin-bottom: 12px;">This tool is free and maintained by <strong>EduardR10</strong>.</p>
+        <p style="margin-bottom: 16px;">If it helps you improve your games, consider supporting future development.</p>
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Channels</div>
+          <div style="display: flex; gap: 8px;">
+            <a href="#" class="social-icon" style="width: auto; padding: 6px 12px; font-size: 12px; text-decoration: none;" data-social="youtube">🎥 YouTube</a>
+            <a href="#" class="social-icon" style="width: auto; padding: 6px 12px; font-size: 12px; text-decoration: none;" data-social="twitch">📺 Twitch</a>
+          </div>
+        </div>
+        <div id="donation-links" style="display: none;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Donations</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <a href="#" class="social-icon" style="justify-content: flex-start; gap: 8px; font-size: 12px; text-decoration: none;" data-social="buymeacoffee">☕ Buy Me a Coffee</a>
+            <a href="#" class="social-icon" style="justify-content: flex-start; gap: 8px; font-size: 12px; text-decoration: none;" data-social="kofi">💛 Ko-fi</a>
+            <a href="#" class="social-icon" style="justify-content: flex-start; gap: 8px; font-size: 12px; text-decoration: none;" data-social="binance">₿ Binance</a>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

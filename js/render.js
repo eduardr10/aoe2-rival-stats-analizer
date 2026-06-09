@@ -1,12 +1,27 @@
 import { formatHms, techDisplayName } from './utils.js';
 
-const SLIDE_DURATION = 8000;
+const OVERLAY_AUTO_HIDE_MS = 12000;
+
+// App configuration for creator links
+window.app_config = {
+  youtube_url: 'https://youtube.com/@EduardR10',
+  twitch_url: 'https://twitch.tv/EduardR10',
+  support_enabled: false,
+  buymeacoffee_url: '',
+  kofi_url: '',
+  patreon_url: '',
+  binance_id: '',
+};
+
+// Helper to get config
+function getConfig(key) {
+  return window.app_config?.[key] || '';
+}
 
 export function buildOverlay(stats, playerId) {
   const container = document.getElementById('aoe2-overlay');
   if (!container) return;
 
-  // Guardar para restartOverlay
   container._lastStats = stats;
   container._lastPlayerId = playerId;
 
@@ -15,38 +30,59 @@ export function buildOverlay(stats, playerId) {
     return;
   }
 
-  // Limpiar slideshow anterior si existe
-  clearSlideshow(container);
-
-  // Generar contenido de slides (siempre retorna algo, nunca vacio)
-  const slides = [
-    buildSlide1(stats),
-    buildSlide2(stats),
-    buildSlide3(stats),
-    buildSlide4(stats),
-  ];
-
-  const total = slides.length;
-
-  // Construir HTML
-  let html = '<div class="slides-wrapper">';
-  for (let i = 0; i < total; i++) {
-    html += `<div class="slide ${i === 0 ? 'active' : ''}" data-slide="${i}">${slides[i]}</div>`;
+  // Clear any previous hide timeout
+  if (container._hideTimeout) {
+    clearTimeout(container._hideTimeout);
   }
-  html += `<div class="slide-nav slide-nav-prev" title="Anterior">&#10094;</div>`;
-  html += `<div class="slide-nav slide-nav-next" title="Siguiente">&#10095;</div>`;
-  html += `<div class="slide-dots">`;
-  for (let i = 0; i < total; i++) {
-    html += `<span class="dot ${i === 0 ? 'active' : ''}" data-index="${i}"></span>`;
-  }
-  html += `</div></div>`;
+
+  const isRivalMode = stats.match_id !== 'self';
+  const rivalName = stats.rival_name || 'Rival';
+  const playerName = stats.player_name || 'Player';
+
+  // Build the full overlay HTML
+  let html = '';
+
+  // Header with social icons
+  html += buildHeader();
+
+  // Scrollable content area
+  html += '<div class="overlay-content">';
+
+  // Block 1: Match Summary (20%)
+  html += buildMatchSummary(stats, isRivalMode, playerName, rivalName);
+
+  // Block 2: Rival Intelligence (30%)
+  html += buildRivalIntelligence(stats);
+
+  // Block 3: Strategic Recommendations (25%)
+  html += buildStrategicRecommendations(stats);
+
+  // Block 4: Detailed Analysis with tabs (20%)
+  html += buildDetailedAnalysis(stats);
+
+  // Block 5: Historical Data (5%)
+  html += buildHistoricalData(stats);
+
+  html += '</div>'; // end overlay-content
+
+  // Footer
+  html += buildFooter();
 
   container.innerHTML = html;
   container.style.opacity = '1';
   container.style.pointerEvents = 'auto';
 
-  // Iniciar slideshow
-  startSlideshow(container, total);
+  // Setup tab switching
+  setupTabs(container);
+
+  // Setup social links
+  setupSocialLinks(container);
+
+  // Auto-hide after 12 seconds
+  container._hideTimeout = setTimeout(() => {
+    container.style.opacity = '0';
+    container.style.pointerEvents = 'none';
+  }, OVERLAY_AUTO_HIDE_MS);
 }
 
 export function restartOverlay() {
@@ -56,426 +92,633 @@ export function restartOverlay() {
   }
 }
 
-function clearSlideshow(container) {
-  const state = container._slideshowState;
-  if (state) {
-    if (state.interval) clearInterval(state.interval);
-    if (state.hideTimeout) clearTimeout(state.hideTimeout);
-  }
-  container._slideshowState = null;
-}
-
-function startSlideshow(container, totalSlides) {
-  const state = {
-    currentSlide: 0,
-    totalSlides,
-    interval: null,
-    hideTimeout: null,
-  };
-  container._slideshowState = state;
-
-  // Navegacion manual - dots
-  container.querySelectorAll('.dot').forEach(dot => {
-    dot.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = parseInt(dot.dataset.index);
-      if (!isNaN(idx)) goToSlide(container, idx);
-    });
-  });
-
-  // Navegacion manual - flechas
-  const prev = container.querySelector('.slide-nav-prev');
-  const next = container.querySelector('.slide-nav-next');
-  if (prev) {
-    prev.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = (state.currentSlide - 1 + state.totalSlides) % state.totalSlides;
-      goToSlide(container, idx);
-    });
-  }
-  if (next) {
-    next.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = (state.currentSlide + 1) % state.totalSlides;
-      goToSlide(container, idx);
-    });
-  }
-
-  // Intervalo automatico
-  state.interval = setInterval(() => {
-    const next = (state.currentSlide + 1) % state.totalSlides;
-    showSlide(container, next);
-    state.currentSlide = next;
-  }, SLIDE_DURATION);
-
-  // Auto-hide despues del ciclo completo + buffer
-  state.hideTimeout = setTimeout(() => {
-    if (state.interval) clearInterval(state.interval);
-    container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
-  }, SLIDE_DURATION * totalSlides + 2000);
-}
-
-function goToSlide(container, index) {
-  const state = container._slideshowState;
-  if (!state || index === state.currentSlide) return;
-
-  showSlide(container, index);
-  state.currentSlide = index;
-
-  // Reiniciar intervalo
-  if (state.interval) clearInterval(state.interval);
-  state.interval = setInterval(() => {
-    const next = (state.currentSlide + 1) % state.totalSlides;
-    showSlide(container, next);
-    state.currentSlide = next;
-  }, SLIDE_DURATION);
-}
-
-function showSlide(container, index) {
-  container.querySelectorAll('.slide').forEach((s, i) => {
-    s.classList.toggle('active', i === index);
-  });
-  container.querySelectorAll('.dot').forEach((d, i) => {
-    d.classList.toggle('active', i === index);
-  });
-}
-
 // ============================================================================
-// SLIDE BUILDERS
+// HEADER
 // ============================================================================
 
-function buildSlide1(stats) {
-  const initial = (stats.player_name || '?').charAt(0).toUpperCase();
-  const wr = stats.win_percent || 0;
-  const wrClass = wr >= 50 ? 'good' : 'bad';
+function buildHeader() {
+  const ytUrl = getConfig('youtube_url');
+  const twUrl = getConfig('twitch_url');
 
-  let html = '';
-
-  html += `<div class="overlay-header">
-    <div class="player-avatar">${initial}</div>
-    <div class="player-info">
-      <div class="player-name">${stats.player_name}</div>
-      <div class="player-rating">Rating: ${stats.rating || '—'}</div>
+  return `<div class="overlay-header-main">
+    <div>
+      <div class="header-title">AOE2 Rival Analyzer</div>
+      <div class="header-subtitle">Decision Assistant</div>
     </div>
-    <div class="wr-badge ${wrClass}">${wr}% WR</div>
+    <div class="header-social">
+      ${ytUrl ? `<a href="${ytUrl}" target="_blank" class="social-icon" title="YouTube - EduardR10" data-social="youtube">▶</a>` : ''}
+      ${twUrl ? `<a href="${twUrl}" target="_blank" class="social-icon" title="Twitch - EduardR10" data-social="twitch">◉</a>` : ''}
+    </div>
   </div>`;
+}
 
-  if (stats.player_profile && stats.match_id === 'self') {
-    html += buildProfileOpening(stats.player_profile);
-  } else if (stats.current_opening && stats.match_id !== 'self') {
-    html += buildCurrentOpening(stats.current_opening);
+// ============================================================================
+// BLOCK 1: MATCH SUMMARY
+// ============================================================================
+
+function buildMatchSummary(stats, isRivalMode, playerName, rivalName) {
+  const playerRating = stats.rating || '—';
+  const rivalRating = stats.rival_rating || '—';
+  const danger = stats.danger_score || { score: 0, level: 'low', label: 'Unknown' };
+  const confidence = stats.confidence || 'Low';
+
+  // Expected matchup text
+  let matchupText = 'Even Matchup';
+  if (typeof playerRating === 'number' && typeof rivalRating === 'number') {
+    const diff = rivalRating - playerRating;
+    if (diff > 150) matchupText = 'Very Difficult';
+    else if (diff > 50) matchupText = 'Difficult';
+    else if (diff < -150) matchupText = 'Very Favorable';
+    else if (diff < -50) matchupText = 'Favorable';
   }
 
-  html += `<div class="quick-stats">
-    <div class="stat-card"><div class="stat-label">Games</div><div class="stat-value">${stats.analyzed}</div></div>
-    <div class="stat-card"><div class="stat-label">Wins</div><div class="stat-value green">${stats.total_wins || 0}</div></div>
-    <div class="stat-card"><div class="stat-label">EAPM</div><div class="stat-value blue">${stats.avg_eapm || '—'}</div></div>
+  const confidenceClass = confidence.toLowerCase();
+  const dangerColorClass = danger.level || 'low';
+
+  return `<div class="block">
+    <div class="block-title">Match Summary</div>
+    <div class="card">
+      <div class="match-summary-row">
+        <div class="player-vs-block">
+          <div class="name">${escapeHtml(playerName)}</div>
+          <div class="elo">ELO: ${playerRating}</div>
+        </div>
+        <div class="vs-divider">VS</div>
+        <div class="player-vs-block">
+          <div class="name">${escapeHtml(rivalName)}</div>
+          <div class="elo">ELO: ${rivalRating}</div>
+        </div>
+      </div>
+      <div class="danger-score">
+        <div class="danger-indicator ${dangerColorClass}"></div>
+        <span class="danger-text ${dangerColorClass}">Danger: ${danger.label}</span>
+        <span class="confidence-badge">Confidence: ${confidence}</span>
+      </div>
+      <div class="expected-matchup">Expected Matchup: <strong>${matchupText}</strong></div>
+    </div>
   </div>`;
+}
 
-  html += buildAgeTimingsCompact(stats);
+// ============================================================================
+// BLOCK 2: RIVAL INTELLIGENCE
+// ============================================================================
 
+function buildRivalIntelligence(stats) {
+  let html = `<div class="block">`;
+  html += `<div class="block-title">Rival Intelligence</div>`;
+
+  // Card 1: Expected Opening
+  html += buildExpectedOpeningCard(stats);
+
+  // Card 2: Preferred Playstyle
+  html += buildPlaystyleCard(stats);
+
+  // Card 3: Civilization Tendencies
+  html += buildCivTendenciesCard(stats);
+
+  // Card 4: Timing Tendencies
+  html += buildTimingTendenciesCard(stats);
+
+  html += `</div>`;
   return html;
 }
 
-function buildSlide2(stats) {
-  let html = '';
-  html += buildCivsSection(stats);
-  html += buildMapsSection(stats);
-  html += buildEconomySection(stats);
-  return html;
-}
+function buildExpectedOpeningCard(stats) {
+  const pp = stats.player_profile || {};
+  const primary = pp.primary_opening || 'Unknown';
+  const freq = pp.per_opening_frequency || {};
+  const stability = Math.round((pp.opening_stability || 0) * 100);
+  const confidence = stability >= 60 ? 'High' : stability >= 30 ? 'Medium' : 'Low';
 
-function buildSlide3(stats) {
-  let html = '';
-  const techsHtml = buildKeyTechsSection(stats);
-  const marketHtml = buildMarketSection(stats);
-
-  if (!techsHtml && !marketHtml) {
-    html += `<div class="section-title">Techs & Market</div>`;
-    html += `<div class="loading-state" style="font-size:11px;padding:20px 0;">No hay datos suficientes de techs o mercado en las partidas analizadas.</div>`;
-  } else {
-    html += techsHtml;
-    html += marketHtml;
-  }
-
-  return html;
-}
-
-function buildSlide4(stats) {
-  const arch = stats.archetype;
-  if (!arch) {
-    return `<div class="section-title">Playstyle</div>
-      <div class="loading-state" style="font-size:11px;padding:20px 0;">Analizando estilo de juego...</div>`;
-  }
-
-  const dims = arch.dimensions || {};
-  const dimLabels = [
-    { key: 'aggression', label: 'Aggression', color: 'var(--accent-red)' },
-    { key: 'economy', label: 'Economy', color: 'var(--accent-green)' },
-    { key: 'versatility', label: 'Versatility', color: 'var(--accent-purple)' },
-    { key: 'lateGame', label: 'Late Game', color: 'var(--accent-blue)' },
-    { key: 'speed', label: 'Speed', color: 'var(--accent-orange)' },
-  ];
-
-  const archetypeColors = {
-    aggressive: 'var(--accent-red)',
-    boomer: 'var(--accent-green)',
-    onetrick: 'var(--accent-yellow)',
-    versatile: 'var(--accent-purple)',
-    balanced: 'var(--accent-blue)',
-    imperial: 'var(--accent-orange)',
-    cheese: 'var(--accent-red)',
-    feudal_allin: 'var(--accent-red)',
-    castle_pusher: 'var(--accent-orange)',
-    macro: 'var(--accent-green)',
-    turtle: 'var(--accent-blue)',
-    ineffective: 'var(--text-muted)',
+  const openingIcons = {
+    'drush': '⚔️',
+    'scout_rush': '🐴',
+    'archer_rush': '🏹',
+    'fast_feudal_aggressive': '⚡',
+    'fast_castle': '🏰',
+    'tower_rush': '🏗️',
+    'Standard/Unknown': '❓',
+    'Mixed/No Data': '❓',
   };
 
-  const color = archetypeColors[arch.primary] || 'var(--accent-blue)';
+  const icon = openingIcons[primary] || '❓';
+  const displayName = formatOpeningName(primary);
 
-  let html = `<div class="archetype-section">
-    <div class="section-title">Playstyle</div>
-    <div class="archetype-badge" style="background:${color}15;color:${color};border-color:${color}30">${arch.title}</div>
-    <div class="archetype-desc">${arch.description}</div>`;
+  // Build horizontal bars for top 3 openings
+  const sortedOpenings = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const maxPct = sortedOpenings.length > 0 ? sortedOpenings[0][1] : 100;
 
-  if (arch.traits && arch.traits.length > 0) {
-    html += `<div class="archetype-traits">`;
-    for (const trait of arch.traits) {
-      html += `<span class="archetype-trait">${trait}</span>`;
-    }
-    html += `</div>`;
-  }
-
-  html += `<div class="dimension-bars">`;
-  for (const dim of dimLabels) {
-    const val = dims[dim.key] || 0;
-    html += `<div class="dim-row">
-      <div class="dim-label">${dim.label}</div>
-      <div class="dim-bar-track">
-        <div class="dim-bar-fill" style="width:${val}%;background:${dim.color}"></div>
-      </div>
-      <div class="dim-value">${val}</div>
+  let barsHtml = '';
+  const barColors = ['var(--accent-blue)', 'var(--accent-purple)', 'var(--accent-orange)'];
+  for (let i = 0; i < sortedOpenings.length; i++) {
+    const [name, pct] = sortedOpenings[i];
+    const width = maxPct > 0 ? (pct / maxPct) * 100 : 0;
+    barsHtml += `<div class="opening-bar-row">
+      <div class="opening-bar-label">${formatOpeningName(name)}</div>
+      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:${barColors[i]}"></div></div>
+      <div class="opening-bar-pct">${pct}%</div>
     </div>`;
   }
-  html += `</div></div>`;
 
-  return html;
-}
-
-// ============================================================================
-// HELPER BUILDERS
-// ============================================================================
-
-function buildProfileOpening(pp) {
-  const label = pp.primary_opening || 'N/A';
-  const stability = Math.round((pp.opening_stability || 0) * 100);
-  const cls = getOpeningClass(label);
-
-  let html = `<div class="opening-section">
-    <div class="opening-label">Apertura de perfil</div>
-    <div class="opening-name ${cls}">${label}</div>
-    <div class="opening-meta"><span>Estabilidad: ${stability}%</span></div>`;
-
-  if (pp.per_opening_frequency && Object.keys(pp.per_opening_frequency).length > 0) {
-    html += `<div class="opening-freq">`;
-    for (const [lbl, pct] of Object.entries(pp.per_opening_frequency)) {
-      html += `<span class="opening-freq-item">${lbl} ${pct}%</span>`;
-    }
-    html += `</div>`;
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-function buildCurrentOpening(co) {
-  const label = co.chosen_opening || 'N/A';
-  const score = co.score || 0;
-  const cls = getOpeningClass(label);
-  const scoreColor = score >= 0.7 ? 'var(--accent-green)' : 'var(--accent-yellow)';
-
-  return `<div class="opening-section">
-    <div class="opening-label">Apertura actual</div>
-    <div class="opening-name ${cls}">${label}</div>
-    <div class="opening-meta"><span class="opening-score" style="color:${scoreColor}">Score: ${score}</span></div>
+  return `<div class="card">
+    <div class="card-label">Expected Opening</div>
+    <div class="card-value">${icon} ${displayName}</div>
+    <div class="card-subtitle">Probability: ${freq[primary] || 0}% · Confidence: ${confidence}</div>
+    ${barsHtml ? `<div style="margin-top:8px;">${barsHtml}</div>` : ''}
   </div>`;
 }
 
-function getOpeningClass(label) {
-  if (!label) return 'unknown';
-  const l = label.toLowerCase();
-  if (l.includes('drush')) return 'drush';
-  if (l.includes('scout')) return 'scout_rush';
-  if (l.includes('archer')) return 'archer_rush';
-  if (l.includes('fast_feudal')) return 'fast_feudal_aggressive';
-  if (l.includes('fast_castle') || l.includes('fc')) return 'fast_castle';
-  if (l.includes('tower')) return 'tower_rush';
-  return 'unknown';
+function buildPlaystyleCard(stats) {
+  const arch = stats.archetype || {};
+  const playstyle = stats.playstyle || { label: 'Unknown', score: 0 };
+  const aggression = arch.dimensions?.aggression || 0;
+
+  const playstyleClass = playstyle.label.toLowerCase().replace(/\s+/g, '');
+
+  return `<div class="card">
+    <div class="card-label">Preferred Playstyle</div>
+    <div class="playstyle-badge ${playstyleClass}">${playstyle.label}</div>
+    <div class="playstyle-score">Average Feudal aggression: ${aggression}/100</div>
+  </div>`;
 }
 
-function buildAgeTimingsCompact(stats) {
-  const ages = ['feudal', 'castle', 'imperial'];
-  const allTimes = [];
-  for (const age of ages) {
-    const p = stats['avg_' + age];
-    const o = stats['opp_avg_' + age];
-    if (p) allTimes.push(p);
-    if (o) allTimes.push(o);
-  }
-  const maxTime = Math.max(...allTimes, 1);
-
-  let html = `<div class="age-timings"><div class="section-title">Age Timings</div>`;
-
-  for (const age of ages) {
-    const pTime = stats['avg_' + age + '_hms'] || 'N/A';
-    const oTime = stats['opp_avg_' + age + '_hms'] || 'N/A';
-    const pSec = stats['avg_' + age];
-    const oSec = stats['opp_avg_' + age];
-
-    const pPct = pSec ? Math.min((pSec / maxTime) * 100, 100) : 0;
-    const oPct = oSec ? Math.min((oSec / maxTime) * 100, 100) : 0;
-
-    html += `<div class="age-row">
-      <div class="age-label">${age}</div>
-      <div class="age-bar-container"><div class="age-bar opponent" style="width:${oPct}%"></div></div>
-      <div class="age-time">${oTime}</div>
-    </div>`;
-    html += `<div class="age-row" style="margin-top:-2px;margin-bottom:6px;">
-      <div class="age-label" style="color:var(--accent-blue)">You</div>
-      <div class="age-bar-container"><div class="age-bar player" style="width:${pPct}%"></div></div>
-      <div class="age-time" style="color:var(--accent-blue)">${pTime}</div>
-    </div>`;
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-function buildMapsSection(stats) {
-  const maps = stats.map_played_percent || {};
-  if (Object.keys(maps).length === 0) {
-    return `<div class="maps-section"><div class="section-title">Top Maps</div><div class="loading-state" style="font-size:10px;padding:8px 0;">Sin datos de mapas.</div></div>`;
-  }
-
-  const sorted = Object.entries(maps).sort((a, b) => b[1] - a[1]).slice(0, 4);
-  let html = `<div class="maps-section"><div class="section-title">Top Maps</div>`;
-  for (const [map, pct] of sorted) {
-    const wr = stats.map_win_percent?.[map] ?? 0;
-    const wrClass = wr >= 55 ? 'good' : wr <= 40 ? 'bad' : 'neutral';
-    html += `<div class="map-row">
-      <div class="map-name">${map}</div>
-      <div class="map-play-pct">${pct}%</div>
-      <div class="map-wr ${wrClass}">${wr}% WR</div>
-    </div>`;
-  }
-  html += `</div>`;
-  return html;
-}
-
-function buildCivsSection(stats) {
+function buildCivTendenciesCard(stats) {
   const civs = stats.civ_played_percent || {};
-  if (Object.keys(civs).length === 0) {
-    return `<div class="civs-section"><div class="section-title">Civilizations</div><div class="loading-state" style="font-size:10px;padding:8px 0;">Sin datos de civs.</div></div>`;
+  const sortedCivs = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  if (sortedCivs.length === 0) {
+    return `<div class="card">
+      <div class="card-label">Civilization Tendencies</div>
+      <div class="card-subtitle">No data available</div>
+    </div>`;
   }
 
-  let html = `<div class="civs-section"><div class="section-title">Civilizations</div><div class="civs-list">`;
-  for (const [civ, pct] of Object.entries(civs)) {
-    html += `<span class="civ-pill">${civ} <span class="civ-pct">${pct}%</span></span>`;
+  let civsHtml = '';
+  for (let i = 0; i < sortedCivs.length; i++) {
+    const [civ, pct] = sortedCivs[i];
+    civsHtml += `<div class="civ-tendency-item">
+      <div class="civ-tendency-rank">${i + 1}</div>
+      <span>${escapeHtml(civ)} <span style="color:var(--text-muted);font-size:10px;">${pct}%</span></span>
+    </div>`;
   }
+
+  return `<div class="card">
+    <div class="card-label">Civilization Tendencies</div>
+    <div class="civ-tendency-list">${civsHtml}</div>
+  </div>`;
+}
+
+function buildTimingTendenciesCard(stats) {
+  const feudalTime = stats.avg_feudal_hms || 'N/A';
+  const castleTime = stats.avg_castle_hms || 'N/A';
+  const imperialTime = stats.avg_imperial_hms || 'N/A';
+  const avgDuration = stats.avg_duration_hms || 'N/A';
+
+  return `<div class="card">
+    <div class="card-label">Timing Tendencies</div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Feudal</span>
+      <span class="timing-value">${feudalTime}</span>
+    </div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Castle</span>
+      <span class="timing-value">${castleTime}</span>
+    </div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Imperial</span>
+      <span class="timing-value">${imperialTime}</span>
+    </div>
+    <div class="timing-row">
+      <span class="timing-label">Avg Game Length</span>
+      <span class="timing-value">${avgDuration}</span>
+    </div>
+  </div>`;
+}
+
+// ============================================================================
+// BLOCK 3: STRATEGIC RECOMMENDATIONS
+// ============================================================================
+
+function buildStrategicRecommendations(stats) {
+  const recs = stats.recommendations || [];
+  const weaknesses = stats.weaknesses || [];
+  const threats = stats.threats || [];
+
+  let html = `<div class="block">`;
+  html += `<div class="block-title">Strategic Recommendations</div>`;
+
+  // Main recommendation card
+  html += `<div class="card">
+    <div class="card-label">Recommended Strategy</div>
+    <ul class="recommendation-list">`;
+
+  if (recs.length > 0) {
+    for (const rec of recs) {
+      const icon = rec.type === 'must' ? '<span class="check">✓</span>' :
+                   rec.type === 'warn' ? '<span class="warn">⚠</span>' :
+                   '<span class="danger">✗</span>';
+      html += `<li>${icon} ${escapeHtml(rec.text)}</li>`;
+    }
+  } else {
+    html += `<li><span class="check">✓</span> Analyze rival matches for specific recommendations</li>`;
+  }
+
+  html += `</ul></div>`;
+
+  // Weaknesses card
+  if (weaknesses.length > 0) {
+    html += `<div class="card">
+      <div class="card-label">Weaknesses Detected</div>
+      <ul class="weakness-list">`;
+    for (const w of weaknesses) {
+      html += `<li>${escapeHtml(w)}</li>`;
+    }
+    html += `</ul></div>`;
+  }
+
+  // Threats card
+  if (threats.length > 0) {
+    html += `<div class="card">
+      <div class="card-label">Major Threats</div>
+      <ul class="threat-list">`;
+    for (const t of threats) {
+      html += `<li>${escapeHtml(t)}</li>`;
+    }
+    html += `</ul></div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+// ============================================================================
+// BLOCK 4: DETAILED ANALYSIS (Tabs)
+// ============================================================================
+
+function buildDetailedAnalysis(stats) {
+  const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs'];
+  const tabLabels = ['Overview', 'Military', 'Economy', 'Openings', 'Maps', 'Civs'];
+
+  let html = `<div class="block">`;
+  html += `<div class="block-title">Detailed Analysis</div>`;
+  html += `<div class="card" style="padding:10px;">`;
+
+  // Tab nav
+  html += `<div class="tabs-nav">`;
+  for (let i = 0; i < tabIds.length; i++) {
+    html += `<button class="tab-btn ${i === 0 ? 'active' : ''}" data-tab="${tabIds[i]}">${tabLabels[i]}</button>`;
+  }
+  html += `</div>`;
+
+  // Tab panels
+  html += buildOverviewPanel(stats, tabIds[0]);
+  html += buildMilitaryPanel(stats, tabIds[1]);
+  html += buildEconomyPanel(stats, tabIds[2]);
+  html += buildOpeningsPanel(stats, tabIds[3]);
+  html += buildMapsPanel(stats, tabIds[4]);
+  html += buildCivsPanel(stats, tabIds[5]);
+
   html += `</div></div>`;
   return html;
 }
 
-function buildEconomySection(stats) {
+function buildOverviewPanel(stats, id) {
+  const wr = stats.win_percent || 0;
+  const games = stats.analyzed || 0;
+  const wins = stats.total_wins || 0;
+  const rating = stats.rating || '—';
+  const eapm = stats.avg_eapm || '—';
+  const streak = stats.current_streak || { type: 'none', count: 0 };
+
+  const streakText = streak.type === 'win' ? `+${streak.count} wins` :
+                       streak.type === 'loss' ? `-${streak.count} losses` :
+                       'No streak';
+
+  return `<div class="tab-panel active" data-panel="${id}">
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Games</div>
+        <div class="tab-stat-value">${games}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Winrate</div>
+        <div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Wins / Losses</div>
+        <div class="tab-stat-value">${wins} / ${games - wins}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Current Streak</div>
+        <div class="tab-stat-value">${streakText}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Avg ELO</div>
+        <div class="tab-stat-value">${rating}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Avg EAPM</div>
+        <div class="tab-stat-value">${eapm}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildMilitaryPanel(stats, id) {
+  const unitCats = stats.unit_categories || {};
+  const aggression = stats.archetype?.dimensions?.aggression || 0;
+
+  const totalUnits = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
+
+  let compositionHtml = '';
+  if (totalUnits > 0) {
+    const cats = [
+      { key: 'cavalry', label: 'Cavalry', color: 'var(--accent-orange)' },
+      { key: 'archers', label: 'Archers', color: 'var(--accent-yellow)' },
+      { key: 'infantry', label: 'Infantry', color: 'var(--accent-red)' },
+      { key: 'siege', label: 'Siege', color: 'var(--accent-purple)' },
+    ];
+    for (const cat of cats) {
+      const data = unitCats[cat.key];
+      if (!data || !data.count) continue;
+      const pct = Math.round((data.count / totalUnits) * 100);
+      compositionHtml += `<div class="opening-bar-row" style="margin-bottom:4px;">
+        <div class="opening-bar-label" style="width:60px;">${cat.label}</div>
+        <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
+        <div class="opening-bar-pct">${pct}%</div>
+      </div>`;
+    }
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div class="tab-stat-grid" style="margin-bottom:10px;">
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Aggression Score</div>
+        <div class="tab-stat-value">${aggression}/100</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Total Units</div>
+        <div class="tab-stat-value">${totalUnits}</div>
+      </div>
+    </div>
+    ${compositionHtml ? `<div style="margin-top:8px;"><div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Army Composition</div>${compositionHtml}</div>` : '<div class="card-subtitle" style="padding:10px 0;">No military data available.</div>'}
+  </div>`;
+}
+
+function buildEconomyPanel(stats, id) {
+  const tcTiming = stats.tc_timing || {};
   const wb = stats.wheel_barrow_avg;
   const hc = stats.hand_cart_avg;
-  if (wb == null && hc == null) {
-    return `<div class="economy-section"><div class="section-title">Economy Upgrades</div><div class="loading-state" style="font-size:10px;padding:8px 0;">Sin datos de mejoras.</div></div>`;
-  }
 
-  let html = `<div class="economy-section"><div class="section-title">Economy Upgrades</div>`;
-  if (wb != null) {
-    html += `<div class="economy-row"><div class="economy-label">Wheelbarrow</div><div class="economy-value">${formatHms(wb)}</div></div>`;
-  }
-  if (hc != null) {
-    html += `<div class="economy-row"><div class="economy-label">Hand Cart</div><div class="economy-value">${formatHms(hc)}</div></div>`;
-  }
-  html += `</div>`;
-  return html;
+  return `<div class="tab-panel" data-panel="${id}">
+    <div class="tab-stat-grid">
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">2nd TC Avg</div>
+        <div class="tab-stat-value">${tcTiming.tc2_avg_hms || 'N/A'}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">3rd TC Avg</div>
+        <div class="tab-stat-value">${tcTiming.tc3_avg_hms || 'N/A'}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Wheelbarrow</div>
+        <div class="tab-stat-value">${wb != null ? formatHms(wb) : 'N/A'}</div>
+      </div>
+      <div class="tab-stat-item">
+        <div class="tab-stat-label">Hand Cart</div>
+        <div class="tab-stat-value">${hc != null ? formatHms(hc) : 'N/A'}</div>
+      </div>
+    </div>
+    ${stats.boom_tendency ? `<div class="card-subtitle" style="margin-top:8px;">Boom tendency: <strong>${stats.boom_tendency}</strong></div>` : ''}
+  </div>`;
 }
 
-function buildMarketSection(stats) {
-  const marketAvg = stats.market_avg_by_age || {};
-  let hasAny = false;
-  for (const age of ['feudal', 'castle', 'imperial']) {
-    const avg = marketAvg[age];
-    if (avg && (Object.keys(avg.buy || {}).length > 0 || Object.keys(avg.sell || {}).length > 0)) {
-      hasAny = true;
-      break;
-    }
+function buildOpeningsPanel(stats, id) {
+  const pp = stats.player_profile || {};
+  const freq = pp.per_opening_frequency || {};
+
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  const maxPct = sorted.length > 0 ? sorted[0][1] : 100;
+
+  let barsHtml = '';
+  const colors = ['var(--accent-blue)', 'var(--accent-purple)', 'var(--accent-orange)', 'var(--accent-green)', 'var(--accent-red)', 'var(--accent-cyan)'];
+  for (let i = 0; i < sorted.length; i++) {
+    const [name, pct] = sorted[i];
+    const width = maxPct > 0 ? (pct / maxPct) * 100 : 0;
+    barsHtml += `<div class="opening-bar-row">
+      <div class="opening-bar-label">${formatOpeningName(name)}</div>
+      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:${colors[i % colors.length]}"></div></div>
+      <div class="opening-bar-pct">${pct}%</div>
+    </div>`;
   }
-  if (!hasAny) return '';
 
-  let html = `<div class="market-section"><div class="section-title">Market Activity</div>`;
-  for (const age of ['feudal', 'castle', 'imperial']) {
-    const avgByAge = marketAvg[age] || null;
-    const topBuys = [];
-    const topSells = [];
-
-    if (avgByAge) {
-      const buys = avgByAge.buy || {};
-      const sells = avgByAge.sell || {};
-      if (Object.keys(buys).length > 0) {
-        Object.entries(buys).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([r, v]) => topBuys.push([r, Math.round(v)]));
-      }
-      if (Object.keys(sells).length > 0) {
-        Object.entries(sells).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([r, v]) => topSells.push([r, Math.round(v)]));
-      }
-    }
-
-    if (topBuys.length === 0 && topSells.length === 0) continue;
-
-    html += `<div class="market-age-row"><div class="market-age-label">${age}</div><div class="market-items">`;
-    for (const [resource, val] of topBuys) {
-      html += `<span class="market-item buy">+${resource} ${val}</span>`;
-    }
-    for (const [resource, val] of topSells) {
-      html += `<span class="market-item sell">-${resource} ${val}</span>`;
-    }
-    html += `</div></div>`;
-  }
-  html += `</div>`;
-  return html;
+  return `<div class="tab-panel" data-panel="${id}">
+    <div style="margin-bottom:6px;">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Opening Distribution</div>
+      ${barsHtml || '<div class="card-subtitle">No opening data available.</div>'}
+    </div>
+    ${pp.primary_opening ? `<div class="card-subtitle">Primary: <strong>${formatOpeningName(pp.primary_opening)}</strong> (${Math.round((pp.opening_stability || 0) * 100)}% stability)</div>` : ''}
+  </div>`;
 }
 
-function buildKeyTechsSection(stats) {
-  const keyTechs = stats.key_techs || {};
-  const entries = Object.entries(keyTechs);
-  if (entries.length === 0) return '';
+function buildMapsPanel(stats, id) {
+  const maps = stats.map_played_percent || {};
+  const sorted = Object.entries(maps).sort((a, b) => b[1] - a[1]);
 
-  const byCategory = { military: [], economy: [], other: [] };
-  for (const [name, data] of entries) {
-    const cat = data.category || 'other';
-    if (byCategory[cat]) byCategory[cat].push([name, data]);
-    else byCategory.other.push([name, data]);
+  let topMaps = '';
+  let worstMaps = '';
+
+  // Top 3 maps by play rate
+  const top3 = sorted.slice(0, 3);
+  for (const [map, pct] of top3) {
+    const wr = stats.map_win_percent?.[map] ?? 0;
+    const wrClass = wr >= 55 ? 'text-green' : wr <= 40 ? 'text-red' : '';
+    topMaps += `<div class="timing-row">
+      <span class="timing-label">${escapeHtml(map)}</span>
+      <span class="timing-value ${wrClass}">${pct}% · ${wr}% WR</span>
+    </div>`;
   }
 
-  let html = `<div class="techs-section"><div class="section-title">Key Techs</div>`;
-  for (const cat of ['military', 'economy', 'other']) {
-    const list = byCategory[cat];
-    if (list.length === 0) continue;
-    list.sort((a, b) => b[1].frequency - a[1].frequency);
+  // Worst 3 maps by win rate (min 2 games)
+  const worst3 = sorted
+    .filter(([m]) => (stats.map_win_percent?.[m] ?? 50) < 45)
+    .sort((a, b) => (stats.map_win_percent?.[a[0]] ?? 50) - (stats.map_win_percent?.[b[0]] ?? 50))
+    .slice(0, 3);
 
-    html += `<div class="tech-category"><div class="tech-category-label">${cat}</div><div class="tech-items">`;
-    for (const [name, data] of list.slice(0, 5)) {
-      const display = techDisplayName(name);
-      const time = data.avg_time != null ? formatHms(data.avg_time) : '';
-      html += `<span class="tech-item">${display} <span class="tech-freq">${data.frequency}%</span>${time ? `<span class="tech-time">${time}</span>` : ''}</span>`;
+  for (const [map, pct] of worst3) {
+    const wr = stats.map_win_percent?.[map] ?? 0;
+    worstMaps += `<div class="timing-row">
+      <span class="timing-label">${escapeHtml(map)}</span>
+      <span class="timing-value text-red">${wr}% WR</span>
+    </div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div style="margin-bottom:10px;">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Top Maps</div>
+      ${topMaps || '<div class="card-subtitle">No map data.</div>'}
+    </div>
+    ${worstMaps ? `<div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Worst Maps</div>${worstMaps}</div>` : ''}
+  </div>`;
+}
+
+function buildCivsPanel(stats, id) {
+  const civs = stats.civ_played_percent || {};
+  const sorted = Object.entries(civs).sort((a, b) => b[1] - a[1]);
+
+  let civsHtml = '';
+  for (const [civ, pct] of sorted) {
+    const wr = stats.civ_win_percent?.[civ] ?? 0;
+    const wrClass = wr >= 55 ? 'text-green' : wr <= 40 ? 'text-red' : '';
+    civsHtml += `<div class="timing-row">
+      <span class="timing-label">${escapeHtml(civ)}</span>
+      <span class="timing-value ${wrClass}">${pct}% · ${wr}% WR</span>
+    </div>`;
+  }
+
+  return `<div class="tab-panel" data-panel="${id}">
+    <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Civilizations</div>
+    ${civsHtml || '<div class="card-subtitle">No civilization data.</div>'}
+  </div>`;
+}
+
+// ============================================================================
+// BLOCK 5: HISTORICAL DATA
+// ============================================================================
+
+function buildHistoricalData(stats) {
+  const matches = stats.matches || [];
+  const recent = matches.slice(0, 10);
+
+  if (recent.length === 0) {
+    return `<div class="block">
+      <div class="block-title">Historical Data</div>
+      <div class="card"><div class="card-subtitle">No match history available.</div></div>
+    </div>`;
+  }
+
+  let rows = '';
+  for (const m of recent) {
+    const date = m.started ? new Date(m.started).toLocaleDateString('es', { month: 'short', day: 'numeric' }) : '—';
+    const result = m.won ? '<span class="win">W</span>' : '<span class="loss">L</span>';
+    const opening = m.opening ? formatOpeningName(m.opening) : '—';
+    const duration = m.duration_hms || '—';
+
+    rows += `<tr>
+      <td>${date}</td>
+      <td>${escapeHtml(m.map_name || '—')}</td>
+      <td>${escapeHtml(m.player_civ || '?')} vs ${escapeHtml(m.opponent_civ || '?')}</td>
+      <td>${result}</td>
+      <td>${opening}</td>
+      <td>${duration}</td>
+    </tr>`;
+  }
+
+  return `<div class="block">
+    <div class="block-title">Historical Data</div>
+    <div class="card" style="padding:8px;">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Map</th>
+            <th>Civs</th>
+            <th>Res</th>
+            <th>Opening</th>
+            <th>Dur</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ============================================================================
+// FOOTER
+// ============================================================================
+
+function buildFooter() {
+  const ytUrl = getConfig('youtube_url');
+  const twUrl = getConfig('twitch_url');
+
+  return `<div class="overlay-footer">
+    <div class="footer-creator">Created by EduardR10 · Helping AoE2 players make better decisions.</div>
+    <div class="footer-links">
+      ${ytUrl ? `<a href="${ytUrl}" target="_blank" class="footer-link">YouTube</a>` : ''}
+      ${twUrl ? `<a href="${twUrl}" target="_blank" class="footer-link">Twitch</a>` : ''}
+    </div>
+  </div>`;
+}
+
+// ============================================================================
+// SETUP FUNCTIONS
+// ============================================================================
+
+function setupTabs(container) {
+  const tabBtns = container.querySelectorAll('.tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      if (!tabId) return;
+
+      // Update buttons
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+
+      // Update panels
+      container.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.panel === tabId);
+      });
+    });
+  });
+}
+
+function setupSocialLinks(container) {
+  const socialLinks = container.querySelectorAll('[data-social]');
+  const config = window.app_config || {};
+
+  socialLinks.forEach(link => {
+    const social = link.dataset.social;
+    let url = '';
+    switch (social) {
+      case 'youtube': url = config.youtube_url; break;
+      case 'twitch': url = config.twitch_url; break;
+      case 'buymeacoffee': url = config.buymeacoffee_url; break;
+      case 'kofi': url = config.kofi_url; break;
+      case 'binance': url = config.binance_id; break;
     }
-    html += `</div></div>`;
-  }
-  html += `</div>`;
-  return html;
+    if (url) {
+      link.href = url;
+      link.target = '_blank';
+    } else {
+      link.style.opacity = '0.4';
+      link.style.pointerEvents = 'none';
+    }
+  });
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function formatOpeningName(label) {
+  if (!label) return 'Unknown';
+  const map = {
+    'drush': 'Drush',
+    'scout_rush': 'Scout Rush',
+    'archer_rush': 'Archer Rush',
+    'fast_feudal_aggressive': 'Fast Feudal Aggro',
+    'fast_castle': 'Fast Castle',
+    'tower_rush': 'Tower Rush',
+    'Standard/Unknown': 'Standard',
+    'Mixed/No Data': 'Mixed',
+  };
+  return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }

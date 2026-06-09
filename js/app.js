@@ -1,6 +1,16 @@
 import { fetchRating, fetchMatches } from './api.js';
 import { analyzeMatches } from './stats.js';
-import { computePlayerPrimaryOpenings, classifyPlayerArchetype } from './analysis.js';
+import {
+  computePlayerPrimaryOpenings,
+  classifyPlayerArchetype,
+  computeDangerScore,
+  classifyPlaystyle,
+  detectWeaknesses,
+  detectThreats,
+  generateRecommendations,
+  computeConfidence,
+  computeStreak,
+} from './analysis.js';
 import { buildOverlay, restartOverlay } from './render.js';
 import { initWebSocket } from './websocket.js';
 import { resolveCivNumber, sleep } from './utils.js';
@@ -145,9 +155,48 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
 
   stats.player_id = playerId;
   stats.match_id = 'self';
+  stats.player_name = allMatches[0]?.player_name || 'Player';
   stats.rating = await fetchRating(playerId);
   stats.player_profile = computePlayerPrimaryOpenings(parseInt(playerId), stats.all_match_features || []);
   stats.archetype = classifyPlayerArchetype(stats);
+
+  // NEW: Intelligence features
+  stats.playstyle = classifyPlaystyle(stats.archetype);
+  stats.danger_score = computeDangerScore(stats, stats.rating);
+  stats.confidence = computeConfidence(stats);
+  stats.weaknesses = detectWeaknesses(stats);
+  stats.threats = detectThreats(stats);
+  stats.recommendations = generateRecommendations(stats);
+  stats.current_streak = computeStreak(allMatches);
+
+  // Compute avg duration and enrich matches for historical data
+  const featureMap = new Map();
+  if (stats.all_match_features) {
+    for (const f of stats.all_match_features) {
+      if (f.match_id) featureMap.set(f.match_id, f);
+    }
+  }
+
+  const durations = [];
+  for (const m of allMatches) {
+    if (m.started && m.finished) {
+      const dur = (new Date(m.finished) - new Date(m.started)) / 1000;
+      if (dur > 0 && dur < 7200) {
+        durations.push(dur);
+        m.duration_hms = formatDurationHms(dur);
+      }
+    }
+    const feat = featureMap.get(m.match_id);
+    if (feat && feat.opening) {
+      m.opening = feat.opening.chosen_opening;
+    }
+  }
+  if (durations.length > 0) {
+    const avgDur = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    stats.avg_duration_hms = formatDurationHms(avgDur);
+  }
+
+  stats.matches = allMatches;
 
   buildOverlay(stats, playerId);
 }
@@ -226,17 +275,68 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
 
   stats.player_id = playerId;
   stats.match_id = matchId;
+  stats.player_name = 'Player';
+  stats.rival_name = matches[0]?.player_name || 'Rival';
   stats.rating = await fetchRating(parseInt(playerId));
+  stats.rival_rating = await fetchRating(parseInt(analyzeId));
   stats.archetype = classifyPlayerArchetype(stats);
 
+  // NEW: Intelligence features
+  stats.playstyle = classifyPlaystyle(stats.archetype);
+  stats.danger_score = computeDangerScore(stats, stats.rating);
+  stats.confidence = computeConfidence(stats);
+  stats.weaknesses = detectWeaknesses(stats);
+  stats.threats = detectThreats(stats);
+  stats.recommendations = generateRecommendations(stats);
+  stats.current_streak = computeStreak(matches);
+
+  // Compute avg duration and enrich matches for historical data
+  const featureMap = new Map();
+  if (stats.all_match_features) {
+    for (const f of stats.all_match_features) {
+      if (f.match_id) featureMap.set(f.match_id, f);
+    }
+  }
+
+  const durations = [];
+  for (const m of matches) {
+    if (m.started && m.finished) {
+      const dur = (new Date(m.finished) - new Date(m.started)) / 1000;
+      if (dur > 0 && dur < 7200) {
+        durations.push(dur);
+        m.duration_hms = formatDurationHms(dur);
+      }
+    }
+    const feat = featureMap.get(m.match_id);
+    if (feat && feat.opening) {
+      m.opening = feat.opening.chosen_opening;
+    }
+  }
+  if (durations.length > 0) {
+    const avgDur = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    stats.avg_duration_hms = formatDurationHms(avgDur);
+  }
+
+  stats.matches = matches;
+
   buildOverlay(stats, playerId);
+}
+
+function formatDurationHms(seconds) {
+  const m = Math.floor(seconds / 60);
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h > 0) return `${h}:${String(rm).padStart(2, '0')}`;
+  return `${rm} min`;
 }
 
 function setupButtons() {
   const btnAuto = document.getElementById('btn-autoanalyze');
   const btnToggle = document.getElementById('btn-toggle-overlay');
   const btnClearCache = document.getElementById('btn-clear-cache');
+  const btnSupport = document.getElementById('btn-support');
   const overlay = document.getElementById('aoe2-overlay');
+  const supportModal = document.getElementById('support-modal');
 
   if (btnToggle && overlay) {
     btnToggle.addEventListener('click', () => {
@@ -276,6 +376,46 @@ function setupButtons() {
       }
     });
   }
+
+  if (btnSupport && supportModal) {
+    btnSupport.addEventListener('click', () => {
+      supportModal.classList.add('active');
+    });
+
+    supportModal.addEventListener('click', (e) => {
+      if (e.target === supportModal) {
+        supportModal.classList.remove('active');
+      }
+    });
+  }
+
+  // Show donation links if support is enabled
+  const donationLinks = document.getElementById('donation-links');
+  if (donationLinks && window.app_config?.support_enabled) {
+    donationLinks.style.display = 'block';
+  }
+
+  // Setup modal social links
+  document.querySelectorAll('#support-modal [data-social]').forEach(link => {
+    const social = link.dataset.social;
+    let url = '';
+    switch (social) {
+      case 'youtube': url = window.app_config?.youtube_url || ''; break;
+      case 'twitch': url = window.app_config?.twitch_url || ''; break;
+      case 'buymeacoffee': url = window.app_config?.buymeacoffee_url || ''; break;
+      case 'kofi': url = window.app_config?.kofi_url || ''; break;
+      case 'binance': url = window.app_config?.binance_id || ''; break;
+    }
+    if (url) {
+      link.href = url;
+      link.target = '_blank';
+      link.style.opacity = '1';
+      link.style.pointerEvents = 'auto';
+    } else {
+      link.style.opacity = '0.4';
+      link.style.pointerEvents = 'none';
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
