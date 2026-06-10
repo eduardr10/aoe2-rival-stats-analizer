@@ -272,7 +272,7 @@ function formatOpeningName(label) {
     'fast_feudal_aggressive': 'Fast Feudal Aggro',
     'fast_castle': 'Fast Castle',
     'tower_rush': 'Tower Rush',
-    'Standard/Unknown': 'Standard',
+    'Standard/Unknown': 'Mixed',
     'Mixed/No Data': 'Mixed',
   };
   return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());

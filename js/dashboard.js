@@ -848,13 +848,11 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderRecommendationsCard(stats);
   html += `</div></div>`;
 
-  // BLOCK 4: RIVAL PROFILE (Playstyle + Intelligence)
+  // BLOCK 4: RIVAL PROFILE (Opening focus)
   html += `<div class="block">`;
   html += `<div class="section-title">${t('rival')} ${t('player').toLowerCase()}</div>`;
-  html += `<div class="block-grid block-grid-3">`;
-  html += renderPlaystyleWithCivsCard(stats);
+  html += `<div class="block-grid">`;
   html += renderExpectedOpeningCard(stats);
-  html += renderConfidenceCard(stats);
   html += `</div></div>`;
 
   // BLOCK 4: TIMING ANALYSIS (Visual timeline + interpretations)
@@ -1885,7 +1883,7 @@ function formatOpeningName(label) {
     'fast_feudal_aggressive': 'Fast Feudal Aggro',
     'fast_castle': 'Fast Castle',
     'tower_rush': 'Tower Rush',
-    'Standard/Unknown': 'Standard',
+    'Standard/Unknown': 'Mixed',
     'Mixed/No Data': 'Mixed',
   };
   return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());

@@ -52,6 +52,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     age_times_losses: { feudal: [], castle: [], imperial: [] },
     opp_age_times: { feudal: [], castle: [], imperial: [] },
     eapm: [],
+    eapm_wins: [],
+    eapm_losses: [],
     prefer_random: [],
     techs_after_age: { feudal: [], castle: [], imperial: [] },
     tech_times_after_age: { feudal: [], castle: [], imperial: [] },
@@ -82,6 +84,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     opp_unit_categories_losses: {},
     opp_openings: {},
     opp_openings_vs_result: { wins: {}, losses: {} },
+    opp_civ_stats: {},  // { civ: { wins: n, losses: n } }
     key_techs_wins: {},
     key_techs_losses: {},
     unit_cat_match_totals_wins: {},
@@ -180,6 +183,15 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     const mePreferRandom = mePlayer.preferRandom || null;
     const mapName = data.map?.name || data.map || match.map_name || null;
     const winner = !!(mePlayer.winner || false);
+
+    // Track opponent civ win/loss
+    const oppCiv = oppPlayer?.civilization || null;
+    if (oppCiv) {
+      const canon = CIV_CANONICAL_NAMES[oppCiv.toLowerCase()] || oppCiv;
+      if (!stats.opp_civ_stats[canon]) stats.opp_civ_stats[canon] = { wins: 0, losses: 0 };
+      if (winner) stats.opp_civ_stats[canon].wins++;
+      else stats.opp_civ_stats[canon].losses++;
+    }
 
     const techs = mePlayer.queuedTechs || [];
 
@@ -531,7 +543,11 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       onProgress({ current: i + 1, total: matches.length, matchId, fromCache });
     }
 
-    if (meEapm !== null) stats.eapm.push(meEapm);
+    if (meEapm !== null) {
+      stats.eapm.push(meEapm);
+      if (winner) stats.eapm_wins.push(meEapm);
+      else stats.eapm_losses.push(meEapm);
+    }
     if (mePreferRandom !== null) stats.prefer_random.push(mePreferRandom ? 1 : 0);
     if (meCiv) {
       stats.civ_played[meCiv] = (stats.civ_played[meCiv] || 0) + 1;
@@ -594,6 +610,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   }
 
   stats.avg_eapm = average(stats.eapm);
+  stats.avg_eapm_wins = average(stats.eapm_wins);
+  stats.avg_eapm_losses = average(stats.eapm_losses);
 
   const totalMaps = Object.values(stats.map_played).reduce((a, b) => a + b, 0);
   stats.map_played_percent = {};
@@ -614,6 +632,15 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       stats.civ_played_percent[civ] = totalCivs ? Math.round((count * 100 / totalCivs) * 100) / 100 : 0;
       const wins = stats.civ_win[civ] || 0;
       stats.civ_win_percent[civ] = count ? Math.round((wins * 100 / count) * 100) / 100 : 0;
+    }
+  }
+
+  // Opponent civ win rates
+  stats.opp_civ_win_percent = {};
+  for (const [civ, data] of Object.entries(stats.opp_civ_stats)) {
+    const total = (data.wins || 0) + (data.losses || 0);
+    if (total >= 3) {
+      stats.opp_civ_win_percent[civ] = total ? Math.round((data.wins * 100 / total) * 100) / 100 : 0;
     }
   }
 

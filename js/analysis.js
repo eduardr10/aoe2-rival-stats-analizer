@@ -757,27 +757,21 @@ export function generateDataDrivenRecommendations(stats) {
   const recs = [];
   const pp = stats.player_profile || {};
   const perFreq = pp.per_opening_frequency || {};
-  const primary = pp.primary_opening || 'Unknown';
   const unitStats = stats.unit_stats || {};
-  const unitCats = stats.unit_categories || {};
-  const keyTechs = stats.key_techs || {};
 
-  // DATA-DRIVEN: based on actual unit production stats (avg per game)
-  const scoutAvg = unitStats['scout_cavalry']?.avg || 0;
-  const archerAvg = unitStats['archer']?.avg || 0;
-  const knightAvg = unitStats['knight']?.avg || 0;
-  const militiaAvg = unitStats['militia']?.avg || 0;
-  const skirmAvg = unitStats['skirmisher']?.avg || 0;
-
-  // Opening frequency based
+  // Opening frequency + unit avg (complement to generatePrediction's expected_strategy)
   const scoutFreq = perFreq['scout_rush'] || 0;
   const archerFreq = perFreq['archer_rush'] || 0;
   const fcFreq = perFreq['fast_castle'] || 0;
   const ffaFreq = perFreq['fast_feudal_aggressive'] || 0;
   const drushFreq = perFreq['drush'] || 0;
   const trushFreq = perFreq['tower_rush'] || 0;
+  const maaFreq = perFreq['maa_rush'] || 0;
 
-  // DATA-DRIVEN: opening frequencies observed
+  const scoutAvg = unitStats['scout_cavalry']?.avg || 0;
+  const archerAvg = unitStats['archer']?.avg || 0;
+  const militiaAvg = unitStats['militia']?.avg || 0;
+
   if (scoutFreq >= 25 || scoutAvg > 2.0) {
     recs.push({ type: 'must', text: `Scout Rush ${scoutFreq}% (${scoutAvg.toFixed(1)} scouts avg)` });
   }
@@ -793,34 +787,14 @@ export function generateDataDrivenRecommendations(stats) {
   if (drushFreq >= 15 || militiaAvg > 1.0) {
     recs.push({ type: 'must', text: `Drush ${drushFreq}% (${militiaAvg.toFixed(1)} militia avg)` });
   }
+  if (maaFreq >= 15) {
+    recs.push({ type: 'must', text: `MAA Rush ${maaFreq}%` });
+  }
   if (trushFreq >= 10) {
     recs.push({ type: 'must', text: `Tower Rush ${trushFreq}%` });
   }
 
-  // DATA-DRIVEN: tech frequency + avg timing (only if significant)
-  const fletchingData = keyTechs['fletching'];
-  if (fletchingData && fletchingData.frequency >= 60 && fletchingData.avg_time != null) {
-    recs.push({ type: 'warn', text: `Fletching ${fletchingData.frequency}% — avg ${formatHms(fletchingData.avg_time)}` });
-  }
-  const bloodlinesData = keyTechs['bloodlines'];
-  if (bloodlinesData && bloodlinesData.frequency >= 50 && bloodlinesData.avg_time != null) {
-    recs.push({ type: 'warn', text: `Bloodlines ${bloodlinesData.frequency}% — avg ${formatHms(bloodlinesData.avg_time)}` });
-  }
-
-  // DATA-DRIVEN: map & civ preferences (only extreme concentration)
-  const mapWR = stats.map_win_percent || {};
-  const bestMap = Object.entries(mapWR).sort((a, b) => b[1] - a[1])[0];
-  if (bestMap && bestMap[1] >= 65) {
-    recs.push({ type: 'warn', text: `${bestMap[0]} ${bestMap[1]}% WR (${stats.map_played_percent[bestMap[0]] || '?'}% play)` });
-  }
-
-  const civPlayed = stats.civ_played_percent || {};
-  const mainCiv = Object.entries(civPlayed).sort((a, b) => b[1] - a[1])[0];
-  if (mainCiv && mainCiv[1] >= 60) {
-    recs.push({ type: 'warn', text: `${mainCiv[0]} ${mainCiv[1]}% of games` });
-  }
-
-  // DATA-DRIVEN: economy timing gaps (wins vs losses)
+  // Economy timing gaps (wins vs losses) — unique to this function
   if (stats.wheel_barrow_loss_avg != null && stats.wheel_barrow_win_avg != null) {
     const gap = stats.wheel_barrow_loss_avg - stats.wheel_barrow_win_avg;
     if (gap > 60) {
@@ -834,7 +808,7 @@ export function generateDataDrivenRecommendations(stats) {
     }
   }
 
-  // DATA-DRIVEN: opponent pattern analysis (our winrate vs rival patterns)
+  // Opponent pattern analysis (our winrate vs rival patterns) — unique to this function
   const oppPatterns = analyzeOpponentPatterns(stats);
   for (const [opening, wr] of Object.entries(oppPatterns.opp_opening_wr)) {
     if (wr >= 70) {
@@ -849,7 +823,7 @@ export function generateDataDrivenRecommendations(stats) {
     }
   }
 
-  // Fallback: opening stability as pure data
+  // Fallback
   if (recs.length === 0) {
     const stability = pp.opening_stability || 0;
     recs.push({ type: 'must', text: `Opening stability ${Math.round(stability * 100)}% (${pp.primary_opening || 'mixed'})` });
@@ -967,75 +941,54 @@ export function generatePrediction(stats) {
 
 export function interpretTimings(stats) {
   const interpretations = [];
-  const feudal = stats.avg_feudal || 0;
-  const castle = stats.avg_castle || 0;
-  const imperial = stats.avg_imperial || 0;
+  const games = stats.analyzed || 1;
 
-  // Get actual military data by period for context
+  // Military context: avg per game, not total
   const unitsByAge = stats.units_by_age_period || {};
   const preCastle = unitsByAge['pre-castle'] || {};
-  const preFeudal = unitsByAge['pre-feudal'] || {};
+  const feudalMilitaryAvg = Object.values(preCastle).reduce((sum, u) => sum + (u.avg || 0), 0);
 
-  // Calculate total military in feudal period from REAL data
-  const feudalMilitary = Object.values(preCastle).reduce((sum, u) => sum + (u.total || 0), 0);
-  const darkMilitary = Object.values(preFeudal).reduce((sum, u) => sum + (u.total || 0), 0);
-
-  // Feudal analysis WITH military context
-  if (feudal > 0) {
-    if (feudal < 600) {
-      if (feudalMilitary > 10) {
-        interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: `Fast Feudal + ${feudalMilitary} military units — Aggressive opener`, icon: '⚠', type: 'warning' });
-      } else if (feudalMilitary < 3) {
-        interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: 'Fast Feudal but low military — Greedy boom', icon: '✓', type: 'positive' });
-      } else {
-        interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: 'Fast Feudal with moderate pressure', icon: '✓', type: 'positive' });
-      }
-    } else if (feudal < 720) {
-      interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: `Standard Feudal timing (${feudalMilitary} pre-castle units)`, icon: '✓', type: 'positive' });
-    } else {
-      interpretations.push({ timing: 'Feudal', value: formatHms(feudal), conclusion: 'Delayed Feudal — likely Fast Castle or boom', icon: '⚠', type: 'warning' });
+  // Feudal: avg time + win/loss differential
+  const feudalAvg = stats.avg_feudal || 0;
+  if (feudalAvg > 0) {
+    const winAvg = stats.age_time_win_avg?.feudal;
+    const lossAvg = stats.age_time_loss_avg?.feudal;
+    let conclusion = `Avg ${formatHms(feudalAvg)}`;
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 30) conclusion += ` — ${formatHms(gap)} slower in losses`;
     }
+    conclusion += ` · ${feudalMilitaryAvg.toFixed(1)} mil avg pre-Castle`;
+    interpretations.push({ timing: 'Feudal', value: formatHms(feudalAvg), conclusion, icon: '→', type: 'neutral' });
   }
 
-  // Castle analysis WITH military context
-  if (castle > 0) {
-    if (castle < 1080) {
-      if (feudalMilitary > 15) {
-        interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: `Extended Feudal pressure (${feudalMilitary} units) before Castle`, icon: '⚠', type: 'warning' });
-      } else {
-        interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: 'Fast Castle — expect boom or tech switch', icon: '✓', type: 'positive' });
-      }
-    } else if (castle < 1260) {
-      interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: 'Standard Castle timing', icon: '✓', type: 'positive' });
-    } else {
-      interpretations.push({ timing: 'Castle', value: formatHms(castle), conclusion: 'Slow Castle — possible turtle or defensive play', icon: '⚠', type: 'warning' });
+  // Castle
+  const castleAvg = stats.avg_castle || 0;
+  if (castleAvg > 0) {
+    const winAvg = stats.age_time_win_avg?.castle;
+    const lossAvg = stats.age_time_loss_avg?.castle;
+    let conclusion = `Avg ${formatHms(castleAvg)}`;
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 30) conclusion += ` — ${formatHms(gap)} slower in losses`;
     }
+    interpretations.push({ timing: 'Castle', value: formatHms(castleAvg), conclusion, icon: '→', type: 'neutral' });
   }
 
-  // Imperial analysis
-  if (imperial > 0) {
-    if (imperial < 1500) {
-      interpretations.push({ timing: 'Imperial', value: formatHms(imperial), conclusion: 'Fast Imperial — tech-based win condition', icon: '✓', type: 'positive' });
-    } else if (imperial < 1800) {
-      interpretations.push({ timing: 'Imperial', value: formatHms(imperial), conclusion: 'Standard Imperial timing', icon: '✓', type: 'positive' });
-    } else {
-      interpretations.push({ timing: 'Imperial', value: formatHms(imperial), conclusion: 'Late Imperial — prefers Castle/Feudal fights', icon: '⚠', type: 'warning' });
+  // Imperial
+  const imperialAvg = stats.avg_imperial || 0;
+  if (imperialAvg > 0) {
+    const winAvg = stats.age_time_win_avg?.imperial;
+    const lossAvg = stats.age_time_loss_avg?.imperial;
+    let conclusion = `Avg ${formatHms(imperialAvg)}`;
+    if (winAvg != null && lossAvg != null) {
+      const gap = lossAvg - winAvg;
+      if (gap > 30) conclusion += ` — ${formatHms(gap)} slower in losses`;
     }
+    interpretations.push({ timing: 'Imperial', value: formatHms(imperialAvg), conclusion, icon: '→', type: 'neutral' });
   }
 
-  // Pattern from real data
-  if (feudal < 600 && castle > 1260 && feudalMilitary > 8) {
-    interpretations.push({ timing: 'Pattern', value: '', conclusion: `Fast Feudal + ${feudalMilitary} military + Slow Castle = Extended aggression`, icon: '⚠', type: 'warning' });
-  } else if (castle < 1080 && imperial < 1500) {
-    interpretations.push({ timing: 'Pattern', value: '', conclusion: 'Rapid aging — macro/boom specialist', icon: '✓', type: 'positive' });
-  } else if (imperial > 1800 && stats.avg_duration_hms) {
-    const durMin = parseInt(stats.avg_duration_hms) || 0;
-    if (durMin > 30) {
-      interpretations.push({ timing: 'Pattern', value: '', conclusion: `Long avg games (${stats.avg_duration_hms}) — late game comfort`, icon: '✓', type: 'positive' });
-    }
-  }
-
-  return interpretations;
+    return interpretations;
 }
 
 // ============================================================================
@@ -1139,7 +1092,7 @@ function formatOpeningName(label) {
     'fast_feudal_aggressive': 'Fast Feudal Aggro',
     'fast_castle': 'Fast Castle',
     'tower_rush': 'Tower Rush',
-    'Standard/Unknown': 'Standard',
+    'Standard/Unknown': 'Mixed',
     'Mixed/No Data': 'Mixed',
   };
   return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -1278,5 +1231,30 @@ export function generateDeepInsights(stats) {
     }
   }
 
-  return insights.slice(0, 8);
+  // 9. Winrate vs opponent civilizations (min 3 games)
+  const oppCivWR = stats.opp_civ_win_percent || {};
+  let bestOppCiv = null;
+  let worstOppCiv = null;
+  for (const [civ, wr] of Object.entries(oppCivWR)) {
+    const total = (stats.opp_civ_stats[civ]?.wins || 0) + (stats.opp_civ_stats[civ]?.losses || 0);
+    if (total < 3) continue;
+    if (!bestOppCiv || wr > bestOppCiv.wr) bestOppCiv = { civ, wr, total };
+    if (!worstOppCiv || wr < worstOppCiv.wr) worstOppCiv = { civ, wr, total };
+  }
+  if (bestOppCiv && worstOppCiv && bestOppCiv.civ !== worstOppCiv.civ) {
+    const diff = Math.round((bestOppCiv.wr - worstOppCiv.wr) * 100) / 100;
+    if (diff >= 25) {
+      insights.push(`${bestOppCiv.wr}% WR vs ${bestOppCiv.civ} vs ${worstOppCiv.wr}% vs ${worstOppCiv.civ}`);
+    }
+  }
+
+  // 10. EAPM differential (wins vs losses)
+  if (stats.avg_eapm_wins != null && stats.avg_eapm_losses != null) {
+    const gap = stats.avg_eapm_losses - stats.avg_eapm_wins;
+    if (gap > 2) {
+      insights.push(`EAPM ${Math.round(gap)} lower in losses (${Math.round(stats.avg_eapm_wins)} wins, ${Math.round(stats.avg_eapm_losses)} losses)`);
+    }
+  }
+
+  return insights.slice(0, 10);
 }
