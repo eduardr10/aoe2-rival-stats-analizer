@@ -23,6 +23,7 @@ import { initWebSocket } from './websocket.js';
 const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
 const PAGES = 1;
+let cachedKnowledgeBase = null;
 
 // ============================================================================
 // INTERNATIONALIZATION
@@ -667,7 +668,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   // Strategic engine integration
   const mainCivEntry = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
   const mainCivName = mainCivEntry ? mainCivEntry[0] : '';
-  await loadKnowledgeBase();
+  cachedKnowledgeBase = await loadKnowledgeBase();
   stats.strategic_analysis = buildStrategicAnalysis(stats, mainCivName);
 
   // Enrich matches for historical data
@@ -748,74 +749,90 @@ function updateHeader(stats) {
 function renderPlayerSummaryBanner(stats) {
   const wr = stats.win_percent || 0;
   const games = stats.analyzed || 0;
-  const streak = stats.current_streak || { type: 'none', count: 0 };
-  const streakText = streak.type === 'win' ? `+${streak.count}` :
-                       streak.type === 'loss' ? `-${streak.count}` : '—';
-  const eapm = stats.avg_eapm || 0;
   const pp = stats.player_profile || {};
-  const primaryOpening = pp.primary_opening || 'Unknown';
-  const stability = Math.round((pp.opening_stability || 0) * 100);
+  const perFreq = pp.per_opening_frequency || {};
+  const arch = stats.archetype || {};
+  const dims = arch.dimensions || {};
 
-  // Best map by winrate (min 3 games)
+  // Best map by play count
   let bestMap = null;
-  const mapWR = stats.map_win_percent || {};
   const mapPlayed = stats.map_played || {};
-  for (const [map, wrMap] of Object.entries(mapWR)) {
-    if ((mapPlayed[map] || 0) >= 3 && (!bestMap || wrMap > bestMap.wr)) {
-      bestMap = { name: map, wr: wrMap, count: mapPlayed[map] };
+  const mapWR = stats.map_win_percent || {};
+  for (const [map, count] of Object.entries(mapPlayed)) {
+    if (count >= 2 && (!bestMap || count > bestMap.count)) {
+      bestMap = { name: map, count, wr: mapWR[map] || 0 };
     }
   }
 
-  // Main civ by play%
-  let mainCiv = null;
-  const civPlayed = stats.civ_played_percent || {};
-  for (const [civ, pct] of Object.entries(civPlayed)) {
-    if (!mainCiv || pct > mainCiv.pct) mainCiv = { name: civ, pct };
+  // Main opening narrative
+  const primaryOpening = pp.primary_opening || 'Unknown';
+  const stability = pp.opening_stability || 0;
+  let mainStyle = 'Mixed openings';
+  if (primaryOpening && primaryOpening !== 'Unknown' && stability >= 0.4) {
+    const sorted = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+    const top2 = sorted.slice(0, 2);
+    if (top2.length === 1) mainStyle = `${formatOpeningName(top2[0][0])} openings`;
+    else if (top2.length >= 2) mainStyle = `${formatOpeningName(top2[0][0])} / ${formatOpeningName(top2[1][0])}`;
+  }
+
+  // Main weakness (first detectable)
+  const weaknesses = stats.weaknesses || [];
+  let mainWeakness = 'No clear weakness detected';
+  if (weaknesses.length > 0 && weaknesses[0] !== 'No extreme patterns detected') {
+    mainWeakness = weaknesses[0];
   }
 
   // Feudal avg
   const feudalAvg = stats.avg_feudal_hms || 'N/A';
 
+  // Aggression label
+  const aggression = dims.aggression || 0;
+  const aggressionLabel = aggression >= 65 ? 'High' : aggression >= 40 ? 'Moderate' : 'Low';
+
   return `<div class="card" style="padding:20px;">
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap;">
+      <!-- Left: Player name + ELO/WR -->
       <div style="flex:1;min-width:200px;">
-        <div style="font-size:22px;font-weight:800;color:var(--text-primary);">${escapeHtml(stats.player_name || 'Player')}</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">
-          ${stats.rating ? `ELO ${stats.rating}` : ''}
-          ${eapm > 0 ? ` · APM ${eapm}` : ''}
+        <div style="font-size:24px;font-weight:800;color:var(--text-primary);">${escapeHtml(stats.player_name || 'Player')}</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">
+          ${stats.rating ? `${stats.rating} Elo` : ''}
+          ${stats.rating && wr > 0 ? ' · ' : ''}
+          ${wr > 0 ? `${wr}% WR` : ''}
+          ${games > 0 ? ` · ${games} games` : ''}
         </div>
       </div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;">
-        <div style="text-align:center;min-width:60px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('winrate')}</div>
-          <div style="font-size:18px;font-weight:700;color:${wr >= 50 ? 'var(--accent-green)' : 'var(--accent-red)'};margin-top:2px;">${wr}%</div>
-        </div>
-        <div style="text-align:center;min-width:60px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('games')}</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${games}</div>
-        </div>
-        <div style="text-align:center;min-width:60px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${t('streak')}</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px;">${streakText}</div>
-        </div>
-        <div style="text-align:center;min-width:100px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Main Opening</div>
-          <div style="font-size:14px;font-weight:700;color:var(--accent-blue);margin-top:2px;">${formatOpeningName(primaryOpening)}</div>
-          <div style="font-size:10px;color:var(--text-muted);">${stability}% stable</div>
-        </div>
-        ${bestMap ? `<div style="text-align:center;min-width:80px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Best Map</div>
-          <div style="font-size:14px;font-weight:700;color:var(--accent-green);margin-top:2px;">${escapeHtml(bestMap.name)}</div>
-          <div style="font-size:10px;color:var(--text-muted);">${bestMap.wr}% WR</div>
-        </div>` : ''}
-        ${mainCiv ? `<div style="text-align:center;min-width:80px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Main Civ</div>
-          <div style="font-size:14px;font-weight:700;color:var(--accent-orange);margin-top:2px;">${escapeHtml(mainCiv.name)}</div>
-          <div style="font-size:10px;color:var(--text-muted);">${mainCiv.pct}%</div>
-        </div>` : ''}
-        <div style="text-align:center;min-width:80px;">
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Feudal Avg</div>
-          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px;">${feudalAvg}</div>
+      <!-- Right: Rival Snapshot -->
+      <div style="flex:1;min-width:240px;max-width:400px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:10px;">Rival Snapshot</div>
+        <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">🏹</span>
+            <div>
+              <div style="font-size:12px;color:var(--text-muted);">Main style</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(mainStyle)}</div>
+            </div>
+          </div>
+          ${bestMap ? `<div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">🌍</span>
+            <div>
+              <div style="font-size:12px;color:var(--text-muted);">Favorite map</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(bestMap.name)} <span style="font-size:11px;color:var(--text-muted);">(${bestMap.count} games)</span></div>
+            </div>
+          </div>` : ''}
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">🏰</span>
+            <div>
+              <div style="font-size:12px;color:var(--text-muted);">Typical timing</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Feudal ${feudalAvg}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">⚠</span>
+            <div>
+              <div style="font-size:12px;color:var(--text-muted);">Main weakness</div>
+              <div style="font-size:14px;font-weight:600;color:var(--accent-red);">${escapeHtml(mainWeakness)}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -834,13 +851,21 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderPlayerSummaryBanner(stats);
   html += `</div>`;
 
-  // BLOCK 2: STRATEGIC IDENTITY (Knowledge base enriched)
+  // BLOCK 2: PLAYER DNA (civ-independent behavior)
   html += `<div class="block">`;
-  html += `<div class="section-title">Strategic Identity</div>`;
-  html += renderStrategicIdentityCard(stats);
+  html += `<div class="section-title">Player DNA</div>`;
+  html += renderPlayerDNACard(stats);
   html += `</div>`;
 
-  // BLOCK 3: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
+  // BLOCK 3: CIVILIZATION TENDENCIES + PREDICTABILITY
+  html += `<div class="block">`;
+  html += `<div class="section-title">Civilization Tendencies</div>`;
+  html += `<div class="block-grid block-grid-2">`;
+  html += renderCivilizationTendenciesCard(stats);
+  html += renderPredictabilityCard(stats);
+  html += `</div></div>`;
+
+  // BLOCK 4: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
   html += `<div class="block">`;
   html += `<div class="section-title">${t('expectedStrategy')}</div>`;
   html += `<div class="block-grid block-grid-2">`;
@@ -848,14 +873,7 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderRecommendationsCard(stats);
   html += `</div></div>`;
 
-  // BLOCK 4: RIVAL PROFILE (Opening focus)
-  html += `<div class="block">`;
-  html += `<div class="section-title">${t('rival')} ${t('player').toLowerCase()}</div>`;
-  html += `<div class="block-grid">`;
-  html += renderExpectedOpeningCard(stats);
-  html += `</div></div>`;
-
-  // BLOCK 4: TIMING ANALYSIS (Visual timeline + interpretations)
+  // BLOCK 5: TIMING ANALYSIS (Visual timeline + interpretations)
   html += `<div class="block">`;
   html += `<div class="section-title">${t('timingAnalysis')}</div>`;
   html += renderTimingAnalysisCard(stats);
@@ -1170,6 +1188,212 @@ function renderRecommendationsCard(stats) {
 
   html += `</ul></div>`;
   return html;
+}
+
+function renderPlayerDNACard(stats) {
+  const pp = stats.player_profile || {};
+  const perFreq = pp.per_opening_frequency || {};
+  const arch = stats.archetype || {};
+  const dims = arch.dimensions || {};
+  const aggression = dims.aggression || 0;
+  const economy = dims.economy || 0;
+  const versatility = dims.versatility || 0;
+
+  // Opening tendencies
+  const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  let openingsHtml = '';
+  if (sortedOpenings.length > 0) {
+    openingsHtml = `<div style="margin-top:12px;">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;">Opening tendencies</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">`;
+    for (const [name, pct] of sortedOpenings) {
+      openingsHtml += `<div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;height:6px;background:rgba(30,30,46,0.06);border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:var(--accent-blue);border-radius:3px;"></div>
+        </div>
+        <div style="font-size:13px;color:var(--text-primary);min-width:140px;text-align:right;">${formatOpeningName(name)} <span style="color:var(--text-muted);font-size:11px;">${pct}%</span></div>
+      </div>`;
+    }
+    openingsHtml += `</div></div>`;
+  }
+
+  // Economic style
+  const ecoLabel = economy >= 60 ? 'Greedy' : economy >= 35 ? 'Balanced' : 'Conservative';
+
+  // Map preference
+  const mapPlayed = stats.map_played || {};
+  let mapPref = 'Mixed';
+  const mapEntries = Object.entries(mapPlayed).sort((a, b) => b[1] - a[1]);
+  if (mapEntries.length === 1) mapPref = mapEntries[0][0];
+  else if (mapEntries.length >= 2) {
+    const total = Object.values(mapPlayed).reduce((a, b) => a + b, 0);
+    const top1Pct = Math.round((mapEntries[0][1] * 100 / total));
+    if (top1Pct >= 50) mapPref = mapEntries[0][0];
+    else mapPref = `${mapEntries[0][0]} / ${mapEntries[1][0]}`;
+  }
+
+  // Typical behavior bullets
+  const behavior = [];
+  if (aggression >= 55) behavior.push('Likes early map control');
+  if (aggression >= 40 && economy >= 40) behavior.push('Balances aggression with economy');
+  if (economy >= 60) behavior.push('Prioritizes boom over pressure');
+  if (versatility >= 50) behavior.push('Adapts strategy to situation');
+  else if (versatility <= 25) behavior.push('Sticks to preferred strategy');
+  const primary = pp.primary_opening || '';
+  if (primary.includes('scout') || (perFreq['scout_rush'] || 0) >= 25) behavior.push('Prefers cavalry openings');
+  if (primary.includes('archer') || (perFreq['archer_rush'] || 0) >= 25) behavior.push('Comfortable with ranged play');
+  if (primary.includes('fast_castle') || (perFreq['fast_castle'] || 0) >= 25) behavior.push('Avoids prolonged Feudal fights');
+  if (behavior.length === 0) behavior.push('No dominant pattern detected');
+
+  return `<div class="card" style="padding:20px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Aggression</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:4px;">${aggression >= 65 ? 'High' : aggression >= 40 ? 'Moderate' : 'Low'}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${aggression}/100</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Economic style</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:4px;">${ecoLabel}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${economy}/100</div>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Map preference</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(mapPref)}</div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Typical behavior</div>
+      <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary);line-height:1.6;">
+        ${behavior.map(b => `<li>${escapeHtml(b)}</li>`).join('')}
+      </ul>
+    </div>
+    ${openingsHtml}
+  </div>`;
+}
+
+function renderCivilizationTendenciesCard(stats) {
+  const civs = stats.civ_played_percent || {};
+  const sortedCivs = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  let civsHtml = '';
+  if (sortedCivs.length > 0) {
+    civsHtml = `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">`;
+    for (const [civ, pct] of sortedCivs) {
+      civsHtml += `<div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;height:6px;background:rgba(30,30,46,0.06);border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:var(--accent-orange);border-radius:3px;"></div>
+        </div>
+        <div style="font-size:13px;color:var(--text-primary);min-width:120px;text-align:right;">${escapeHtml(civ)} <span style="color:var(--text-muted);font-size:11px;">${pct}%</span></div>
+      </div>`;
+    }
+    civsHtml += `</div>`;
+  }
+
+  // Interpretation using knowledge base
+  const knowledge = cachedKnowledgeBase || {};
+  const archetypeCounts = {};
+  for (const [civ, _] of sortedCivs) {
+    const kb = knowledge[civ];
+    if (kb && kb.archetype) {
+      archetypeCounts[kb.archetype] = (archetypeCounts[kb.archetype] || 0) + 1;
+    }
+  }
+  const topArchetype = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0];
+
+  let interpretation = '';
+  const civCount = Object.keys(civs).length;
+  if (civCount === 0) {
+    interpretation = 'Insufficient civilization data.';
+  } else if (civCount >= 5 && sortedCivs[0][1] <= 40) {
+    interpretation = 'Wide civilization pool. Expected strategies vary significantly based on civ choice.';
+  } else if (sortedCivs[0][1] >= 60) {
+    const mainCiv = sortedCivs[0][0];
+    const kb = knowledge[mainCiv];
+    if (kb && kb.archetype) {
+      interpretation = `Strong preference for ${mainCiv}. Comfortable with ${kb.archetype.replace(/_/g, ' ')} strategies.`;
+    } else {
+      interpretation = `Strong preference for ${mainCiv}. Prepare for their typical unit composition.`;
+    }
+  } else if (topArchetype) {
+    const pct = Math.round((topArchetype[1] * 100) / civCount);
+    interpretation = `${pct}% of played civs have ${topArchetype[0].replace(/_/g, ' ')} strengths. The player is comfortable with that archetype.`;
+  } else {
+    interpretation = 'Civilization history shows mixed preferences.';
+  }
+
+  return `<div class="card" style="padding:20px;">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:12px;">Civilization Preferences</div>
+    ${civsHtml}
+    <div style="padding-top:12px;border-top:1px solid var(--border-subtle);">
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;">${escapeHtml(interpretation)}</div>
+    </div>
+  </div>`;
+}
+
+function renderPredictabilityCard(stats) {
+  const pp = stats.player_profile || {};
+  const perFreq = pp.per_opening_frequency || {};
+  const civs = stats.civ_played_percent || {};
+  const stability = pp.opening_stability || 0;
+  const civCount = Object.keys(civs).length;
+  const openingCount = Object.keys(perFreq).length;
+
+  // Predictability score: 0-100, lower = more predictable
+  let predictability = 50;
+  if (stability >= 0.7) predictability += 30;
+  else if (stability >= 0.4) predictability += 10;
+  else predictability -= 15;
+  if (civCount <= 2) predictability += 15;
+  else if (civCount >= 6) predictability -= 15;
+  if (openingCount <= 2) predictability += 15;
+  else if (openingCount >= 5) predictability -= 10;
+  predictability = Math.max(0, Math.min(100, predictability));
+
+  // Flexibility stars (1-5)
+  let stars = 3;
+  if (predictability >= 75) stars = 1;
+  else if (predictability >= 55) stars = 2;
+  else if (predictability >= 40) stars = 3;
+  else if (predictability >= 20) stars = 4;
+  else stars = 5;
+  const starHtml = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+
+  const label = predictability >= 70 ? 'HIGH' : predictability >= 45 ? 'MODERATE' : 'LOW';
+  const labelColor = predictability >= 70 ? 'var(--accent-red)' : predictability >= 45 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+
+  let narrative = '';
+  if (predictability >= 70) {
+    narrative = 'Very predictable. Prepare a hard counter to their main strategy.';
+  } else if (predictability >= 45) {
+    narrative = 'Somewhat predictable. They have preferences but will adapt.';
+  } else {
+    narrative = 'Adaptive player. Expect multiple strategies across different civs.';
+  }
+
+  const mainCiv = Object.entries(civs).sort((a, b) => b[1] - a[1])[0];
+  const mainOpening = Object.entries(perFreq).sort((a, b) => b[1] - a[1])[0];
+
+  return `<div class="card" style="padding:20px;">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:12px;">Predictability</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <div style="font-size:32px;font-weight:800;color:${labelColor};">${label}</div>
+      <div style="font-size:20px;letter-spacing:2px;color:var(--accent-yellow);">${starHtml}</div>
+    </div>
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:16px;">${narrative}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);">Main opening</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${mainOpening ? formatOpeningName(mainOpening[0]) : 'N/A'}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${mainOpening ? mainOpening[1] + '%' : ''}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);">Main civ</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${mainCiv ? escapeHtml(mainCiv[0]) : 'N/A'}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${mainCiv ? mainCiv[1] + '%' : ''}</div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderKeyInsightsCard(stats) {

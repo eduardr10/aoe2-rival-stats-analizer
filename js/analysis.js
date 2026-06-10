@@ -941,12 +941,6 @@ export function generatePrediction(stats) {
 
 export function interpretTimings(stats) {
   const interpretations = [];
-  const games = stats.analyzed || 1;
-
-  // Military context: avg per game, not total
-  const unitsByAge = stats.units_by_age_period || {};
-  const preCastle = unitsByAge['pre-castle'] || {};
-  const feudalMilitaryAvg = Object.values(preCastle).reduce((sum, u) => sum + (u.avg || 0), 0);
 
   // Feudal: avg time + win/loss differential
   const feudalAvg = stats.avg_feudal || 0;
@@ -957,8 +951,8 @@ export function interpretTimings(stats) {
     if (winAvg != null && lossAvg != null) {
       const gap = lossAvg - winAvg;
       if (gap > 30) conclusion += ` — ${formatHms(gap)} slower in losses`;
+      else if (gap > 10) conclusion += ` — ${formatHms(gap)} gap vs wins`;
     }
-    conclusion += ` · ${feudalMilitaryAvg.toFixed(1)} mil avg pre-Castle`;
     interpretations.push({ timing: 'Feudal', value: formatHms(feudalAvg), conclusion, icon: '→', type: 'neutral' });
   }
 
@@ -971,6 +965,7 @@ export function interpretTimings(stats) {
     if (winAvg != null && lossAvg != null) {
       const gap = lossAvg - winAvg;
       if (gap > 30) conclusion += ` — ${formatHms(gap)} slower in losses`;
+      else if (gap > 10) conclusion += ` — ${formatHms(gap)} gap vs wins`;
     }
     interpretations.push({ timing: 'Castle', value: formatHms(castleAvg), conclusion, icon: '→', type: 'neutral' });
   }
@@ -984,11 +979,12 @@ export function interpretTimings(stats) {
     if (winAvg != null && lossAvg != null) {
       const gap = lossAvg - winAvg;
       if (gap > 30) conclusion += ` — ${formatHms(gap)} slower in losses`;
+      else if (gap > 10) conclusion += ` — ${formatHms(gap)} gap vs wins`;
     }
     interpretations.push({ timing: 'Imperial', value: formatHms(imperialAvg), conclusion, icon: '→', type: 'neutral' });
   }
 
-    return interpretations;
+  return interpretations;
 }
 
 // ============================================================================
@@ -1166,7 +1162,7 @@ export function generateDeepInsights(stats) {
     if (winAvg != null && lossAvg != null) {
       const gap = lossAvg - winAvg;
       if (gap > 1.0) {
-        insights.push(`Opponent produces ${lossAvg.toFixed(1)} ${cat} avg when we lose vs ${winAvg.toFixed(1)} when we win`);
+        insights.push(`${cat.charAt(0).toUpperCase() + cat.slice(1)} pressure is a major factor in defeats — Losses: ${lossAvg.toFixed(1)} avg, Wins: ${winAvg.toFixed(1)} avg`);
       }
     }
   }
@@ -1186,7 +1182,7 @@ export function generateDeepInsights(stats) {
     if (winAvg != null && lossAvg != null) {
       const gap = lossAvg - winAvg;
       if (gap > 1.0) {
-        insights.push(`Opponent makes ${lossAvg.toFixed(1)} ${u.label} avg when we lose vs ${winAvg.toFixed(1)} when we win`);
+        insights.push(`${u.label.charAt(0).toUpperCase() + u.label.slice(1)} pressure is a major factor in defeats — Losses: ${lossAvg.toFixed(1)} avg, Wins: ${winAvg.toFixed(1)} avg`);
       }
     }
   }
