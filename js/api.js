@@ -7,16 +7,26 @@ import {
 const API_BASE = 'https://data.aoe2companion.com';
 const UA_HEADER = 'eduardr10-stats-script';
 
-async function apiFetch(url) {
+async function apiFetch(url, timeoutMs = 15000) {
   const cacheBuster = url.includes('?') ? '&_t=' : '?_t=';
-  const resp = await fetch(url + cacheBuster + Date.now(), {
-    headers: { 'User-Agent': UA_HEADER },
-  });
-  if (!resp.ok) {
-    console.error('API error:', url, resp.status);
+  try {
+    const resp = await fetch(url + cacheBuster + Date.now(), {
+      headers: { 'User-Agent': UA_HEADER },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!resp.ok) {
+      console.error('API error:', url, resp.status);
+      return null;
+    }
+    return await resp.json();
+  } catch (e) {
+    if (e.name === 'TimeoutError') {
+      console.error('API timeout:', url);
+    } else {
+      console.error('API error:', url, e);
+    }
     return null;
   }
-  return await resp.json();
 }
 
 export async function fetchRating(playerId) {

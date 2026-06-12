@@ -618,6 +618,8 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
     }
   }
 
+  allMatches = allMatches.filter(m => m.finished !== null);
+
   allMatches.sort((a, b) => new Date(b.started) - new Date(a.started));
   const maxMatches = effPages * effPerPage;
   if (allMatches.length > maxMatches) {

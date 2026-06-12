@@ -150,9 +150,7 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
     match_id: 'self',
   };
 
-  if (ongoing) {
-    allMatches = allMatches.filter(m => m.finished !== null);
-  }
+  allMatches = allMatches.filter(m => m.finished !== null);
 
   let stats = await analyzeMatches(allMatches, parseInt(playerId), playedCivNum, opponentCivNum, dataMainPlayer);
 
@@ -280,9 +278,7 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
     ongoing,
   };
 
-  if (ongoing) {
-    matches = matches.filter(m => m.finished !== null);
-  }
+  matches = matches.filter(m => m.finished !== null);
 
   let stats = await analyzeMatches(matches, parseInt(analyzeId), playedCivNum, opponentCivNum, dataMainPlayer);
 
