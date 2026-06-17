@@ -77,17 +77,17 @@
       "unit_signature": {
         "title": "Real Army Signature",
         "body": "Your most produced units are {units}. This is what you actually build, not what your civ can build.",
-        "tooltip": "Shows the units you really created across analyzed matches, ordered by total count. The win rate indicates whether you won more often when that unit appeared."
+        "tooltip": "Shows the units you really created across analyzed matches, ordered by total count. Includes each unit's win rate and share of your total army."
       },
       "unit_strength": {
         "title": "Effective Unit",
-        "body": "You win {wr}% of games when producing {unit} ({avg} avg/game, {games} games).",
-        "tooltip": "Identifies a unit with a high win rate across enough games. Only shown when there are at least 3 games with that unit and the win rate is 60% or higher."
+        "body": "You win {wr}% of games when producing {unit} ({avg} avg/game, {games} games, {share}% of your army).",
+        "tooltip": "Identifies a unit with a high win rate, enough games, and at least 5% of your total army. This avoids highlighting units that only appeared in a handful of matches."
       },
       "unit_weakness": {
         "title": "Ineffective Unit",
-        "body": "You win only {wr}% of games when committing to {unit} ({avg} avg/game, {games} games).",
-        "tooltip": "Identifies a unit with a low win rate across enough games. Only shown when there are at least 3 games with that unit and the win rate is 40% or lower."
+        "body": "You win only {wr}% of games when committing to {unit} ({avg} avg/game, {games} games, {share}% of your army).",
+        "tooltip": "Identifies a unit with a low win rate, enough games, and at least 5% of your total army. This avoids highlighting units that only appeared in a handful of matches."
       },
       "civ_context": {
         "title": "Civ Context: {civ}",
@@ -187,7 +187,25 @@
       "scorpion": "Scorpion",
       "ram": "Battering Ram",
       "cavalry_archer": "Cavalry Archer",
-      "hand_cannoneer": "Hand Cannoneer"
+      "hand_cannoneer": "Hand Cannoneer",
+      "slinger": "Slinger",
+      "champi_scout": "Champi Scout",
+      "champi_runner": "Champi Runner",
+      "champi_warrior": "Champi Warrior",
+      "elite_champi_warrior": "Elite Champi Warrior",
+      "bolas_rider": "Bolas Rider",
+      "elite_bolas_rider": "Elite Bolas Rider",
+      "kona": "Kona",
+      "elite_kona": "Elite Kona",
+      "temple_guard": "Temple Guard",
+      "elite_temple_guard": "Elite Temple Guard",
+      "guecha_warrior": "Guecha Warrior",
+      "elite_guecha_warrior": "Elite Guecha Warrior",
+      "ibirapema_warrior": "Ibirapema Warrior",
+      "elite_ibirapema_warrior": "Elite Ibirapema Warrior",
+      "blackwood_archer": "Blackwood Archer",
+      "elite_blackwood_archer": "Elite Blackwood Archer",
+      "catapult_galleon": "Catapult Galleon"
     },
     "openings": {
       "drush": "Drush",
@@ -275,17 +293,17 @@
       "unit_signature": {
         "title": "Firma Real de Ejército",
         "body": "Tus unidades más producidas son {units}. Esto es lo que realmente construyes, no lo que tu civ puede construir.",
-        "tooltip": "Muestra las unidades que realmente creaste en las partidas analizadas, ordenadas por cantidad total. El win rate indica si ganaste más cuando esa unidad apareció."
+        "tooltip": "Muestra las unidades que realmente creaste en las partidas analizadas, ordenadas por cantidad total. Incluye el win rate y el porcentaje de tu ejército total que representa cada una."
       },
       "unit_strength": {
         "title": "Unidad Efectiva",
-        "body": "Ganas el {wr}% de las partidas cuando produces {unit} ({avg} de media/partida, {games} partidas).",
-        "tooltip": "Identifica una unidad con alto win rate y suficientes partidas. Solo se muestra con al menos 3 partidas y win rate del 60% o más."
+        "body": "Ganas el {wr}% de las partidas cuando produces {unit} ({avg} de media/partida, {games} partidas, {share}% de tu ejército).",
+        "tooltip": "Identifica una unidad con alto win rate, suficientes partidas y al menos un 5% de tu ejército total. Evita destacar unidades que solo aparecen en un puñado de partidas."
       },
       "unit_weakness": {
         "title": "Unidad Inefectiva",
-        "body": "Solo ganas el {wr}% de las partidas cuando apuestas por {unit} ({avg} de media/partida, {games} partidas).",
-        "tooltip": "Identifica una unidad con bajo win rate y suficientes partidas. Solo se muestra con al menos 3 partidas y win rate del 40% o menos."
+        "body": "Solo ganas el {wr}% de las partidas cuando apuestas por {unit} ({avg} de media/partida, {games} partidas, {share}% de tu ejército).",
+        "tooltip": "Identifica una unidad con bajo win rate, suficientes partidas y al menos un 5% de tu ejército total. Evita destacar unidades que solo aparecen en un puñado de partidas."
       },
       "civ_context": {
         "title": "Contexto de Civ: {civ}",
@@ -356,8 +374,8 @@
       "duration": "Dur"
     },
     "units": {
-      "skirmisher": "Arrojero",
-      "elite_skirmisher": "Arrojero de Élite",
+      "skirmisher": "Escaramuzador",
+      "elite_skirmisher": "Escaramuzador de Élite",
       "archer": "Arquero",
       "crossbowman": "Ballestero",
       "arbalester": "Arbalestero",
@@ -385,7 +403,25 @@
       "scorpion": "Escorpión",
       "ram": "Ariete",
       "cavalry_archer": "Arquero a Caballo",
-      "hand_cannoneer": "Cañonero"
+      "hand_cannoneer": "Cañonero",
+      "slinger": "Hondero",
+      "champi_scout": "Champi Scout",
+      "champi_runner": "Champi Runner",
+      "champi_warrior": "Champi Warrior",
+      "elite_champi_warrior": "Champi Warrior de Élite",
+      "bolas_rider": "Jinete de Boleadoras",
+      "elite_bolas_rider": "Jinete de Boleadoras de Élite",
+      "kona": "Kona",
+      "elite_kona": "Kona de Élite",
+      "temple_guard": "Guardia del Templo",
+      "elite_temple_guard": "Guardia del Templo de Élite",
+      "guecha_warrior": "Guerrero Guecha",
+      "elite_guecha_warrior": "Guerrero Guecha de Élite",
+      "ibirapema_warrior": "Guerrero Ibirapema",
+      "elite_ibirapema_warrior": "Guerrero Ibirapema de Élite",
+      "blackwood_archer": "Arquero de Madera Negra",
+      "elite_blackwood_archer": "Arquero de Madera Negra de Élite",
+      "catapult_galleon": "Galeón Catapulta"
     },
     "openings": {
       "drush": "Drush",

@@ -17,7 +17,7 @@ rival-stats-analizer/
 │   └── style.css       # All styles
 ├── data/
 │   ├── civilizations.json  # Static civ name→number lookup (45 civs)
-│   ├── knowledge_base.json # Static civ archetypes and strategic context
+│   ├── knowledge_base.json # Static civ archetypes and strategic context (official + pre-Columbian regional civs)
 │   └── i18n.json           # UI translations (en/es)
 └── js/
     ├── app.js          # Main orchestrator
@@ -103,6 +103,7 @@ All configuration comes from URL query parameters:
 - `js/insights.js` generates data-driven conclusions from aggregated match stats (`js/stats.js`).
 - Insights must be anchored to real player behavior (units produced, win/loss differentials, timings, matchups) rather than civ archetypes from `knowledge_base.json`.
 - `knowledge_base.json` is used only as **context** (e.g., "although Vietnamese can go archers/elephants, this player's actual signature is...").
+- Unit effectiveness insights (strength/weakness) require the unit to represent at least 5% of the player's total army in addition to sample-size and win-rate thresholds.
 - Each insight card includes a tooltip explaining the metric and sample size.
 
 ## AI session rules (READ FIRST before any work)

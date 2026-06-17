@@ -15,7 +15,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
   }
 
   function fmtUnitList(units) {
-    return units.map(u => `${unitDisplayName(u.name)} (${u.wr}% WR)`).join(', ');
+    return units.map(u => `${unitDisplayName(u.name)} (${u.wr}% WR, ${u.share || 0}% army)`).join(', ');
   }
 
   // 1. Real army signature
@@ -37,7 +37,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
   // 2. Effective unit
   const effectiveness = Object.entries(stats.unit_effectiveness || {})
     .map(([name, d]) => ({ name, ...d }))
-    .filter(d => d.label === 'strong' && d.matches >= 3)
+    .filter(d => d.label === 'strong' && d.matches >= 3 && (d.share || 0) >= 5)
     .sort((a, b) => b.wr - a.wr || b.matches - a.matches);
   if (effectiveness.length > 0) {
     const top = effectiveness[0];
@@ -54,6 +54,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
         wr: top.wr,
         avg: top.avg,
         games: top.matches,
+        share: top.share,
       },
       tooltipKey: 'insights.unit_strength.tooltip',
     });
@@ -62,7 +63,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
   // 3. Ineffective unit
   const weaknesses = Object.entries(stats.unit_effectiveness || {})
     .map(([name, d]) => ({ name, ...d }))
-    .filter(d => d.label === 'weak' && d.matches >= 3)
+    .filter(d => d.label === 'weak' && d.matches >= 3 && (d.share || 0) >= 5)
     .sort((a, b) => a.wr - b.wr || b.matches - a.matches);
   if (weaknesses.length > 0) {
     const top = weaknesses[0];
@@ -79,6 +80,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
         wr: top.wr,
         avg: top.avg,
         games: top.matches,
+        share: top.share,
       },
       tooltipKey: 'insights.unit_weakness.tooltip',
     });

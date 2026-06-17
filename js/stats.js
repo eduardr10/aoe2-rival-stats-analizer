@@ -11,21 +11,26 @@ const UNIT_CATEGORIES = {
     'battle_elephant', 'elite_battle_elephant', 'steppe_lancer', 'elite_steppe_lancer',
     'hussar', 'light_cavalry', 'winged_hussar', 'tarkan', 'elite_tarkan', 'konnik', 'keshik', 'leitis',
     'boyar', 'magyar_huszar', 'war_elephant', 'mameluke', 'cataphract',
-    'shrivamsha_rider', 'sosso_guard', 'monaspa'],
+    'shrivamsha_rider', 'sosso_guard', 'monaspa',
+    'bolas_rider', 'elite_bolas_rider'],
   archers: ['archer', 'crossbowman', 'arbalester', 'skirmisher', 'elite_skirmisher',
     'cavalry_archer', 'heavy_cavalry_archer', 'hand_cannoneer', 'genoese_crossbowman',
     'plumed_archer', 'chu_ko_nu', 'longbowman', 'war_wagon', 'elephant_archer',
     'rattan_archer', 'arambai', 'genitour', 'elite_genitour', 'camel_archer', 'elite_camel_archer',
-    'slinger'],
+    'slinger', 'blackwood_archer', 'elite_blackwood_archer'],
   infantry: ['militia', 'men-at-arms', 'long_swordsman', 'two-handed_swordsman', 'champion',
     'spearman', 'pikeman', 'halberdier', 'eagle_warrior', 'elite_eagle_warrior',
     'ghulam', 'teutonic_knight', 'berserk', 'jaguar_warrior', 'samurai', 'woad_raider',
     'throwing_axeman', 'huskarl', 'shotel_warrior', 'condottiero',
     'karambit_warrior', 'elite_karambit_warrior', 'serjeant', 'flemish_militia',
-    'obuch', 'urumi_swordsman', 'elite_urumi_swordsman', 'chakram_thrower', 'elite_chakram_thrower'],
+    'obuch', 'urumi_swordsman', 'elite_urumi_swordsman', 'chakram_thrower', 'elite_chakram_thrower',
+    'champi_scout', 'champi_runner', 'champi_warrior', 'elite_champi_warrior',
+    'kona', 'elite_kona', 'temple_guard', 'elite_temple_guard', 'guecha_warrior', 'elite_guecha_warrior',
+    'ibirapema_warrior', 'elite_ibirapema_warrior'],
   siege: ['battering_ram', 'capped_ram', 'siege_ram', 'mangonel', 'onager', 'siege_onager',
     'scorpion', 'heavy_scorpion', 'bombard_cannon', 'trebuchet', 'siege_tower',
-    'petard', 'flaming_camel', 'organ_gun', 'ballista_elephant', 'houfnice'],
+    'petard', 'flaming_camel', 'organ_gun', 'ballista_elephant', 'houfnice',
+    'catapult_galleon'],
 };
 
 function categorizeUnit(unitName) {
@@ -899,9 +904,15 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   }
 
   // Unit effectiveness: WR when unit is produced, plus signature
+  const totalMilitaryUnits = Object.entries(stats.unit_stats || {})
+    .filter(([name]) => name !== 'villager')
+    .reduce((sum, [, d]) => sum + d.total, 0);
+  const MIN_ARMY_SHARE = 0.05;
   stats.unit_effectiveness = {};
   for (const [unitName, data] of Object.entries(stats.unit_stats || {})) {
     if (unitName === 'villager' || data.matches < 3) continue;
+    const share = totalMilitaryUnits > 0 ? data.total / totalMilitaryUnits : 0;
+    const rawLabel = data.wr >= 65 ? 'strong' : data.wr <= 40 ? 'weak' : 'neutral';
     stats.unit_effectiveness[unitName] = {
       total: data.total,
       avg: data.avg,
@@ -909,7 +920,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       wins: data.wins,
       losses: data.losses,
       wr: data.wr,
-      label: data.wr >= 65 ? 'strong' : data.wr <= 40 ? 'weak' : 'neutral',
+      share: Math.round(share * 1000) / 10,
+      label: share >= MIN_ARMY_SHARE ? rawLabel : 'neutral',
     };
   }
 
@@ -917,7 +929,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   const signatureUnits = Object.entries(stats.unit_effectiveness)
     .sort((a, b) => b[1].total - a[1].total)
     .slice(0, 3)
-    .map(([name, d]) => ({ name, total: d.total, wr: d.wr }));
+    .map(([name, d]) => ({ name, total: d.total, wr: d.wr, share: d.share }));
   stats.unit_signature = signatureUnits;
 
   // Age consistency + slow impact

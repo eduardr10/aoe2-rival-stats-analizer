@@ -210,10 +210,10 @@
     "late_game_rating": 6
   },
   "Incas": {
-    "archetype": "infantry_sling",
+    "archetype": "infantry_sling_champi",
     "strong_ages": ["feudal", "castle"],
-    "power_spikes": ["eagle", "slinger", "kamayuk"],
-    "expected_transitions": ["eagle", "slinger", "kamayuk"],
+    "power_spikes": ["champi", "slinger", "kamayuk"],
+    "expected_transitions": ["champi", "slinger", "kamayuk"],
     "weaknesses": ["cavalry", "hand_cannoneer"],
     "economy_rating": 7,
     "mobility_rating": 4,
@@ -508,5 +508,35 @@
     "economy_rating": 7,
     "mobility_rating": 6,
     "late_game_rating": 7
+  },
+  "Muisca": {
+    "archetype": "infantry_sling",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["champi", "slinger", "temple_guard", "guecha_warrior"],
+    "expected_transitions": ["champi", "slinger", "temple_guard", "guecha_warrior"],
+    "weaknesses": ["cavalry", "hand_cannoneer"],
+    "economy_rating": 7,
+    "mobility_rating": 4,
+    "late_game_rating": 6
+  },
+  "Tupi": {
+    "archetype": "infantry_archer",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["champi", "blackwood_archer", "ibirapema_warrior"],
+    "expected_transitions": ["champi", "blackwood_archer", "ibirapema_warrior"],
+    "weaknesses": ["cavalry", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 5,
+    "late_game_rating": 6
+  },
+  "Mapuche": {
+    "archetype": "cavalry_infantry",
+    "strong_ages": ["feudal", "castle"],
+    "power_spikes": ["champi", "bolas_rider", "kona"],
+    "expected_transitions": ["champi", "bolas_rider", "kona"],
+    "weaknesses": ["archers", "siege"],
+    "economy_rating": 7,
+    "mobility_rating": 6,
+    "late_game_rating": 6
   }
 }
