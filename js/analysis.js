@@ -274,7 +274,10 @@ export function classifyOpening(features, baselines) {
     ffaScore += 0.4;
     ffaCriteria.push(['High Military', '> Baseline + IQR', '+0.4', features.total_military_by_early]);
   }
-  if (ffaScore >= 0.6) {
+  // Only classify as generic fast-feudal-pressure when no more specific opening was found.
+  // This avoids overlapping a scout rush or archer rush with this catch-all bucket.
+  const hasSpecificOpening = openings.some(o => ['drush', 'maa_rush', 'scout_rush', 'archer_rush', 'tower_rush'].includes(o.label));
+  if (ffaScore >= 0.6 && !hasSpecificOpening) {
     openings.push({ label: 'fast_feudal_aggressive', score: Math.round(ffaScore * 100) / 100, matched: ffaCriteria });
   }
 
