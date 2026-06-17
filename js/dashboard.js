@@ -19,178 +19,13 @@ import { loadKnowledgeBase, buildStrategicAnalysis } from './strategic_engine.js
 import { analyzeMatchup } from './matchup_engine.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName } from './utils.js';
 import { initWebSocket } from './websocket.js';
+import { initI18n, t, formatOpeningName, getLanguage, setLanguage } from './i18n.js';
+import { generateInsights, renderInsightCard } from './insights.js';
 
 const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
 const PAGES = 1;
 let cachedKnowledgeBase = null;
-
-// ============================================================================
-// INTERNATIONALIZATION
-// ============================================================================
-
-const i18n = {
-  en: {
-    rating: 'Rating',
-    winrate: 'Winrate',
-    games: 'Games',
-    streak: 'Streak',
-    expectedStrategy: 'Expected Strategy',
-    probability: 'Probability',
-    recommendedCounter: 'Recommended Counter',
-    preferredPlaystyle: 'Preferred Playstyle',
-    mostPlayedCivs: 'Most Played Civs',
-    expectedOpening: 'Expected Opening',
-    analysisConfidence: 'Analysis Confidence',
-    timingAnalysis: 'Timing Analysis',
-    ageTimeline: 'Age Timeline',
-    interpretation: 'Interpretation',
-    weaknessesDetected: 'Weaknesses Detected',
-    majorThreats: 'Major Threats',
-    strategicRecommendations: 'Strategic Recommendations',
-    detailedAnalysis: 'Detailed Analysis',
-    historicalData: 'Historical Data',
-    overview: 'Overview',
-    military: 'Military',
-    economy: 'Economy',
-    openings: 'Openings',
-    maps: 'Maps',
-    civs: 'Civs',
-    liveMatch: 'Live Match',
-    vs: 'vs',
-    currentGame: 'Current Game',
-    player: 'Player',
-    rival: 'Rival',
-    liveAdvantage: 'Live Advantage',
-    styleComparison: 'Style Comparison',
-    criticalTimings: 'Critical Timings',
-    expectedTransitions: 'Expected Transitions',
-    detailedMetrics: 'Detailed Metrics',
-    loading: 'Loading profile...',
-    error: 'Error loading data.',
-    noData: 'No data available',
-    avgEapm: 'Avg EAPM',
-    aggressionScore: 'Aggression Score',
-    armyComposition: 'Army Composition',
-    feudal: 'Feudal',
-    castle: 'Castle',
-    imperial: 'Imperial',
-    pattern: 'Pattern',
-    apply: 'Apply',
-    analyzeRival: 'Analyze Rival',
-    viewProfile: 'View profile',
-    support: 'Support',
-    createdBy: 'Created by',
-    helpingText: 'Helping AoE2 players make better decisions.',
-    youtube: 'YouTube',
-    twitch: 'Twitch',
-    ladder: 'Ladder',
-    from: 'From',
-    to: 'To',
-    ranked1v1: 'Ranked 1v1',
-    unranked: 'Unranked',
-    unitsByAge: 'Units by Age',
-    techs: 'Techs',
-    avgUnitsPerGame: 'Avg Units/Game',
-  },
-  es: {
-    rating: 'ELO',
-    winrate: 'Winrate',
-    games: 'Partidas',
-    streak: 'Racha',
-    expectedStrategy: 'Estrategia Esperada',
-    probability: 'Probabilidad',
-    recommendedCounter: 'Contra-recomendación',
-    preferredPlaystyle: 'Estilo de Juego',
-    mostPlayedCivs: 'Civs Frecuentes',
-    expectedOpening: 'Apertura Esperada',
-    analysisConfidence: 'Confianza del Análisis',
-    timingAnalysis: 'Análisis de Tiempos',
-    ageTimeline: 'Timeline de Edades',
-    interpretation: 'Interpretación',
-    weaknessesDetected: 'Debilidades Detectadas',
-    majorThreats: 'Amenazas Mayores',
-    strategicRecommendations: 'Recomendaciones Estratégicas',
-    detailedAnalysis: 'Análisis Detallado',
-    historicalData: 'Datos Históricos',
-    overview: 'Resumen',
-    military: 'Militar',
-    economy: 'Economía',
-    openings: 'Aperturas',
-    maps: 'Mapas',
-    civs: 'Civilizaciones',
-    liveMatch: 'Partida en Vivo',
-    vs: 'vs',
-    currentGame: 'Partida Actual',
-    player: 'Jugador',
-    rival: 'Rival',
-    liveAdvantage: 'Ventaja en Vivo',
-    styleComparison: 'Comparación de Estilos',
-    criticalTimings: 'Tiempos Críticos',
-    expectedTransitions: 'Transiciones Esperadas',
-    detailedMetrics: 'Métricas Detalladas',
-    loading: 'Cargando perfil...',
-    error: 'Error cargando datos.',
-    noData: 'Sin datos disponibles',
-    avgEapm: 'EAPM Promedio',
-    aggressionScore: 'Puntuación de Agresión',
-    armyComposition: 'Composición del Ejército',
-    feudal: 'Feudal',
-    castle: 'Castillos',
-    imperial: 'Imperial',
-    pattern: 'Patrón',
-    apply: 'Aplicar',
-    analyzeRival: 'Analizar Rival',
-    viewProfile: 'Ver perfil',
-    support: 'Apoyar',
-    createdBy: 'Creado por',
-    helpingText: 'Ayudando a jugadores de AoE2 a tomar mejores decisiones.',
-    youtube: 'YouTube',
-    twitch: 'Twitch',
-    ladder: 'Ladder',
-    from: 'Desde',
-    to: 'Hasta',
-    ranked1v1: 'Ranked 1v1',
-    unranked: 'No rankeado',
-    unitsByAge: 'Unidades por Edad',
-    techs: 'Tecnologías',
-    avgUnitsPerGame: 'Prom. Unid./Partida',
-  },
-};
-
-let currentLang = 'en';
-
-function t(key) {
-  return i18n[currentLang]?.[key] || i18n.en[key] || key;
-}
-
-function detectLanguage() {
-  const saved = localStorage.getItem('aoe2-lang');
-  if (saved && i18n[saved]) return saved;
-  const navLang = navigator.language || navigator.userLanguage || 'en';
-  if (navLang.startsWith('es')) return 'es';
-  return 'en';
-}
-
-function setLanguage(lang) {
-  if (i18n[lang]) {
-    currentLang = lang;
-    localStorage.setItem('aoe2-lang', lang);
-  }
-}
-
-// Detect on load
-currentLang = detectLanguage();
-
-// Try IP-based detection (GitHub Pages friendly — free API)
-try {
-  fetch('https://ipapi.co/json/').then(r => r.json()).then(data => {
-    const country = data.country_code;
-    if (country === 'ES' || country === 'MX' || country === 'AR' || country === 'CL' || country === 'CO' || country === 'PE' || country === 'VE' || country === 'UY' || country === 'EC' || country === 'BO' || country === 'PY' || country === 'PA' || country === 'CR' || country === 'NI' || country === 'HN' || country === 'GT' || country === 'SV' || country === 'DO' || country === 'PR' || country === 'CU') {
-      setLanguage('es');
-    }
-  }).catch(() => {});
-} catch (e) {}
 
 // App configuration for creator links
 window.app_config = {
@@ -255,6 +90,12 @@ function syncURLToControls(cfg) {
 // ============================================================================
 
 export async function initDashboard() {
+  // Initialize language and knowledge base before rendering
+  await initI18n();
+  if (!cachedKnowledgeBase) {
+    cachedKnowledgeBase = await loadKnowledgeBase();
+  }
+
   let cfg = readControls();
   syncURLToControls(cfg);
 
@@ -262,14 +103,14 @@ export async function initDashboard() {
   setupSocialLinks();
 
   const container = document.getElementById('dashboard');
-  container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div>Cargando perfil...</div>';
+  container.innerHTML = `<div class="loading-state"><div class="loading-spinner"></div>${t('app.loading')}</div>`;
 
   try {
     currentPlayerStats = await runSelfAnalysis(cfg.playerId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
     renderDashboard(currentPlayerStats);
   } catch (err) {
     console.error(err);
-    container.innerHTML = '<div class="loading-state">Error cargando datos.</div>';
+    container.innerHTML = `<div class="loading-state">${t('app.error')}</div>`;
   }
 
   // WebSocket for live match detection
@@ -387,6 +228,23 @@ function setupEventListeners() {
   const donationLinks = document.getElementById('donation-links');
   if (donationLinks && window.app_config?.support_enabled) {
     donationLinks.style.display = 'block';
+  }
+
+  // Language selector
+  const langSelector = document.getElementById('lang-selector');
+  if (langSelector) {
+    langSelector.value = getLanguage();
+    langSelector.addEventListener('change', () => {
+      const lang = langSelector.value;
+      const url = new URL(window.location.href);
+      if (lang) {
+        setLanguage(lang);
+        url.searchParams.set('lang', lang);
+      } else {
+        url.searchParams.delete('lang');
+      }
+      window.location.href = url.toString();
+    });
   }
 
   // Player search
@@ -746,6 +604,20 @@ function updateHeader(stats) {
     headerBadge.className = `wr-badge ${(stats.win_percent || 0) >= 50 ? 'good' : 'bad'}`;
   }
   if (headerAvatar) headerAvatar.textContent = (stats.player_name || '?').charAt(0).toUpperCase();
+
+  // Companion profile link
+  const headerSocial = document.querySelector('.header-social');
+  if (headerSocial && stats.player_id) {
+    let companionLink = headerSocial.querySelector('.btn-companion');
+    if (!companionLink) {
+      companionLink = document.createElement('a');
+      companionLink.className = 'btn-companion';
+      companionLink.target = '_blank';
+      companionLink.textContent = t('app.viewOnCompanion');
+      headerSocial.insertBefore(companionLink, headerSocial.firstChild);
+    }
+    companionLink.href = `https://www.aoe2companion.com/players/${stats.player_id}`;
+  }
 }
 
 function renderPlayerSummaryBanner(stats) {
@@ -853,52 +725,68 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderPlayerSummaryBanner(stats);
   html += `</div>`;
 
-  // BLOCK 2: PLAYER DNA (civ-independent behavior)
-  html += `<div class="block">`;
-  html += `<div class="section-title">Player DNA</div>`;
-  html += renderPlayerDNACard(stats);
-  html += `</div>`;
+  // BLOCK 2: DATA-DRIVEN INSIGHTS
+  const insights = generateInsights(stats, cachedKnowledgeBase || {});
+  html += renderInsightsSection(insights);
 
-  // BLOCK 3: CIVILIZATION TENDENCIES + PREDICTABILITY
+  // BLOCK 3: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
   html += `<div class="block">`;
-  html += `<div class="section-title">Civilization Tendencies</div>`;
-  html += `<div class="block-grid block-grid-2">`;
-  html += renderCivilizationTendenciesCard(stats);
-  html += renderPredictabilityCard(stats);
-  html += `</div></div>`;
-
-  // BLOCK 4: PREDICTION ENGINE + STRATEGIC RECOMMENDATIONS
-  html += `<div class="block">`;
-  html += `<div class="section-title">${t('expectedStrategy')}</div>`;
+  html += `<div class="section-title">${t('sections.predictedStrategy')}</div>`;
   html += `<div class="block-grid block-grid-2">`;
   html += renderPredictionEngineCard(stats);
   html += renderRecommendationsCard(stats);
   html += `</div></div>`;
 
-  // BLOCK 5: TIMING ANALYSIS (Visual timeline + interpretations)
+  // BLOCK 4: TIMING ANALYSIS (Visual timeline + interpretations)
   html += `<div class="block">`;
-  html += `<div class="section-title">${t('timingAnalysis')}</div>`;
+  html += `<div class="section-title">${t('sections.timingAnalysis')}</div>`;
   html += renderTimingAnalysisCard(stats);
   html += `</div>`;
 
-  // BLOCK 5: KEY INSIGHTS (deep data-driven analysis)
+  // BLOCK 5: KEY INSIGHTS (top 3 insights as a focused list)
   html += `<div class="block">`;
-  html += `<div class="section-title">Key Insights</div>`;
-  html += renderKeyInsightsCard(stats);
+  html += `<div class="section-title">${t('sections.keyInsights')}</div>`;
+  html += renderKeyInsightsCard(insights);
   html += `</div>`;
 
   // BLOCK 6: Detailed Analysis with tabs
   html += `<div class="block">`;
-  html += `<div class="section-title">${t('detailedAnalysis')}</div>`;
+  html += `<div class="section-title">${t('sections.detailedAnalysis')}</div>`;
   html += renderDetailedAnalysisCard(stats);
   html += `</div>`;
 
   // BLOCK 7: Historical Data
   html += `<div class="block">`;
-  html += `<div class="section-title">${t('historicalData')}</div>`;
+  html += `<div class="section-title">${t('sections.historicalData')}</div>`;
   html += renderHistoricalDataCard(stats);
   html += `</div>`;
 
+  return html;
+}
+
+function renderInsightsSection(insights) {
+  if (!insights || insights.length === 0) return '';
+
+  const categories = [
+    { key: 'army', title: t('sections.army') },
+    { key: 'economy', title: t('sections.economy') },
+    { key: 'matchups', title: t('sections.matchups') },
+    { key: 'pattern', title: t('sections.insights') },
+    { key: 'context', title: t('sections.insights') },
+  ];
+
+  let html = '';
+  for (const cat of categories) {
+    const catInsights = insights.filter(i => i.category === cat.key);
+    if (catInsights.length === 0) continue;
+    html += `<div class="block">`;
+    html += `<div class="section-title">${cat.title}</div>`;
+    html += `<div class="block-grid block-grid-3">`;
+    for (const insight of catInsights) {
+      html += renderInsightCard(insight);
+    }
+    html += `</div></div>`;
+  }
   return html;
 }
 
@@ -1398,23 +1286,27 @@ function renderPredictabilityCard(stats) {
   </div>`;
 }
 
-function renderKeyInsightsCard(stats) {
-  const insights = stats.deep_insights || [];
+function renderKeyInsightsCard(insights) {
+  const topInsights = (insights || []).slice(0, 3);
 
-  if (insights.length === 0) {
+  if (topInsights.length === 0) {
     return `<div class="card">
-      <div class="card-subtitle">${t('noData')}</div>
+      <div class="card-subtitle">${t('app.noData')}</div>
     </div>`;
   }
 
   let rows = '';
-  for (const insight of insights) {
-    rows += `<div style="padding:12px 0;border-bottom:1px solid var(--border-subtle);font-size:14px;color:var(--text-primary);line-height:1.5;">
-      <span style="color:var(--accent-blue);font-weight:700;margin-right:6px;">•</span>${escapeHtml(insight)}
+  for (const insight of topInsights) {
+    const title = t(insight.titleKey, insight.params);
+    const body = t(insight.bodyKey, insight.params);
+    const typeClass = insight.type;
+    rows += `<div class="key-insight-row key-insight-${typeClass}">
+      <div class="key-insight-title">${escapeHtml(title)}</div>
+      <div class="key-insight-body">${escapeHtml(body)}</div>
     </div>`;
   }
 
-  return `<div class="card" style="padding:20px 24px;background:linear-gradient(135deg, var(--bg-card) 0%, #f0f4ff 100%);border-left:3px solid var(--accent-blue);">
+  return `<div class="card key-insights-card">
     ${rows}
   </div>`;
 }
@@ -1489,12 +1381,12 @@ function buildOverviewPanel(stats, id) {
 
   return `<div class="tab-panel active" data-panel="${id}">
     <div class="tab-stat-grid">
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('games')}</div><div class="tab-stat-value">${games}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('winrate')}</div><div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">W/L</div><div class="tab-stat-value">${wins} / ${games - wins}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('streak')}</div><div class="tab-stat-value">${streakText}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('rating')}</div><div class="tab-stat-value">${stats.rating || '—'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('avgEapm')}</div><div class="tab-stat-value">${stats.avg_eapm || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.games')}</div><div class="tab-stat-value">${games}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.winrate')}</div><div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.wl')}</div><div class="tab-stat-value">${wins} / ${games - wins}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.streak')}</div><div class="tab-stat-value">${streakText}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('header.rating')}</div><div class="tab-stat-value">${stats.rating || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.avgEapm')}</div><div class="tab-stat-value">${stats.avg_eapm || '—'}</div></div>
     </div>
   </div>`;
 }
@@ -1528,10 +1420,10 @@ function buildMilitaryPanel(stats, id) {
 
   return `<div class="tab-panel" data-panel="${id}">
     <div class="tab-stat-grid" style="margin-bottom:12px;">
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('aggressionScore')}</div><div class="tab-stat-value">${aggression}/100</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('avgUnitsPerGame')}</div><div class="tab-stat-value">${totalAvg}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.aggressionScore')}</div><div class="tab-stat-value">${aggression}/100</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.avgUnitsPerGame')}</div><div class="tab-stat-value">${totalAvg}</div></div>
     </div>
-    ${compositionHtml ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">${t('armyComposition')}</div>${compositionHtml}</div>` : `<div class="card-subtitle" style="padding:10px 0;">${t('noData')}</div>`}
+    ${compositionHtml ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">${t('tabs.armyComposition')}</div>${compositionHtml}</div>` : `<div class="card-subtitle" style="padding:10px 0;">${t('app.noData')}</div>`}
   </div>`;
 }
 
@@ -1539,12 +1431,12 @@ function buildEconomyPanel(stats, id) {
   const tcTiming = stats.tc_timing || {};
   return `<div class="tab-panel" data-panel="${id}">
     <div class="tab-stat-grid">
-      <div class="tab-stat-item"><div class="tab-stat-label">2nd TC Avg</div><div class="tab-stat-value">${tcTiming.tc2_avg_hms || 'N/A'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">3rd TC Avg</div><div class="tab-stat-value">${tcTiming.tc3_avg_hms || 'N/A'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Wheelbarrow</div><div class="tab-stat-value">${stats.wheel_barrow_avg != null ? formatHms(stats.wheel_barrow_avg) : 'N/A'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Hand Cart</div><div class="tab-stat-value">${stats.hand_cart_avg != null ? formatHms(stats.hand_cart_avg) : 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.2ndTc')}</div><div class="tab-stat-value">${tcTiming.tc2_avg_hms || 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.3rdTc')}</div><div class="tab-stat-value">${tcTiming.tc3_avg_hms || 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.wheelbarrow')}</div><div class="tab-stat-value">${stats.wheel_barrow_avg != null ? formatHms(stats.wheel_barrow_avg) : 'N/A'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.handCart')}</div><div class="tab-stat-value">${stats.hand_cart_avg != null ? formatHms(stats.hand_cart_avg) : 'N/A'}</div></div>
     </div>
-    ${stats.boom_tendency ? `<div class="card-subtitle" style="margin-top:10px;">Boom tendency: <strong>${stats.boom_tendency}</strong></div>` : ''}
+    ${stats.boom_tendency ? `<div class="card-subtitle" style="margin-top:10px;">${t('tabs.boomTendency')}: <strong>${stats.boom_tendency}</strong></div>` : ''}
   </div>`;
 }
 
@@ -1567,9 +1459,9 @@ function buildOpeningsPanel(stats, id) {
   }
 
   return `<div class="tab-panel" data-panel="${id}">
-    <div style="margin-bottom:8px;"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Opening Distribution</div>
-    ${barsHtml || '<div class="card-subtitle">No opening data available.</div>'}</div>
-    ${pp.primary_opening ? `<div class="card-subtitle">Primary: <strong>${formatOpeningName(pp.primary_opening)}</strong> (${Math.round((pp.opening_stability || 0) * 100)}% stability)</div>` : ''}
+    <div style="margin-bottom:8px;"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${t('tabs.openingDistribution')}</div>
+    ${barsHtml || `<div class="card-subtitle">${t('app.noData')}</div>`}</div>
+    ${pp.primary_opening ? `<div class="card-subtitle">${t('sections.openings')}: <strong>${formatOpeningName(pp.primary_opening)}</strong> (${Math.round((pp.opening_stability || 0) * 100)}%)</div>` : ''}
   </div>`;
 }
 
@@ -1673,10 +1565,10 @@ function buildMapsPanel(stats, id) {
 
   return `<div class="tab-panel" data-panel="${id}">
     <div style="margin-bottom:12px;">
-      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Top Maps</div>
-      ${topMaps || '<div class="card-subtitle">No map data.</div>'}
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${t('tabs.topMaps')}</div>
+      ${topMaps || `<div class="card-subtitle">${t('app.noData')}</div>`}
     </div>
-    ${worstMaps ? `<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Worst Maps</div>${worstMaps}</div>` : ''}
+    ${worstMaps ? `<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${t('tabs.worstMaps')}</div>${worstMaps}</div>` : ''}
   </div>`;
 }
 
@@ -1695,8 +1587,8 @@ function buildCivsPanel(stats, id) {
   }
 
   return `<div class="tab-panel" data-panel="${id}">
-    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Civilizations</div>
-    ${civsHtml || '<div class="card-subtitle">No civilization data.</div>'}
+    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${t('tabs.civilizations')}</div>
+    ${civsHtml || `<div class="card-subtitle">${t('app.noData')}</div>`}
   </div>`;
 }
 
@@ -1726,7 +1618,7 @@ function renderHistoricalDataCard(stats) {
 
   return `<div class="card" style="padding:12px;">
     <table class="history-table">
-      <thead><tr><th>Date</th><th>Map</th><th>Civs</th><th>Res</th><th>Opening</th><th>Dur</th></tr></thead>
+      <thead><tr><th>${t('controls.from')}</th><th>${t('sections.maps')}</th><th>${t('sections.civs')}</th><th>Res</th><th>${t('sections.openings')}</th><th>Dur</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -2099,21 +1991,6 @@ function setupTabs(container) {
 // ============================================================================
 // HELPERS
 // ============================================================================
-
-function formatOpeningName(label) {
-  if (!label) return 'Unknown';
-  const map = {
-    'drush': 'Drush',
-    'scout_rush': 'Scout Rush',
-    'archer_rush': 'Archer Rush',
-    'fast_feudal_aggressive': 'Fast Feudal Aggro',
-    'fast_castle': 'Fast Castle',
-    'tower_rush': 'Tower Rush',
-    'Standard/Unknown': 'Mixed',
-    'Mixed/No Data': 'Mixed',
-  };
-  return map[label] || label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
 
 function escapeHtml(text) {
   if (!text) return '';

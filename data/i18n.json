@@ -1,0 +1,376 @@
+{
+  "meta": {
+    "default": "en",
+    "supported": ["en", "es"]
+  },
+  "en": {
+    "app": {
+      "title": "AoE2 Rival Analyzer",
+      "subtitle": "Decision Assistant",
+      "loading": "Loading profile...",
+      "error": "Error loading data.",
+      "noData": "No data available",
+      "viewOnCompanion": "View on AoE2 Companion",
+      "createdBy": "Created by",
+      "dataBy": "Data by"
+    },
+    "header": {
+      "rating": "Rating",
+      "games": "Games",
+      "winrate": "Winrate"
+    },
+    "controls": {
+      "ladder": "Ladder",
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "ranked1v1": "Ranked 1v1",
+      "unranked": "Unranked"
+    },
+    "live": {
+      "title": "LIVE MATCH",
+      "vs": "vs",
+      "analyzeRival": "Analyze Rival",
+      "viewProfile": "View profile"
+    },
+    "sections": {
+      "playerSummary": "Player Summary",
+      "insights": "Insights",
+      "army": "Army",
+      "economy": "Economy",
+      "matchups": "Matchups",
+      "predictedStrategy": "Predicted Strategy",
+      "recommendations": "Recommendations",
+      "timingAnalysis": "Timing Analysis",
+      "keyInsights": "Key Insights",
+      "detailedAnalysis": "Detailed Analysis",
+      "historicalData": "Historical Data",
+      "overview": "Overview",
+      "military": "Military",
+      "openings": "Openings",
+      "maps": "Maps",
+      "civs": "Civilizations",
+      "unitsByAge": "Units by Age",
+      "techs": "Technologies"
+    },
+    "insights": {
+      "confidenceHigh": "High confidence",
+      "confidenceMedium": "Medium confidence",
+      "confidenceLow": "Low confidence",
+      "sample": "Sample",
+      "games": "games",
+      "strength": "Strength",
+      "weakness": "Weakness",
+      "pattern": "Pattern",
+      "context": "Context",
+      "recommendation": "Recommendation",
+      "unit_signature": {
+        "title": "Real Army Signature",
+        "body": "Your most produced units are {units}. This is what you actually build, not what your civ can build.",
+        "tooltip": "Shows the units you really created across analyzed matches, ordered by total count. The win rate indicates whether you won more often when that unit appeared."
+      },
+      "unit_strength": {
+        "title": "Effective Unit",
+        "body": "You win {wr}% of games when producing {unit} ({avg} avg/game, {games} games).",
+        "tooltip": "Identifies a unit with a high win rate across enough games. Only shown when there are at least 3 games with that unit and the win rate is 60% or higher."
+      },
+      "unit_weakness": {
+        "title": "Ineffective Unit",
+        "body": "You win only {wr}% of games when committing to {unit} ({avg} avg/game, {games} games).",
+        "tooltip": "Identifies a unit with a low win rate across enough games. Only shown when there are at least 3 games with that unit and the win rate is 40% or lower."
+      },
+      "civ_context": {
+        "title": "Civ Context: {civ}",
+        "body": "You play {civ} in {pct}% of games. Although {civ} is known for {archetype}, your actual signature is {signature}.",
+        "tooltip": "Compares the strategic potential of your most-played civilization with the units you really produce. The civ archetype is context, not a claim about your play."
+      },
+      "civ_dependency": {
+        "title": "Civ Dependency",
+        "body": "You win {mainWr}% with {civ} ({mainGames} games) but only {otherWr}% with other civs ({otherGames} games).",
+        "tooltip": "Compares your win rate with your main civilization against your win rate with all other civilizations. Requires at least 3 games in each group."
+      },
+      "opening_map": {
+        "title": "Opening-Map Fit",
+        "body": "{opening} works best on {bestMap} ({bestWr}% WR, {bestGames} games) and worst on {worstMap} ({worstWr}% WR, {worstGames} games).",
+        "tooltip": "Crosses your classified openings with maps to find where each opening succeeds or fails. Requires at least 3 games per opening-map pair."
+      },
+      "age_consistency": {
+        "title": "Inconsistent {age} Age",
+        "body": "Your {age} age varies by {std} on average. When you are {gap} slower than your average, your WR drops to {slowWr}%.",
+        "tooltip": "Measures the standard deviation of your age-up times and compares outcomes when you are slower than your own average."
+      },
+      "timing_critical": {
+        "title": "Critical Timing: {tech}",
+        "body": "You research {tech} {gap} slower in losses ({lossAvg}) than in wins ({winAvg}).",
+        "tooltip": "Finds economic or military technologies whose timing strongly correlates with winning or losing."
+      },
+      "matchup_weakness": {
+        "title": "Weak Matchup: {civ}",
+        "body": "You win only {wr}% against {civ} ({games} games). In those losses, rivals average {unitAvg} {unit}.",
+        "tooltip": "Identifies opponent civilizations you struggle against and the specific units that appear in those defeats."
+      },
+      "early_pressure": {
+        "title": "Early Pressure Impact",
+        "body": "In wins you produce {winRatio} military units per villager before {minutes} min; in losses only {lossRatio}.",
+        "tooltip": "Compares your military-to-villager ratio in early game between victories and defeats."
+      },
+      "apm_efficiency": {
+        "title": "APM Efficiency",
+        "body": "Your APM is {winApm} in wins and {lossApm} in losses, but you produce {winUnits} units/min in wins vs {lossUnits} in losses.",
+        "tooltip": "Compares actions per minute with actual unit production to see whether speed translates into output."
+      },
+      "key_insight": {
+        "title": "Key Finding",
+        "body": "{text}",
+        "tooltip": "The data point with the largest win/loss differential in your current sample."
+      }
+    },
+    "tabs": {
+      "games": "Games",
+      "winrate": "Winrate",
+      "wl": "W/L",
+      "streak": "Streak",
+      "avgEapm": "Avg EAPM",
+      "aggressionScore": "Aggression Score",
+      "avgUnitsPerGame": "Avg Units/Game",
+      "armyComposition": "Army Composition",
+      "2ndTc": "2nd TC Avg",
+      "3rdTc": "3rd TC Avg",
+      "wheelbarrow": "Wheelbarrow",
+      "handCart": "Hand Cart",
+      "boomTendency": "Boom tendency",
+      "openingDistribution": "Opening Distribution",
+      "topMaps": "Top Maps",
+      "worstMaps": "Worst Maps",
+      "civilizations": "Civilizations"
+    },
+    "units": {
+      "skirmisher": "Skirmisher",
+      "elite_skirmisher": "Elite Skirmisher",
+      "archer": "Archer",
+      "crossbowman": "Crossbowman",
+      "arbalester": "Arbalester",
+      "fire_lancer": "Fire Lancer",
+      "scout_cavalry": "Scout Cavalry",
+      "light_cavalry": "Light Cavalry",
+      "hussar": "Hussar",
+      "knight": "Knight",
+      "cavalier": "Cavalier",
+      "paladin": "Paladin",
+      "camel_rider": "Camel Rider",
+      "spearman": "Spearman",
+      "pikeman": "Pikeman",
+      "halberdier": "Halberdier",
+      "militia": "Militia",
+      "men-at-arms": "Men-at-Arms",
+      "long_swordsman": "Long Swordsman",
+      "two-handed_swordsman": "Two-Handed Swordsman",
+      "champion": "Champion",
+      "villager": "Villager",
+      "trebuchet": "Trebuchet",
+      "bombard_cannon": "Bombard Cannon",
+      "mangonel": "Mangonel",
+      "onager": "Onager",
+      "scorpion": "Scorpion",
+      "ram": "Battering Ram",
+      "cavalry_archer": "Cavalry Archer",
+      "hand_cannoneer": "Hand Cannoneer"
+    },
+    "openings": {
+      "drush": "Drush",
+      "maa_rush": "MAA Rush",
+      "scout_rush": "Scout Rush",
+      "archer_rush": "Archer Rush",
+      "fast_feudal_aggressive": "Fast Feudal Aggro",
+      "fast_castle": "Fast Castle",
+      "tower_rush": "Tower Rush",
+      "Standard/Unknown": "Mixed",
+      "Mixed/No Data": "Mixed"
+    }
+  },
+  "es": {
+    "app": {
+      "title": "AoE2 Rival Analyzer",
+      "subtitle": "Asistente de Decisiones",
+      "loading": "Cargando perfil...",
+      "error": "Error cargando datos.",
+      "noData": "Sin datos disponibles",
+      "viewOnCompanion": "Ver en AoE2 Companion",
+      "createdBy": "Creado por",
+      "dataBy": "Datos de"
+    },
+    "header": {
+      "rating": "ELO",
+      "games": "Partidas",
+      "winrate": "Winrate"
+    },
+    "controls": {
+      "ladder": "Ladder",
+      "from": "Desde",
+      "to": "Hasta",
+      "apply": "Aplicar",
+      "ranked1v1": "Ranked 1v1",
+      "unranked": "No rankeado"
+    },
+    "live": {
+      "title": "PARTIDA EN VIVO",
+      "vs": "vs",
+      "analyzeRival": "Analizar Rival",
+      "viewProfile": "Ver perfil"
+    },
+    "sections": {
+      "playerSummary": "Resumen del Jugador",
+      "insights": "Conclusiones",
+      "army": "Ejército",
+      "economy": "Economía",
+      "matchups": "Matchups",
+      "predictedStrategy": "Estrategia Predecida",
+      "recommendations": "Recomendaciones",
+      "timingAnalysis": "Análisis de Tiempos",
+      "keyInsights": "Conclusiones Clave",
+      "detailedAnalysis": "Análisis Detallado",
+      "historicalData": "Datos Históricos",
+      "overview": "Resumen",
+      "military": "Militar",
+      "openings": "Aperturas",
+      "maps": "Mapas",
+      "civs": "Civilizaciones",
+      "unitsByAge": "Unidades por Edad",
+      "techs": "Tecnologías"
+    },
+    "insights": {
+      "confidenceHigh": "Alta confianza",
+      "confidenceMedium": "Confianza media",
+      "confidenceLow": "Baja confianza",
+      "sample": "Muestra",
+      "games": "partidas",
+      "strength": "Fortaleza",
+      "weakness": "Debilidad",
+      "pattern": "Patrón",
+      "context": "Contexto",
+      "recommendation": "Recomendación",
+      "unit_signature": {
+        "title": "Firma Real de Ejército",
+        "body": "Tus unidades más producidas son {units}. Esto es lo que realmente construyes, no lo que tu civ puede construir.",
+        "tooltip": "Muestra las unidades que realmente creaste en las partidas analizadas, ordenadas por cantidad total. El win rate indica si ganaste más cuando esa unidad apareció."
+      },
+      "unit_strength": {
+        "title": "Unidad Efectiva",
+        "body": "Ganas el {wr}% de las partidas cuando produces {unit} ({avg} de media/partida, {games} partidas).",
+        "tooltip": "Identifica una unidad con alto win rate y suficientes partidas. Solo se muestra con al menos 3 partidas y win rate del 60% o más."
+      },
+      "unit_weakness": {
+        "title": "Unidad Inefectiva",
+        "body": "Solo ganas el {wr}% de las partidas cuando apuestas por {unit} ({avg} de media/partida, {games} partidas).",
+        "tooltip": "Identifica una unidad con bajo win rate y suficientes partidas. Solo se muestra con al menos 3 partidas y win rate del 40% o menos."
+      },
+      "civ_context": {
+        "title": "Contexto de Civ: {civ}",
+        "body": "Juegas {civ} en el {pct}% de tus partidas. Aunque {civ} es conocida por {archetype}, tu firma real es {signature}.",
+        "tooltip": "Compara el potencial estratégico de tu civilización más jugada con las unidades que realmente produces. El arquetipo de la civ es contexto, no una afirmación sobre tu juego."
+      },
+      "civ_dependency": {
+        "title": "Dependencia de Civilización",
+        "body": "Ganas el {mainWr}% con {civ} ({mainGames} partidas) pero solo el {otherWr}% con otras civilizaciones ({otherGames} partidas).",
+        "tooltip": "Compara tu win rate con tu civilización principal contra tu win rate con el resto de civilizaciones. Requiere al menos 3 partidas en cada grupo."
+      },
+      "opening_map": {
+        "title": "Apertura y Mapa",
+        "body": "{opening} funciona mejor en {bestMap} ({bestWr}% WR, {bestGames} partidas) y peor en {worstMap} ({worstWr}% WR, {worstGames} partidas).",
+        "tooltip": "Cruza tus aperturas clasificadas con los mapas para encontrar dónde funciona cada una. Requiere al menos 3 partidas por combinación."
+      },
+      "age_consistency": {
+        "title": "Edad {age} Inconsistente",
+        "body": "Tu edad {age} varía {std} de media. Cuando subes {gap} más lento que tu promedio, tu WR cae al {slowWr}%.",
+        "tooltip": "Mide la desviación estándar de tus tiempos de subida de edad y compara el resultado cuando eres más lento que tu propio promedio."
+      },
+      "timing_critical": {
+        "title": "Timing Crítico: {tech}",
+        "body": "Investigas {tech} {gap} más tarde en derrotas ({lossAvg}) que en victorias ({winAvg}).",
+        "tooltip": "Encuentra tecnologías económicas o militares cuyo timing se correlaciona fuertemente con ganar o perder."
+      },
+      "matchup_weakness": {
+        "title": "Matchup Débil: {civ}",
+        "body": "Solo ganas el {wr}% contra {civ} ({games} partidas). En esas derrotas, los rivales promedian {unitAvg} {unit}.",
+        "tooltip": "Identifica civilizaciones oponentes contra las que tienes dificultades y las unidades específicas que aparecen en esas derrotas."
+      },
+      "early_pressure": {
+        "title": "Impacto de la Presión Temprana",
+        "body": "En victorias produces {winRatio} unidades militares por aldeano antes del minuto {minutes}; en derrotas solo {lossRatio}.",
+        "tooltip": "Compara tu ratio militar/aldeano en early game entre victorias y derrotas."
+      },
+      "apm_efficiency": {
+        "title": "Eficiencia de APM",
+        "body": "Tu APM es {winApm} en victorias y {lossApm} en derrotas, pero produces {winUnits} unidades/min en victorias frente a {lossUnits} en derrotas.",
+        "tooltip": "Compara las acciones por minuto con la producción real de unidades para ver si la velocidad se traduce en output."
+      },
+      "key_insight": {
+        "title": "Hallazgo Clave",
+        "body": "{text}",
+        "tooltip": "El dato con la mayor diferencia victoria/derrota en tu muestra actual."
+      }
+    },
+    "tabs": {
+      "games": "Partidas",
+      "winrate": "Winrate",
+      "wl": "V/D",
+      "streak": "Racha",
+      "avgEapm": "EAPM Promedio",
+      "aggressionScore": "Puntuación de Agresión",
+      "avgUnitsPerGame": "Prom. Unid./Partida",
+      "armyComposition": "Composición del Ejército",
+      "2ndTc": "2º TC Medio",
+      "3rdTc": "3º TC Medio",
+      "wheelbarrow": "Carretilla",
+      "handCart": "Carro de Mano",
+      "boomTendency": "Tendencia a boom",
+      "openingDistribution": "Distribución de Aperturas",
+      "topMaps": "Mapas Principales",
+      "worstMaps": "Peores Mapas",
+      "civilizations": "Civilizaciones"
+    },
+    "units": {
+      "skirmisher": "Arrojero",
+      "elite_skirmisher": "Arrojero de Élite",
+      "archer": "Arquero",
+      "crossbowman": "Ballestero",
+      "arbalester": "Arbalestero",
+      "fire_lancer": "Lancero de Fuego",
+      "scout_cavalry": "Explorador",
+      "light_cavalry": "Caballería Ligera",
+      "hussar": "Húsar",
+      "knight": "Caballero",
+      "cavalier": "Caballero Imperial",
+      "paladin": "Paladín",
+      "camel_rider": "Jinete de Camello",
+      "spearman": "Lancero",
+      "pikeman": "Piquero",
+      "halberdier": "Alabardero",
+      "militia": "Milicia",
+      "men-at-arms": "Hombres de Armas",
+      "long_swordsman": "Espadachín",
+      "two-handed_swordsman": "Espadachín de Dos Manos",
+      "champion": "Campeón",
+      "villager": "Aldeano",
+      "trebuchet": "Trebuchet",
+      "bombard_cannon": "Cañón Bombarda",
+      "mangonel": "Mangonel",
+      "onager": "Onagro",
+      "scorpion": "Escorpión",
+      "ram": "Ariete",
+      "cavalry_archer": "Arquero a Caballo",
+      "hand_cannoneer": "Cañonero"
+    },
+    "openings": {
+      "drush": "Drush",
+      "maa_rush": "MAA Rush",
+      "scout_rush": "Scout Rush",
+      "archer_rush": "Archer Rush",
+      "fast_feudal_aggressive": "Fast Feudal Aggro",
+      "fast_castle": "Fast Castle",
+      "tower_rush": "Tower Rush",
+      "Standard/Unknown": "Mixto",
+      "Mixed/No Data": "Mixto"
+    }
+  }
+}

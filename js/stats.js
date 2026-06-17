@@ -124,6 +124,16 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   const allOppFeatures = [];
   const matchMeta = []; // { mapName, meCiv, winner } per match
 
+  // Early pressure tracking
+  const earlyPressureWins = []; // military/villager ratio before 10 min
+  const earlyPressureLosses = [];
+  const midPressureWins = []; // military/villager ratio before 15 min
+  const midPressureLosses = [];
+
+  // Total military unit counts by result (for APM efficiency)
+  let totalMilitaryUnitsWins = 0;
+  let totalMilitaryUnitsLosses = 0;
+
   // Unidades por periodo de edad
   const unitsByAgePeriod = {
     'pre-feudal': {},
@@ -267,6 +277,41 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     for (const [cat, total] of Object.entries(matchCatTotals)) {
       if (!targetCatTotals[cat]) targetCatTotals[cat] = [];
       targetCatTotals[cat].push(total);
+    }
+
+    // Early pressure ratios by result
+    let earlyMilitary = 0;
+    let earlyVillagers = 0;
+    let midMilitary = 0;
+    let midVillagers = 0;
+    let matchMilitaryTotal = 0;
+    for (const u of queuedUnits) {
+      if (!u.unit || !u.timestamp) continue;
+      const uSec = parseTimestamp(u.timestamp);
+      if (uSec === null) continue;
+      const rawName = u.unit.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+      const amount = u.amount || 1;
+      const isVillager = rawName === 'villager';
+      if (!isVillager) matchMilitaryTotal += amount;
+      if (uSec <= 600) {
+        if (isVillager) earlyVillagers += amount;
+        else earlyMilitary += amount;
+      }
+      if (uSec <= 900) {
+        if (isVillager) midVillagers += amount;
+        else midMilitary += amount;
+      }
+    }
+    const earlyRatio = earlyMilitary / Math.max(1, earlyVillagers);
+    const midRatio = midMilitary / Math.max(1, midVillagers);
+    if (winner) {
+      earlyPressureWins.push(earlyRatio);
+      midPressureWins.push(midRatio);
+      totalMilitaryUnitsWins += matchMilitaryTotal;
+    } else {
+      earlyPressureLosses.push(earlyRatio);
+      midPressureLosses.push(midRatio);
+      totalMilitaryUnitsLosses += matchMilitaryTotal;
     }
 
     // Unidades por periodo de edad
@@ -839,6 +884,167 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       unit_types: ctx.unitTypes,
       avg_count: avg,
       samples: ctx.values.length,
+    };
+  }
+
+  // ============================================================================
+  // INSIGHT METRICS (real behavior, not civ archetypes)
+  // ============================================================================
+
+  function stdDev(arr) {
+    if (!arr || arr.length < 2) return 0;
+    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const variance = arr.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / arr.length;
+    return Math.round(Math.sqrt(variance) * 100) / 100;
+  }
+
+  // Unit effectiveness: WR when unit is produced, plus signature
+  stats.unit_effectiveness = {};
+  for (const [unitName, data] of Object.entries(stats.unit_stats || {})) {
+    if (unitName === 'villager' || data.matches < 3) continue;
+    stats.unit_effectiveness[unitName] = {
+      total: data.total,
+      avg: data.avg,
+      matches: data.matches,
+      wins: data.wins,
+      losses: data.losses,
+      wr: data.wr,
+      label: data.wr >= 65 ? 'strong' : data.wr <= 40 ? 'weak' : 'neutral',
+    };
+  }
+
+  // Top 3 real units for signature
+  const signatureUnits = Object.entries(stats.unit_effectiveness)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 3)
+    .map(([name, d]) => ({ name, total: d.total, wr: d.wr }));
+  stats.unit_signature = signatureUnits;
+
+  // Age consistency + slow impact
+  stats.age_time_std = {};
+  stats.age_slow_impact = {};
+  for (const age of AGES) {
+    const times = stats.age_times[age] || [];
+    const std = stdDev(times);
+    stats.age_time_std[age] = std;
+    const avgTime = stats['avg_' + age] || 0;
+    if (avgTime > 0 && times.length >= 5) {
+      const slowTimes = times.filter(t => t > avgTime);
+      const slowCount = slowTimes.length;
+      const slowWinsCount = (stats.age_times_wins[age] || []).filter(t => t > avgTime).length;
+      stats.age_slow_impact[age] = {
+        std,
+        slowCount,
+        slowWins: slowWinsCount,
+        slowWr: slowCount > 0 ? Math.round((slowWinsCount * 100 / slowCount) * 100) / 100 : 0,
+      };
+    }
+  }
+
+  // Civ dependency
+  const sortedCivsByPlay = Object.entries(stats.civ_played || {}).sort((a, b) => b[1] - a[1]);
+  if (sortedCivsByPlay.length > 0) {
+    const [mainCiv, mainGames] = sortedCivsByPlay[0];
+    const mainWins = stats.civ_win[mainCiv] || 0;
+    const mainLosses = stats.civ_loss[mainCiv] || 0;
+    let otherWins = 0;
+    let otherLosses = 0;
+    for (let i = 1; i < sortedCivsByPlay.length; i++) {
+      const [civ] = sortedCivsByPlay[i];
+      otherWins += stats.civ_win[civ] || 0;
+      otherLosses += stats.civ_loss[civ] || 0;
+    }
+    const totalCivGames = (stats.civ_played && Object.values(stats.civ_played).reduce((a, b) => a + b, 0)) || 0;
+    stats.civ_dependency = {
+      mainCiv,
+      mainPct: totalCivGames ? Math.round((mainGames * 100 / totalCivGames) * 100) / 100 : 0,
+      mainGames,
+      mainWr: mainGames > 0 ? Math.round((mainWins * 100 / mainGames) * 100) / 100 : 0,
+      otherGames: otherWins + otherLosses,
+      otherWr: (otherWins + otherLosses) > 0 ? Math.round((otherWins * 100 / (otherWins + otherLosses)) * 100) / 100 : 0,
+    };
+  }
+
+  // Opening x Map performance (best/worst map per opening)
+  stats.opening_map_performance = {};
+  for (const [opening, maps] of Object.entries(stats.opening_map_wr || {})) {
+    let best = null;
+    let worst = null;
+    for (const [mapName, data] of Object.entries(maps)) {
+      const total = (data.wins || 0) + (data.losses || 0);
+      if (total < 2) continue;
+      const wr = Math.round((data.wins * 100 / total) * 100) / 100;
+      if (!best || wr > best.wr) best = { map: mapName, wr, total };
+      if (!worst || wr < worst.wr) worst = { map: mapName, wr, total };
+    }
+    if (best && worst && best.map !== worst.map) {
+      stats.opening_map_performance[opening] = { best, worst };
+    }
+  }
+
+  // Critical economic timings: wins vs losses gaps
+  stats.economic_gaps = [];
+  const ecoChecks = [
+    { key: 'wheel_barrow', win: stats.wheel_barrow_win_avg, loss: stats.wheel_barrow_loss_avg, name: 'Wheelbarrow' },
+    { key: 'hand_cart', win: stats.hand_cart_win_avg, loss: stats.hand_cart_loss_avg, name: 'Hand Cart' },
+    { key: 'tc2', win: null, loss: null },
+  ];
+  for (const check of ecoChecks) {
+    if (check.key === 'tc2') {
+      // TC2 times not stored per result; skip for now
+      continue;
+    }
+    if (check.win != null && check.loss != null && check.loss - check.win > 30) {
+      stats.economic_gaps.push({
+        tech: check.name,
+        gap: Math.round((check.loss - check.win) * 100) / 100,
+        winAvg: formatHms(check.win),
+        lossAvg: formatHms(check.loss),
+      });
+    }
+  }
+
+  // Early pressure ratios (military / villager before 10 and 15 min)
+  stats.early_pressure = {
+    before10: { wins: avgArr(earlyPressureWins), losses: avgArr(earlyPressureLosses) },
+    before15: { wins: avgArr(midPressureWins), losses: avgArr(midPressureLosses) },
+  };
+
+  // Matchup weaknesses: opponent civs with low WR and their units in our losses
+  stats.matchup_weaknesses = [];
+  for (const [civ, wr] of Object.entries(stats.opp_civ_win_percent || {})) {
+    if (wr > 40) continue;
+    const total = ((stats.opp_civ_stats[civ]?.wins || 0) + (stats.opp_civ_stats[civ]?.losses || 0));
+    if (total < 3) continue;
+    const lossUnitAvgs = {};
+    for (const [unit, totals] of Object.entries(stats.opp_unit_stats_losses || {})) {
+      lossUnitAvgs[unit] = avgArr(totals);
+    }
+    const topLossUnits = Object.entries(lossUnitAvgs)
+      .filter(([_, avg]) => avg > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([name, avg]) => ({ name, avg: Math.round(avg * 100) / 100 }));
+    stats.matchup_weaknesses.push({ civ, wr, games: total, topLossUnits });
+  }
+
+  // APM efficiency
+  if (stats.avg_eapm_wins != null && stats.avg_eapm_losses != null) {
+    const winGames = stats.total_wins || 1;
+    const lossGames = (stats.analyzed - stats.total_wins) || 1;
+    const durs = [];
+    for (const m of matches) {
+      if (m.started && m.finished) {
+        const dur = (new Date(m.finished) - new Date(m.started)) / 1000;
+        if (dur > 0 && dur < 7200) durs.push(dur);
+      }
+    }
+    const avgDurationMin = durs.length ? (durs.reduce((a, b) => a + b, 0) / durs.length) / 60 : 25;
+    stats.apm_efficiency = {
+      winApm: Math.round(stats.avg_eapm_wins),
+      lossApm: Math.round(stats.avg_eapm_losses),
+      winUnitsPerMin: Math.round((totalMilitaryUnitsWins / winGames / avgDurationMin) * 100) / 100,
+      lossUnitsPerMin: Math.round((totalMilitaryUnitsLosses / lossGames / avgDurationMin) * 100) / 100,
     };
   }
 

@@ -16,7 +16,9 @@ rival-stats-analizer/
 ├── css/
 │   └── style.css       # All styles
 ├── data/
-│   └── civilizations.json  # Static civ name→number lookup (45 civs)
+│   ├── civilizations.json  # Static civ name→number lookup (45 civs)
+│   ├── knowledge_base.json # Static civ archetypes and strategic context
+│   └── i18n.json           # UI translations (en/es)
 └── js/
     ├── app.js          # Main orchestrator
     ├── api.js          # HTTP fetch wrappers (with cache integration)
@@ -25,7 +27,9 @@ rival-stats-analizer/
     ├── render.js       # DOM overlay builder (auto-hide after 12s)
     ├── websocket.js    # WebSocket for ongoing matches
     ├── cache.js        # IndexedDB local cache (matches, analysis, profiles)
-    └── utils.js        # Helpers
+    ├── utils.js        # Helpers
+    ├── i18n.js         # Language detection and translations
+    └── insights.js     # Data-driven insight generator
 ```
 
 ## Technology constraints (NEVER violate)
@@ -51,6 +55,7 @@ All configuration comes from URL query parameters:
 | `pages` | `1` | Number of pages to fetch |
 | `per_page` | `10` | Matches per page |
 | `ongoing` | `false` | If `true`, filter to finished matches only |
+| `lang` | (auto) | Force UI language: `es` or `en`. Overrides IP/browser detection |
 
 ## Core business logic (must be preserved)
 
@@ -85,6 +90,20 @@ All configuration comes from URL query parameters:
 - `GET https://data.aoe2companion.com/api/matches?profile_ids=&leaderboard_ids=&page=&per_page=&direction=forward` — match list
 - `GET https://data.aoe2companion.com/api/matches/{matchId}/analysis?language=es` — match analysis JSON
 - `wss://socket.aoe2companion.com/listen?handler=ongoing-matches&profile_ids={player_id}` — live match events
+
+## Internationalization
+
+- Language detection order: `?lang=` URL parameter → `localStorage` (`aoe2-lang`) → IP geolocation via `https://ipapi.co/json/` → `navigator.language`.
+- Supported languages: `en`, `es`.
+- All UI text, tooltips, and insight messages are translated via `js/i18n.js` and `data/i18n.json`.
+- Static strings must not be hard-coded in render functions; use `t('key')`.
+
+## Insights engine
+
+- `js/insights.js` generates data-driven conclusions from aggregated match stats (`js/stats.js`).
+- Insights must be anchored to real player behavior (units produced, win/loss differentials, timings, matchups) rather than civ archetypes from `knowledge_base.json`.
+- `knowledge_base.json` is used only as **context** (e.g., "although Vietnamese can go archers/elephants, this player's actual signature is...").
+- Each insight card includes a tooltip explaining the metric and sample size.
 
 ## AI session rules (READ FIRST before any work)
 1. This is a **static site for GitHub Pages**. Never add server-side code, build tools, or npm packages.
