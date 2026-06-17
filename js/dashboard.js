@@ -641,17 +641,17 @@ function renderPlayerSummaryBanner(stats) {
   // Main opening narrative
   const primaryOpening = pp.primary_opening || 'Unknown';
   const stability = pp.opening_stability || 0;
-  let mainStyle = 'Mixed openings';
+  let mainStyle = t('banner.mixedOpenings');
   if (primaryOpening && primaryOpening !== 'Unknown' && stability >= 0.4) {
     const sorted = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
     const top2 = sorted.slice(0, 2);
-    if (top2.length === 1) mainStyle = `${formatOpeningName(top2[0][0])} openings`;
+    if (top2.length === 1) mainStyle = `${formatOpeningName(top2[0][0])}`;
     else if (top2.length >= 2) mainStyle = `${formatOpeningName(top2[0][0])} / ${formatOpeningName(top2[1][0])}`;
   }
 
   // Main weakness (first detectable)
   const weaknesses = stats.weaknesses || [];
-  let mainWeakness = 'No clear weakness detected';
+  let mainWeakness = t('banner.noWeakness');
   if (weaknesses.length > 0 && weaknesses[0] !== 'No extreme patterns detected') {
     mainWeakness = weaknesses[0];
   }
@@ -669,41 +669,41 @@ function renderPlayerSummaryBanner(stats) {
       <div style="flex:1;min-width:200px;">
         <div style="font-size:24px;font-weight:800;color:var(--text-primary);">${escapeHtml(stats.player_name || 'Player')}</div>
         <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">
-          ${stats.rating ? `${stats.rating} Elo` : ''}
+          ${stats.rating ? `${stats.rating} ${t('header.rating')}` : ''}
           ${stats.rating && wr > 0 ? ' · ' : ''}
-          ${wr > 0 ? `${wr}% WR` : ''}
-          ${games > 0 ? ` · ${games} games` : ''}
+          ${wr > 0 ? `${wr}% ${t('header.winrate')}` : ''}
+          ${games > 0 ? ` · ${games} ${t('header.games')}` : ''}
         </div>
       </div>
       <!-- Right: Rival Snapshot -->
       <div style="flex:1;min-width:240px;max-width:400px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:10px;">Rival Snapshot</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:10px;">${t('banner.rivalSnapshot')}</div>
         <div style="display:grid;grid-template-columns:1fr;gap:8px;">
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:16px;">🏹</span>
             <div>
-              <div style="font-size:12px;color:var(--text-muted);">Main style</div>
+              <div style="font-size:12px;color:var(--text-muted);">${t('banner.mainStyle')}</div>
               <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(mainStyle)}</div>
             </div>
           </div>
           ${bestMap ? `<div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:16px;">🌍</span>
             <div>
-              <div style="font-size:12px;color:var(--text-muted);">Favorite map</div>
-              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(bestMap.name)} <span style="font-size:11px;color:var(--text-muted);">(${bestMap.count} games)</span></div>
+              <div style="font-size:12px;color:var(--text-muted);">${t('banner.favoriteMap')}</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(bestMap.name)} <span style="font-size:11px;color:var(--text-muted);">(${bestMap.count} ${t('banner.games')})</span></div>
             </div>
           </div>` : ''}
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:16px;">🏰</span>
             <div>
-              <div style="font-size:12px;color:var(--text-muted);">Typical timing</div>
-              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Feudal ${feudalAvg}</div>
+              <div style="font-size:12px;color:var(--text-muted);">${t('banner.typicalTiming')}</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${t('sections.openings')} ${feudalAvg}</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:16px;">⚠</span>
             <div>
-              <div style="font-size:12px;color:var(--text-muted);">Main weakness</div>
+              <div style="font-size:12px;color:var(--text-muted);">${t('banner.mainWeakness')}</div>
               <div style="font-size:14px;font-weight:600;color:var(--accent-red);">${escapeHtml(mainWeakness)}</div>
             </div>
           </div>
@@ -1618,7 +1618,7 @@ function renderHistoricalDataCard(stats) {
 
   return `<div class="card" style="padding:12px;">
     <table class="history-table">
-      <thead><tr><th>${t('controls.from')}</th><th>${t('sections.maps')}</th><th>${t('sections.civs')}</th><th>Res</th><th>${t('sections.openings')}</th><th>Dur</th></tr></thead>
+      <thead><tr><th>${t('tabs.date')}</th><th>${t('sections.maps')}</th><th>${t('sections.civs')}</th><th>${t('tabs.result')}</th><th>${t('sections.openings')}</th><th>${t('tabs.duration')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;

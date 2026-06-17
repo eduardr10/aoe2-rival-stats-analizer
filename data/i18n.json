@@ -19,6 +19,16 @@
       "games": "Games",
       "winrate": "Winrate"
     },
+    "banner": {
+      "rivalSnapshot": "Rival Snapshot",
+      "mainStyle": "Main style",
+      "favoriteMap": "Favorite map",
+      "typicalTiming": "Typical timing",
+      "mainWeakness": "Main weakness",
+      "noWeakness": "No clear weakness detected",
+      "mixedOpenings": "Mixed openings",
+      "games": "games"
+    },
     "controls": {
       "ladder": "Ladder",
       "from": "From",
@@ -142,7 +152,10 @@
       "openingDistribution": "Opening Distribution",
       "topMaps": "Top Maps",
       "worstMaps": "Worst Maps",
-      "civilizations": "Civilizations"
+      "civilizations": "Civilizations",
+      "date": "Date",
+      "result": "Res",
+      "duration": "Dur"
     },
     "units": {
       "skirmisher": "Skirmisher",
@@ -203,6 +216,16 @@
       "rating": "ELO",
       "games": "Partidas",
       "winrate": "Winrate"
+    },
+    "banner": {
+      "rivalSnapshot": "Resumen del Rival",
+      "mainStyle": "Estilo principal",
+      "favoriteMap": "Mapa favorito",
+      "typicalTiming": "Timing típico",
+      "mainWeakness": "Debilidad principal",
+      "noWeakness": "No se detecta debilidad clara",
+      "mixedOpenings": "Aperturas mixtas",
+      "games": "partidas"
     },
     "controls": {
       "ladder": "Ladder",
@@ -327,7 +350,10 @@
       "openingDistribution": "Distribución de Aperturas",
       "topMaps": "Mapas Principales",
       "worstMaps": "Peores Mapas",
-      "civilizations": "Civilizaciones"
+      "civilizations": "Civilizaciones",
+      "date": "Fecha",
+      "result": "Res",
+      "duration": "Dur"
     },
     "units": {
       "skirmisher": "Arrojero",
