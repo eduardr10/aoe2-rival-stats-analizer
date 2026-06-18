@@ -8,8 +8,8 @@ import {
 import { loadKnowledgeBase } from './strategic_engine.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName, escapeHtml } from './utils.js';
 import { initWebSocket } from './websocket.js';
-import { initI18n, t, formatOpeningName, getLanguage, setLanguage } from './i18n.js';
-import { generateInsights, renderInsightCard } from './insights.js';
+import { initI18n, t, formatOpeningName, getLanguage, setLanguage, unitDisplayName } from './i18n.js';
+import { generateInsights } from './insights.js';
 
 const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
@@ -559,15 +559,15 @@ function updateHeader(stats) {
   }
   if (headerAvatar) headerAvatar.textContent = (stats.player_name || '?').charAt(0).toUpperCase();
 
-  const headerSocial = document.querySelector('.header-social');
-  if (headerSocial && stats.player_id) {
-    let companionLink = headerSocial.querySelector('.btn-companion');
+  const playerBar = document.getElementById('player-bar');
+  if (playerBar && stats.player_id) {
+    let companionLink = playerBar.querySelector('.btn-companion');
     if (!companionLink) {
       companionLink = document.createElement('a');
       companionLink.className = 'btn-companion';
       companionLink.target = '_blank';
       companionLink.textContent = t('app.viewOnCompanion');
-      headerSocial.insertBefore(companionLink, headerSocial.firstChild);
+      playerBar.querySelector('.player-bar-inner').appendChild(companionLink);
     }
     companionLink.href = `https://www.aoe2companion.com/players/${stats.player_id}`;
   }
@@ -730,88 +730,220 @@ function renderExecutiveSummary(stats) {
 function renderFindingsSection(stats, insights) {
   if (!insights || insights.length === 0) return '';
 
-  let html = `<div class="block">
+  // Separate insights by category, excluding repetitive age-consistency cards
+  const strengthInsights = insights.filter(i => i.type === 'strength');
+  const weaknessInsights = insights.filter(i => i.type === 'weakness');
+  const patternInsights = insights.filter(i => i.type === 'pattern');
+
+  const heroStrength = strengthInsights[0] || null;
+  const heroWeakness = weaknessInsights[0] || null;
+
+  return `<div class="block">
     <div class="section-title">${t('sections.insights')}</div>
-    ${renderInsightsVisualSummary(stats, insights)}
-    <div class="block-grid block-grid-2">`;
-  
-  for (const insight of insights) {
-    html += renderInsightCard(insight);
-  }
-  
-  html += `</div></div>`;
-  return html;
+    ${renderFindingsHero(heroStrength, heroWeakness, stats)}
+    ${renderFindingsCharts(stats)}
+    ${renderFindingsSupporting(patternInsights, weaknessInsights.slice(1), strengthInsights.slice(1))}
+    ${renderAgeStability(stats)}
+  </div>`;
 }
 
-function renderInsightsVisualSummary(stats, insights) {
-  const unitEff = stats.unit_effectiveness || {};
-  const dep = stats.civ_dependency;
+function renderFindingsHero(strength, weakness, stats) {
+  const strengthCard = renderHeroCard(strength, 'strength', stats);
+  const weaknessCard = renderHeroCard(weakness, 'weakness', stats);
+  if (!strengthCard && !weaknessCard) return '';
+  const cards = [strengthCard, weaknessCard].filter(Boolean);
+  return `<div class="findings-hero" style="grid-template-columns: repeat(${cards.length}, 1fr);">
+    ${cards.join('')}
+  </div>`;
+}
 
-  let barsHtml = '';
+function renderHeroCard(insight, fallbackType, stats) {
+  if (!insight) return '';
 
-  const strongUnits = Object.entries(unitEff)
-    .filter(([, d]) => d.label === 'strong' && d.matches >= 3 && (d.share || 0) >= 5)
-    .sort((a, b) => b[1].wr - a[1].wr)
-    .slice(0, 3);
+  const typeClass = insight.type || fallbackType;
+  const title = t(insight.titleKey, insight.params);
+  const body = t(insight.bodyKey, insight.params);
 
-  for (const [name, d] of strongUnits) {
-    const wr = d.wr;
-    const barColor = wr >= 65 ? 'var(--accent-green)' : wr >= 55 ? 'var(--accent-blue)' : 'var(--accent-yellow)';
-    barsHtml += `<div class="insight-bar-row">
-      <div class="insight-bar-label">${escapeHtml(name.replace(/_/g, ' '))}</div>
-      <div class="insight-bar-track">
-        <div class="insight-bar-fill" style="width:${wr}%;background:${barColor}"></div>
-      </div>
-      <div class="insight-bar-value">${wr}%</div>
-    </div>`;
-  }
+  let metricNumber = '';
+  let metricUnit = '';
+  let barWidth = 0;
+  let barColor = '';
 
-  const weakUnits = Object.entries(unitEff)
-    .filter(([, d]) => d.label === 'weak' && d.matches >= 3 && (d.share || 0) >= 5)
-    .sort((a, b) => a[1].wr - b[1].wr)
-    .slice(0, 3);
-
-  for (const [name, d] of weakUnits) {
-    const wr = d.wr;
-    const barColor = wr <= 35 ? 'var(--accent-red)' : 'var(--accent-orange)';
-    barsHtml += `<div class="insight-bar-row">
-      <div class="insight-bar-label">${escapeHtml(name.replace(/_/g, ' '))}</div>
-      <div class="insight-bar-track">
-        <div class="insight-bar-fill" style="width:${wr}%;background:${barColor}"></div>
-      </div>
-      <div class="insight-bar-value">${wr}%</div>
-    </div>`;
-  }
-
-  if (dep && dep.mainGames >= 3) {
-    const mainWr = dep.mainWr;
-    const otherWr = dep.otherWr;
-    const diff = mainWr - otherWr;
-    if (Math.abs(diff) >= 10 || dep.otherGames >= 3) {
-      const mainColor = mainWr >= otherWr ? 'var(--accent-green)' : 'var(--accent-red)';
-      const otherColor = otherWr >= mainWr ? 'var(--accent-green)' : 'var(--accent-red)';
-      barsHtml += `<div class="insight-bar-row">
-        <div class="insight-bar-label">${escapeHtml(dep.mainCiv)} WR</div>
-        <div class="insight-bar-track">
-          <div class="insight-bar-fill" style="width:${mainWr}%;background:${mainColor}"></div>
-        </div>
-        <div class="insight-bar-value">${mainWr}%</div>
-      </div>`;
-      if (dep.otherGames >= 3) {
-        barsHtml += `<div class="insight-bar-row">
-          <div class="insight-bar-label">Other Civs WR</div>
-          <div class="insight-bar-track">
-            <div class="insight-bar-fill" style="width:${otherWr}%;background:${otherColor}"></div>
-          </div>
-          <div class="insight-bar-value">${otherWr}%</div>
-        </div>`;
-      }
+  if (typeClass === 'strength') {
+    metricNumber = `${insight.params.wr}%`;
+    metricUnit = unitDisplayName(insight.params.unit);
+    barWidth = insight.params.wr;
+    barColor = insight.params.wr >= 65 ? 'var(--accent-green)' : 'var(--accent-blue)';
+  } else if (typeClass === 'weakness') {
+    if (insight.id === 'civ_dependency') {
+      metricNumber = `${insight.params.mainWr}%`;
+      metricUnit = insight.params.civ;
+      barWidth = insight.params.mainWr;
+      barColor = 'var(--accent-red)';
+    } else if (insight.id.startsWith('timing_')) {
+      const gapVal = parseFloat(String(insight.params.gap).replace(/[^0-9.]/g, '')) || 0;
+      metricNumber = insight.params.gap;
+      metricUnit = insight.params.tech;
+      barWidth = Math.min(gapVal / 5, 100);
+      barColor = 'var(--accent-red)';
+    } else if (insight.id === 'matchup_weakness') {
+      metricNumber = `${insight.params.wr}%`;
+      metricUnit = `${insight.params.civ}`;
+      barWidth = insight.params.wr;
+      barColor = 'var(--accent-red)';
+    } else {
+      metricNumber = `${insight.params.wr}%`;
+      metricUnit = unitDisplayName(insight.params.unit) || insight.params.civ || '';
+      barWidth = insight.params.wr;
+      barColor = 'var(--accent-red)';
     }
   }
 
-  if (!barsHtml) return '';
+  const colorClass = typeClass === 'strength' ? (insight.params.wr >= 65 ? 'green' : 'blue') : 'red';
+  const label = typeClass === 'strength' ? t('insights.strength') : t('insights.weakness');
 
-  return `<div class="insights-summary">${barsHtml}</div>`;
+  return `<div class="findings-hero-card ${typeClass}">
+    <div class="findings-hero-label">${escapeHtml(label)}</div>
+    <div class="findings-hero-title">${escapeHtml(title)}</div>
+    <div class="findings-hero-metric">
+      <span class="findings-hero-number ${colorClass}">${escapeHtml(metricNumber)}</span>
+      <span class="findings-hero-unit">${escapeHtml(metricUnit)}</span>
+    </div>
+    <div class="findings-hero-body">${escapeHtml(body)}</div>
+    <div class="findings-hero-bar">
+      <div class="findings-hero-bar-fill" style="width:${barWidth}%;background:${barColor}"></div>
+    </div>
+  </div>`;
+}
+
+function renderFindingsCharts(stats) {
+  const unitChart = renderUnitEffectivenessChart(stats);
+  const civChart = renderCivDependencyChart(stats);
+  if (!unitChart && !civChart) return '';
+  return `<div class="findings-panels">
+    ${unitChart || ''}
+    ${civChart || ''}
+  </div>`;
+}
+
+function renderUnitEffectivenessChart(stats) {
+  const unitEff = stats.unit_effectiveness || {};
+  const entries = Object.entries(unitEff)
+    .filter(([, d]) => d.matches >= 3 && (d.share || 0) >= 5)
+    .sort((a, b) => b[1].wr - a[1].wr);
+
+  if (entries.length === 0) return '';
+
+  const rows = entries.map(([name, d]) => {
+    const wr = d.wr;
+    const color = d.label === 'strong' ? 'var(--accent-green)' : d.label === 'weak' ? 'var(--accent-red)' : 'var(--accent-blue)';
+    const meta = `${d.matches} games · ${d.avg}/game · ${d.share}% army`;
+    return `<div class="findings-chart-row">
+      <div class="findings-chart-label">${escapeHtml(unitDisplayName(name))}</div>
+      <div class="findings-chart-track">
+        <div class="findings-chart-fill" style="width:${wr}%;background:${color}"></div>
+      </div>
+      <div class="findings-chart-value" style="color:${color}">${wr}%</div>
+      <div class="findings-chart-meta">${escapeHtml(meta)}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="findings-panel">
+    <div class="findings-panel-header">
+      <div class="findings-panel-title">${t('tabs.armyComposition')}</div>
+      <div class="findings-panel-subtitle">WR by unit type</div>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+function renderCivDependencyChart(stats) {
+  const dep = stats.civ_dependency;
+  if (!dep || dep.mainGames < 3) return '';
+
+  const rows = [];
+  const mainColor = dep.mainWr >= 50 ? 'var(--accent-green)' : dep.mainWr >= 40 ? 'var(--accent-blue)' : 'var(--accent-red)';
+  rows.push(`<div class="findings-chart-row">
+    <div class="findings-chart-label">${escapeHtml(dep.mainCiv)}</div>
+    <div class="findings-chart-track">
+      <div class="findings-chart-fill" style="width:${dep.mainWr}%;background:${mainColor}"></div>
+    </div>
+    <div class="findings-chart-value" style="color:${mainColor}">${dep.mainWr}%</div>
+    <div class="findings-chart-meta">${dep.mainGames} games · main civ</div>
+  </div>`);
+
+  if (dep.otherGames >= 3) {
+    const otherColor = dep.otherWr >= 50 ? 'var(--accent-green)' : dep.otherWr >= 40 ? 'var(--accent-blue)' : 'var(--accent-red)';
+    rows.push(`<div class="findings-chart-row">
+      <div class="findings-chart-label">${t('insights.others') || 'Others'}</div>
+      <div class="findings-chart-track">
+        <div class="findings-chart-fill" style="width:${dep.otherWr}%;background:${otherColor}"></div>
+      </div>
+      <div class="findings-chart-value" style="color:${otherColor}">${dep.otherWr}%</div>
+      <div class="findings-chart-meta">${dep.otherGames} games · all other civs</div>
+    </div>`);
+  }
+
+  return `<div class="findings-panel">
+    <div class="findings-panel-header">
+      <div class="findings-panel-title">${t('sections.civs')}</div>
+      <div class="findings-panel-subtitle">WR by civilization</div>
+    </div>
+    ${rows.join('')}
+  </div>`;
+}
+
+function renderFindingsSupporting(patterns, extraWeaknesses, extraStrengths) {
+  const all = [...patterns, ...extraWeaknesses, ...extraStrengths];
+  if (all.length === 0) return '';
+
+  const cards = all.slice(0, 6).map(insight => {
+    const title = t(insight.titleKey, insight.params);
+    const body = t(insight.bodyKey, insight.params);
+    const confidenceLabel = t(`insights.confidence${
+      insight.confidence === 'high' ? 'High' : insight.confidence === 'medium' ? 'Medium' : 'Low'
+    }`);
+    const typeLabel = t(`insights.${insight.type}`);
+    return `<div class="findings-mini">
+      <div class="findings-mini-header">
+        <span class="findings-mini-type">${escapeHtml(typeLabel)}</span>
+        <span class="findings-mini-confidence">${escapeHtml(confidenceLabel)}</span>
+      </div>
+      <div class="findings-mini-title">${escapeHtml(title)}</div>
+      <div class="findings-mini-body">${escapeHtml(body)}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="findings-supporting">${cards}</div>`;
+}
+
+function renderAgeStability(stats) {
+  const ages = ['feudal', 'castle', 'imperial'];
+  const items = [];
+  for (const age of ages) {
+    const data = stats.age_slow_impact?.[age];
+    const avg = stats['avg_' + age + '_hms'] || '—';
+    const gap = data ? Math.round(data.std) : 0;
+    if (!data || data.slowCount < 2) {
+      items.push(`<div class="age-stability-item">
+        <div class="age-stability-label">${t(age)}</div>
+        <div class="age-stability-value">${avg}</div>
+        <div class="age-stability-gap">—</div>
+      </div>`);
+    } else {
+      const gapClass = gap > 45 ? 'text-red' : gap > 25 ? 'text-yellow' : 'text-green';
+      items.push(`<div class="age-stability-item">
+        <div class="age-stability-label">${t(age)}</div>
+        <div class="age-stability-value">${avg}</div>
+        <div class="age-stability-gap ${gapClass}">±${gap}s · ${data.slowWr}% WR slow</div>
+      </div>`);
+    }
+  }
+
+  return `<div class="age-stability">
+    <div class="age-stability-title">${t('ageTimeline') || 'Age Stability'}</div>
+    <div class="age-stability-grid">${items.join('')}</div>
+  </div>`;
 }
 
 function renderTimingAnalysisCard(stats) {

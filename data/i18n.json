@@ -72,6 +72,7 @@
       "strength": "Strength",
       "weakness": "Weakness",
       "pattern": "Pattern",
+      "others": "Others",
       "context": "Context",
       "recommendation": "Recommendation",
       "smallSampleWarning": "⚠ Small sample size — interpret with caution",
@@ -94,11 +95,6 @@
         "title": "Opening-Map Fit",
         "body": "{opening} works best on {bestMap} ({bestWr}% WR, {bestGames} games) and worst on {worstMap} ({worstWr}% WR, {worstGames} games).",
         "tooltip": "Crosses your classified openings with maps to find where each opening succeeds or fails. Requires at least 3 games per opening-map pair."
-      },
-      "age_consistency": {
-        "title": "Inconsistent {age} Age",
-        "body": "Your {age} age varies by {std} on average. When you are {gap} slower than your average, your WR drops to {slowWr}%.",
-        "tooltip": "Measures the standard deviation of your age-up times and compares outcomes when you are slower than your own average."
       },
       "timing_critical": {
         "title": "Critical Timing: {tech}",
@@ -280,6 +276,7 @@
       "strength": "Fortaleza",
       "weakness": "Debilidad",
       "pattern": "Patrón",
+      "others": "Otros",
       "context": "Contexto",
       "recommendation": "Recomendación",
       "smallSampleWarning": "⚠ Muestra pequeña — interpretar con precaución",
@@ -302,11 +299,6 @@
         "title": "Apertura y Mapa",
         "body": "{opening} funciona mejor en {bestMap} ({bestWr}% WR, {bestGames} partidas) y peor en {worstMap} ({worstWr}% WR, {worstGames} partidas).",
         "tooltip": "Cruza tus aperturas clasificadas con los mapas para encontrar dónde funciona cada una. Requiere al menos 3 partidas por combinación."
-      },
-      "age_consistency": {
-        "title": "Edad {age} Inconsistente",
-        "body": "Tu edad {age} varía {std} de media. Cuando subes {gap} más lento que tu promedio, tu WR cae al {slowWr}%.",
-        "tooltip": "Mide la desviación estándar de tus tiempos de subida de edad y compara el resultado cuando eres más lento que tu propio promedio."
       },
       "timing_critical": {
         "title": "Timing Crítico: {tech}",

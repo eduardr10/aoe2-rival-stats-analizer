@@ -135,29 +135,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
     });
   }
 
-  // 6. Age consistency
-  for (const age of ['feudal', 'castle', 'imperial']) {
-    const data = stats.age_slow_impact?.[age];
-    if (!data) continue;
-    if (data.std >= 25 && data.slowCount >= 3) {
-      add({
-        id: `age_consistency_${age}`,
-        category: 'economy',
-        type: 'weakness',
-        priority: data.slowWr <= 40 ? 9 : 7,
-        confidence: confidenceFromSample(data.slowCount),
-        titleKey: 'insights.age_consistency.title',
-        bodyKey: 'insights.age_consistency.body',
-        params: {
-          age: age.charAt(0).toUpperCase() + age.slice(1),
-          std: `${data.std}s`,
-          gap: `${Math.round(data.std)}s`,
-          slowWr: data.slowWr,
-        },
-        tooltipKey: 'insights.age_consistency.tooltip',
-      });
-    }
-  }
+  // 6. Age consistency insights removed from cards — rendered as a single Age Stability panel in dashboard
 
   // 7. Critical economic timings
   for (const gap of stats.economic_gaps || []) {
