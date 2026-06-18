@@ -1,22 +1,11 @@
 import { fetchRating, fetchMatches } from './api.js';
 import { analyzeMatches } from './stats.js';
 import {
-  classifyPlaystyle,
-  classifyPlayerArchetype,
-  detectWeaknesses,
-  detectThreats,
-  generateDataDrivenRecommendations,
-  generatePrediction,
   interpretTimings,
-  computeConfidence,
-  computeConfidenceDetails,
   computeStreak,
-  analyzeOpponentPatterns,
   computePlayerPrimaryOpenings,
-  generateDeepInsights,
 } from './analysis.js';
-import { loadKnowledgeBase, buildStrategicAnalysis } from './strategic_engine.js';
-import { analyzeMatchup } from './matchup_engine.js';
+import { loadKnowledgeBase } from './strategic_engine.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName, escapeHtml } from './utils.js';
 import { initWebSocket } from './websocket.js';
 import { initI18n, t, formatOpeningName, getLanguage, setLanguage } from './i18n.js';
@@ -496,24 +485,10 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   stats.player_name = allMatches[0]?.player_name || 'Player';
   stats.rating = await fetchRating(playerId);
   stats.player_profile = computePlayerPrimaryOpenings(parseInt(playerId), stats.all_match_features || []);
-  stats.archetype = classifyPlayerArchetype(stats);
-
-  stats.playstyle = classifyPlaystyle(stats.archetype);
-  stats.confidence = computeConfidence(stats);
-  stats.confidence_details = computeConfidenceDetails(stats);
-  stats.weaknesses = detectWeaknesses(stats);
-  stats.threats = detectThreats(stats);
-  stats.recommendations = generateDataDrivenRecommendations(stats);
-  stats.prediction = generatePrediction(stats);
-  stats.opp_patterns = analyzeOpponentPatterns(stats);
-  stats.deep_insights = generateDeepInsights(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
-  const mainCivEntry = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
-  const mainCivName = mainCivEntry ? mainCivEntry[0] : '';
   cachedKnowledgeBase = await loadKnowledgeBase();
-  stats.strategic_analysis = buildStrategicAnalysis(stats, mainCivName);
 
   const featureMap = new Map();
   if (stats.all_match_features) {
@@ -638,103 +613,114 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 function renderExecutiveSummary(stats) {
   const wr = stats.win_percent || 0;
   const games = stats.analyzed || 0;
+  const wins = stats.total_wins || 0;
   const pp = stats.player_profile || {};
   const perFreq = pp.per_opening_frequency || {};
-  const arch = stats.archetype || {};
-  const dims = arch.dimensions || {};
-  const playstyle = stats.playstyle || { label: 'Unknown', score: 0 };
 
-  // Best map by play count
-  let bestMap = null;
-  const mapPlayed = stats.map_played || {};
-  const mapWR = stats.map_win_percent || {};
-  for (const [map, count] of Object.entries(mapPlayed)) {
-    if (count >= 2 && (!bestMap || count > bestMap.count)) {
-      bestMap = { name: map, count, wr: mapWR[map] || 0 };
-    }
+  const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+  const top2 = sortedOpenings.slice(0, 2);
+  let openingsLine = '';
+  if (top2.length > 0) {
+    openingsLine = top2.map(([name, pct]) => `${formatOpeningName(name)} ${pct}%`).join(' · ');
+  } else {
+    openingsLine = t('app.noData');
   }
 
-  // Main opening
-  const primaryOpening = pp.primary_opening || 'Unknown';
-  const stability = pp.opening_stability || 0;
-  let mainStyle = t('banner.mixedOpenings');
-  if (primaryOpening && primaryOpening !== 'Unknown' && stability >= 0.4) {
-    const sorted = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
-    const top2 = sorted.slice(0, 2);
-    if (top2.length === 1) mainStyle = `${formatOpeningName(top2[0][0])}`;
-    else if (top2.length >= 2) mainStyle = `${formatOpeningName(top2[0][0])} / ${formatOpeningName(top2[1][0])}`;
-  }
-
-  // Main weakness
-  const weaknesses = stats.weaknesses || [];
-  let mainWeakness = t('banner.noWeakness');
-  if (weaknesses.length > 0 && weaknesses[0] !== 'No extreme patterns detected') {
-    mainWeakness = weaknesses[0];
-  }
-
-  // Top 3 civs
   const civs = stats.civ_played_percent || {};
   const sortedCivs = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const civsLine = sortedCivs.length
+    ? sortedCivs.map(([civ, pct]) => {
+        const civWR = stats.civ_win_percent?.[civ] ?? 0;
+        return `${civ} ${pct}% (<span class="${civWR >= 55 ? 'text-green' : civWR <= 40 ? 'text-red' : ''}">${civWR}% WR</span>)`;
+      }).join(' · ')
+    : '';
 
-  // Aggression label
-  const aggression = dims.aggression || 0;
-  const aggressionLabel = aggression >= 65 ? 'High' : aggression >= 40 ? 'Moderate' : 'Low';
+  const unitCats = stats.unit_categories || {};
+  const totalCount = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
+  const cavPct = totalCount > 0 ? Math.round(((unitCats.cavalry?.count || 0) / totalCount) * 100) : 0;
+  const archPct = totalCount > 0 ? Math.round(((unitCats.archers?.count || 0) / totalCount) * 100) : 0;
+  const infPct = totalCount > 0 ? Math.round(((unitCats.infantry?.count || 0) / totalCount) * 100) : 0;
+  const siegePct = totalCount > 0 ? Math.round(((unitCats.siege?.count || 0) / totalCount) * 100) : 0;
+  let armyLine = '';
+  if (totalCount > 0) {
+    const parts = [];
+    if (cavPct > 0) parts.push(`<span class="text-orange">${cavPct}% Cav</span>`);
+    if (archPct > 0) parts.push(`<span class="text-yellow">${archPct}% Arch</span>`);
+    if (infPct > 0) parts.push(`<span class="text-red">${infPct}% Inf</span>`);
+    if (siegePct > 0) parts.push(`<span class="text-purple">${siegePct}% Siege</span>`);
+    armyLine = parts.join(' · ');
+  }
+
+  let mapLine = '';
+  const mapPlayed = stats.map_played || {};
+  const mapWR = stats.map_win_percent || {};
+  const sortedMaps = Object.entries(mapPlayed).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  if (sortedMaps.length > 0) {
+    mapLine = sortedMaps.map(([map, count]) => {
+      const mwr = mapWR[map] || 0;
+      return `${map} ${count}g (<span class="${mwr >= 55 ? 'text-green' : mwr <= 40 ? 'text-red' : ''}">${mwr}%</span>)`;
+    }).join(' · ');
+  }
+
+  const feudalAvg = stats.avg_feudal_hms || '—';
+  const castleAvg = stats.avg_castle_hms || '—';
+  const impAvg = stats.avg_imperial_hms || '—';
+
+  const feudalGap = stats.age_time_loss_avg?.feudal && stats.age_time_win_avg?.feudal
+    ? stats.age_time_loss_avg.feudal - stats.age_time_win_avg.feudal : 0;
+  const castleGap = stats.age_time_loss_avg?.castle && stats.age_time_win_avg?.castle
+    ? stats.age_time_loss_avg.castle - stats.age_time_win_avg.castle : 0;
+  const impGap = stats.age_time_loss_avg?.imperial && stats.age_time_win_avg?.imperial
+    ? stats.age_time_loss_avg.imperial - stats.age_time_win_avg.imperial : 0;
+
+  function gapHtml(gap) {
+    if (gap > 30) return ` <span class="text-red text-xs">+${Math.round(gap)}s in losses</span>`;
+    if (gap < -30) return ` <span class="text-green text-xs">${Math.round(gap)}s faster in wins</span>`;
+    return '';
+  }
+
+  const streak = stats.current_streak || { type: 'none', count: 0 };
+  const streakText = streak.type === 'win' ? `+${streak.count} wins` : streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
 
   return `<div class="card executive-summary">
-    <div class="executive-summary-grid">
-      <!-- Left: Player info -->
-      <div class="executive-summary-left">
-        <div class="player-name-large">${escapeHtml(stats.player_name || 'Player')}</div>
-        <div class="player-meta">
-          ${stats.rating ? `${stats.rating} ${t('header.rating')}` : ''}
-          ${stats.rating && wr > 0 ? ' · ' : ''}
-          ${wr > 0 ? `${wr}% ${t('header.winrate')}` : ''}
-          ${games > 0 ? ` · ${games} ${t('header.games')}` : ''}
+    <div class="exec-summary-header">
+      <span class="player-name-large">${escapeHtml(stats.player_name || 'Player')}</span>
+      <span class="exec-summary-stats">
+        <span class="exec-stat">${stats.rating || '—'} <span class="exec-stat-label">Rating</span></span>
+        <span class="exec-stat ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}% <span class="exec-stat-label">WR</span></span>
+        <span class="exec-stat">${wins}/${games - wins} <span class="exec-stat-label">W/L</span></span>
+        <span class="exec-stat">${streakText} <span class="exec-stat-label">Streak</span></span>
+      </span>
+    </div>
+    <div class="exec-summary-grid">
+      <div class="exec-summary-col">
+        <div class="exec-summary-item">
+          <div class="exec-item-label">${t('sections.openings')}</div>
+          <div class="exec-item-value">${openingsLine}</div>
         </div>
-        <div class="playstyle-section">
-          <div class="playstyle-badge ${playstyle.label.toLowerCase().replace(/\s+/g, '')}">${playstyle.label}</div>
-          <div class="playstyle-score">${t('aggressionScore')}: ${aggression}/100 (${aggressionLabel})</div>
+        <div class="exec-summary-item">
+          <div class="exec-item-label">${t('sections.civs')}</div>
+          <div class="exec-item-value">${civsLine || t('app.noData')}</div>
         </div>
-        ${sortedCivs.length > 0 ? `<div class="civs-section">
-          <div class="section-label">${t('mostPlayedCivs')}</div>
-          <div class="civs-tags">
-            ${sortedCivs.map(([civ, pct]) => `<span class="civ-tag">${escapeHtml(civ)} <span class="civ-pct">${pct}%</span></span>`).join('')}
-          </div>
-        </div>` : ''}
       </div>
-      
-      <!-- Right: Key metrics -->
-      <div class="executive-summary-right">
-        <div class="section-label">${t('banner.rivalSnapshot')}</div>
-        <div class="metrics-grid">
-          <div class="metric-item">
-            <div class="metric-icon">🏹</div>
-            <div class="metric-content">
-              <div class="metric-label">${t('banner.mainStyle')}</div>
-              <div class="metric-value">${escapeHtml(mainStyle)}</div>
-            </div>
-          </div>
-          ${bestMap ? `<div class="metric-item">
-            <div class="metric-icon">🌍</div>
-            <div class="metric-content">
-              <div class="metric-label">${t('banner.favoriteMap')}</div>
-              <div class="metric-value">${escapeHtml(bestMap.name)} <span class="metric-sub">(${bestMap.count} ${t('banner.games')})</span></div>
-            </div>
-          </div>` : ''}
-          <div class="metric-item">
-            <div class="metric-icon">🏰</div>
-            <div class="metric-content">
-              <div class="metric-label">${t('banner.typicalTiming')}</div>
-              <div class="metric-value">${t('sections.openings')} ${stats.avg_feudal_hms || 'N/A'}</div>
-            </div>
-          </div>
-          <div class="metric-item">
-            <div class="metric-icon">⚠</div>
-            <div class="metric-content">
-              <div class="metric-label">${t('banner.mainWeakness')}</div>
-              <div class="metric-value text-red">${escapeHtml(mainWeakness)}</div>
-            </div>
-          </div>
+      <div class="exec-summary-col">
+        <div class="exec-summary-item">
+          <div class="exec-item-label">${t('tabs.armyComposition')}</div>
+          <div class="exec-item-value">${armyLine || t('app.noData')}</div>
+        </div>
+        <div class="exec-summary-item">
+          <div class="exec-item-label">${t('sections.maps')}</div>
+          <div class="exec-item-value">${mapLine || t('app.noData')}</div>
+        </div>
+      </div>
+      <div class="exec-summary-col">
+        <div class="exec-summary-item">
+          <div class="exec-item-label">${t('tabs.avgEapm')}</div>
+          <div class="exec-item-value">${stats.avg_eapm || '—'} (${Math.round(stats.avg_eapm_wins || 0)} wins / ${Math.round(stats.avg_eapm_losses || 0)} losses)</div>
+        </div>
+        <div class="exec-summary-item">
+          <div class="exec-item-label">Average Age Times</div>
+          <div class="exec-item-value">Feudal ${feudalAvg}${gapHtml(feudalGap)} · Castle ${castleAvg}${gapHtml(castleGap)} · Imperial ${impAvg}${gapHtml(impGap)}</div>
         </div>
       </div>
     </div>
@@ -818,7 +804,7 @@ function renderTimingAnalysisCard(stats) {
 
 function renderDetailedAnalysisCard(stats) {
   const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs', 'techs'];
-  const tabLabels = [t('overview'), t('military'), t('economy'), t('openings'), t('maps'), t('civs'), t('techs')];
+  const tabLabels = [t('sections.overview'), t('sections.military'), t('sections.economy'), t('sections.openings'), t('sections.maps'), t('sections.civs'), t('sections.techs')];
 
   let html = `<div class="card detailed-analysis-card">`;
   html += `<div class="tabs-nav">`;
@@ -861,7 +847,6 @@ function buildOverviewPanel(stats, id) {
 
 function buildMilitaryPanel(stats, id) {
   const unitCats = stats.unit_categories || {};
-  const aggression = stats.archetype?.dimensions?.aggression || 0;
   const games = stats.analyzed || 1;
 
   const totalCount = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
@@ -888,7 +873,6 @@ function buildMilitaryPanel(stats, id) {
 
   return `<div class="tab-panel" data-panel="${id}">
     <div class="tab-stat-grid mb-3">
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.aggressionScore')}</div><div class="tab-stat-value">${aggression}/100</div></div>
       <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.avgUnitsPerGame')}</div><div class="tab-stat-value">${totalAvg}</div></div>
     </div>
     ${compositionHtml ? `<div><div class="section-label">${t('tabs.armyComposition')}</div>${compositionHtml}</div>` : `<div class="card-subtitle">${t('app.noData')}</div>`}
@@ -1166,78 +1150,52 @@ function renderLiveAdvantage(playerStats, rivalStats) {
 }
 
 function renderStyleComparison(playerStats, rivalStats) {
-  const pDims = playerStats.archetype?.dimensions || {};
-  const rDims = rivalStats.archetype?.dimensions || {};
-
-  const dimensions = [
-    { key: 'aggression', label: 'Aggression' },
-    { key: 'economy', label: 'Economy Focus' },
-    { key: 'versatility', label: 'Versatility' },
-    { key: 'lateGame', label: 'Late Game' },
-    { key: 'speed', label: 'Speed' },
-  ];
-
-  let html = `<div class="card">`;
-  html += `<div class="card-label">Dimension Comparison</div>`;
-
-  for (const dim of dimensions) {
-    const pVal = pDims[dim.key] || 0;
-    const rVal = rDims[dim.key] || 0;
-    const maxVal = Math.max(pVal, rVal, 1);
-    const pWidth = (pVal / maxVal) * 100;
-    const rWidth = (rVal / maxVal) * 100;
-
-    html += `<div class="dimension-comparison-row">`;
-    html += `<div class="dimension-label">${dim.label}</div>`;
-    html += `<div class="dimension-bar-row">`;
-    html += `<span class="dimension-value text-blue">${pVal}</span>`;
-    html += `<div class="dimension-bar-track"><div class="dimension-bar-fill player" style="width:${pWidth}%"></div></div>`;
-    html += `</div>`;
-    html += `<div class="dimension-bar-row">`;
-    html += `<span class="dimension-value text-red">${rVal}</span>`;
-    html += `<div class="dimension-bar-track"><div class="dimension-bar-fill rival" style="width:${rWidth}%"></div></div>`;
-    html += `</div>`;
-    html += `</div>`;
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-function renderTempoAnalysis(playerStats, rivalStats) {
-  const pDims = playerStats.archetype?.dimensions || {};
-  const rDims = rivalStats.archetype?.dimensions || {};
-
-  function getStars(val) {
-    const filled = Math.round(val / 20);
-    return '★'.repeat(filled) + '☆'.repeat(5 - filled);
-  }
-
-  function getTempoLabel(econ, mil) {
-    if (econ > 60 && mil < 30) return 'Greedy boom';
-    if (econ > 50 && mil > 40) return 'Macro play';
-    if (mil > 60 && econ < 40) return 'Aggressive';
-    if (mil < 30 && econ < 40) return 'Defensive / Turtle';
-    return 'Balanced';
+  function featStr(stats, label) {
+    const pp = stats.player_profile || {};
+    const sorted = Object.entries(pp.per_opening_frequency || {}).sort((a, b) => b[1] - a[1]);
+    const topOpening = sorted[0] ? `${formatOpeningName(sorted[0][0])} ${sorted[0][1]}%` : '—';
+    const wr = stats.win_percent || 0;
+    const apm = stats.avg_eapm || '—';
+    const feudal = stats.avg_feudal_hms || '—';
+    const castle = stats.avg_castle_hms || '—';
+    return `<div class="tempo-section">
+      <div class="tempo-title">${label}</div>
+      <div class="tempo-item"><span class="tempo-label">${t('header.winrate')}</span><span class="${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</span></div>
+      <div class="tempo-item"><span class="tempo-label">${t('tabs.avgEapm')}</span><span>${apm}</span></div>
+      <div class="tempo-item"><span class="tempo-label">${t('sections.openings')}</span><span>${topOpening}</span></div>
+      <div class="tempo-item"><span class="tempo-label">Feudal</span><span>${feudal}</span></div>
+      <div class="tempo-item"><span class="tempo-label">Castle</span><span>${castle}</span></div>
+    </div>`;
   }
 
   return `<div class="card">
-    <div class="card-label">Tempo Analysis</div>
+    <div class="card-label">Head to Head Metrics</div>
     <div class="tempo-grid">
-      <div class="tempo-section">
-        <div class="tempo-title">${escapeHtml(playerStats.player_name || 'Player')}</div>
-        <div class="tempo-item"><span class="tempo-label">Economic Tempo</span><span class="tempo-stars">${getStars(pDims.economy || 0)}</span></div>
-        <div class="tempo-item"><span class="tempo-label">Military Tempo</span><span class="tempo-stars">${getStars(pDims.aggression || 0)}</span></div>
-        <div class="tempo-item"><span class="tempo-label">Expansion Tempo</span><span class="tempo-stars">${getStars(((pDims.economy || 0) + (pDims.lateGame || 0)) / 2)}</span></div>
-        <div class="tempo-summary">${getTempoLabel(pDims.economy || 0, pDims.aggression || 0)}</div>
-      </div>
-      <div class="tempo-section">
-        <div class="tempo-title">${escapeHtml(rivalStats.rival_name || 'Rival')}</div>
-        <div class="tempo-item"><span class="tempo-label">Economic Tempo</span><span class="tempo-stars">${getStars(rDims.economy || 0)}</span></div>
-        <div class="tempo-item"><span class="tempo-label">Military Tempo</span><span class="tempo-stars">${getStars(rDims.aggression || 0)}</span></div>
-        <div class="tempo-item"><span class="tempo-label">Expansion Tempo</span><span class="tempo-stars">${getStars(((rDims.economy || 0) + (rDims.lateGame || 0)) / 2)}</span></div>
-        <div class="tempo-summary">${getTempoLabel(rDims.economy || 0, rDims.aggression || 0)}</div>
-      </div>
+      ${featStr(playerStats, escapeHtml(playerStats.player_name || 'Player'))}
+      ${featStr(rivalStats, escapeHtml(rivalStats.rival_name || 'Rival'))}
+    </div>
+  </div>`;
+}
+
+function renderTempoAnalysis(playerStats, rivalStats) {
+  function unitComp(stats, label) {
+    const cats = stats.unit_categories || {};
+    const total = Object.values(cats).reduce((s, c) => s + (c.count || 0), 0);
+    const pct = (cat) => total > 0 ? Math.round(((cats[cat]?.count || 0) / total) * 100) : 0;
+    const top3Civs = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, p]) => `${c} ${p}%`).join(' · ');
+    return `<div class="tempo-section">
+      <div class="tempo-title">${label}</div>
+      <div class="tempo-item"><span class="tempo-label">Army</span><span>Cav ${pct('cavalry')}% · Arch ${pct('archers')}% · Inf ${pct('infantry')}%</span></div>
+      <div class="tempo-item"><span class="tempo-label">${t('sections.civs')}</span><span>${top3Civs || '—'}</span></div>
+      <div class="tempo-item"><span class="tempo-label">${t('tabs.2ndTc')}</span><span>${stats.tc_timing?.tc2_avg_hms || '—'} · ${(stats.tc2_pct || 0)}% matches</span></div>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-label">Unit & Economy Comparison</div>
+    <div class="tempo-grid">
+      ${unitComp(playerStats, escapeHtml(playerStats.player_name || 'Player'))}
+      ${unitComp(rivalStats, escapeHtml(rivalStats.rival_name || 'Rival'))}
     </div>
   </div>`;
 }
@@ -1293,10 +1251,6 @@ function renderTimingInsights(playerStats, rivalStats) {
   if (castleDiff < -20) insights.push({ type: 'positive', text: `Faster Castle (${Math.abs(Math.round(castleDiff))}s avg)` });
   else if (castleDiff > 20) insights.push({ type: 'negative', text: `Slower Castle (${Math.round(castleDiff)}s avg)` });
 
-  const rAgg = rivalStats.archetype?.dimensions?.aggression || 0;
-  if (rAgg > 60) insights.push({ type: 'negative', text: 'Rival invests heavily into military' });
-  if (rAgg < 30) insights.push({ type: 'positive', text: 'Rival plays passive — eco lead likely' });
-
   if (insights.length === 0) insights.push({ type: 'neutral', text: 'Historical timings are similar' });
 
   let html = `<div class="card">`;
@@ -1315,35 +1269,18 @@ function renderTimingInsights(playerStats, rivalStats) {
 function renderExpectedTransitions(rivalStats) {
   const pp = rivalStats.player_profile || {};
   const freq = pp.per_opening_frequency || {};
-
-  const transitions = {
-    'scout_rush': { 'Knights': 60, 'Skirmishers': 20, 'Archers': 15, 'Siege': 5 },
-    'archer_rush': { 'Crossbows': 55, 'Knights': 25, 'Siege': 15, 'Monks': 5 },
-    'fast_castle': { 'Knights': 50, 'Boom': 30, 'Unique Unit': 15, 'Monks': 5 },
-    'drush': { 'Archers': 45, 'Fast Castle': 30, 'Scouts': 20, 'Tower': 5 },
-    'fast_feudal_aggressive': { 'Archers': 40, 'Scouts': 35, 'Tower': 15, 'Fast Castle': 10 },
-  };
-
   const primary = pp.primary_opening || 'Unknown';
-  const transitionMap = transitions[primary] || { 'Standard follow-up': 100 };
 
-  const totalPct = Object.values(transitionMap).reduce((a, b) => a + b, 0);
-  const sortedTrans = Object.entries(transitionMap).sort((a, b) => b[1] - a[1]);
-
-  let barsHtml = '';
-  for (const [unit, pct] of sortedTrans) {
-    const width = totalPct > 0 ? (pct / totalPct) * 100 : 0;
-    barsHtml += `<div class="opening-bar-row">
-      <div class="opening-bar-label">${unit}</div>
-      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:var(--accent-blue)"></div></div>
-      <div class="opening-bar-pct">${pct}%</div>
-    </div>`;
+  const signature = rivalStats.unit_signature || [];
+  let unitLine = '';
+  if (signature.length > 0) {
+    unitLine = signature.map(u => `${escapeHtml(u.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()))} (${u.share || 0}% army, ${u.wr}% WR)`).join(' · ');
   }
 
   return `<div class="card">
-    <div class="card-label">Expected Rival Transition</div>
-    <div class="card-subtitle">Based on primary opening: ${formatOpeningName(primary)}</div>
-    <div class="mt-2">${barsHtml}</div>
+    <div class="card-label">Rival Production Profile</div>
+    <div class="card-subtitle">Primary opening: <strong>${formatOpeningName(primary)}</strong> (${Math.round((freq[primary] || 0) * 10) / 10}% of games)</div>
+    ${unitLine ? `<div class="mt-2 text-sm">Most produced: ${unitLine}</div>` : '<div class="mt-2 text-sm">Insufficient production data.</div>'}
   </div>`;
 }
 
@@ -1367,14 +1304,14 @@ function renderLiveDetailedMetrics(playerStats, rivalStats) {
     </div>
   </div>`;
 
-  const pAgg = playerStats.archetype?.dimensions?.aggression || 0;
-  const rAgg = rivalStats.archetype?.dimensions?.aggression || 0;
+  const pUnits = Object.values(playerStats.unit_categories || {}).reduce((s, c) => s + (c.count || 0), 0);
+  const rUnits = Object.values(rivalStats.unit_categories || {}).reduce((s, c) => s + (c.count || 0), 0);
   html += `<div class="tab-panel" data-panel="live-military">
     <div class="tab-stat-grid">
-      <div class="tab-stat-item"><div class="tab-stat-label">Player Aggression</div><div class="tab-stat-value">${pAgg}/100</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Rival Aggression</div><div class="tab-stat-value">${rAgg}/100</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Player Units</div><div class="tab-stat-value">${Object.values(playerStats.unit_categories || {}).reduce((s, c) => s + (c.count || 0), 0)}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">Rival Units</div><div class="tab-stat-value">${Object.values(rivalStats.unit_categories || {}).reduce((s, c) => s + (c.count || 0), 0)}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Player EAPM</div><div class="tab-stat-value">${playerStats.avg_eapm || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Rival EAPM</div><div class="tab-stat-value">${rivalStats.avg_eapm || '—'}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Player Units</div><div class="tab-stat-value">${pUnits}</div></div>
+      <div class="tab-stat-item"><div class="tab-stat-label">Rival Units</div><div class="tab-stat-value">${rUnits}</div></div>
     </div>
   </div>`;
 
