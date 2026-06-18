@@ -221,6 +221,34 @@ body {
 }
 
 /* ==========================================================================
+   CREATOR BAR (social links separated from player header)
+   ========================================================================== */
+.creator-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+
+.creator-sep {
+  color: var(--border-subtle);
+  margin: 0 4px;
+}
+
+.lang-selector {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ==========================================================================
    MAIN LAYOUT
    ========================================================================== */
 
@@ -1717,6 +1745,56 @@ body {
   padding: 6px 10px;
   margin-top: 10px;
   font-weight: 500;
+}
+
+/* ==========================================================================
+   INSIGHTS VISUAL SUMMARY (bar charts at top of findings)
+   ========================================================================== */
+.insights-summary {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.insight-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.insight-bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 100px;
+  text-transform: capitalize;
+}
+
+.insight-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(30, 30, 46, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.insight-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.insight-bar-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 40px;
+  text-align: right;
 }
 
 /* ==========================================================================

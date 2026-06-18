@@ -22,27 +22,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
     }
   }
 
-  function fmtUnitList(units) {
-    return units.map(u => `${unitDisplayName(u.name)} (${u.wr}% WR, ${u.share || 0}% army)`).join(', ');
-  }
-
-  // 1. Real army signature
-  const signature = stats.unit_signature || [];
-  if (signature.length > 0) {
-    add({
-      id: 'unit_signature',
-      category: 'army',
-      type: 'pattern',
-      priority: 9,
-      confidence: confidenceFromSample(stats.analyzed),
-      titleKey: 'insights.unit_signature.title',
-      bodyKey: 'insights.unit_signature.body',
-      params: { units: fmtUnitList(signature) },
-      tooltipKey: 'insights.unit_signature.tooltip',
-    });
-  }
-
-  // 2. Effective unit
+  // 1. Effective unit
   const effectiveness = Object.entries(stats.unit_effectiveness || {})
     .map(([name, d]) => ({ name, ...d }))
     .filter(d => d.label === 'strong' && d.matches >= 3 && (d.share || 0) >= 5)
@@ -98,33 +78,9 @@ export function generateInsights(stats, knowledgeBase = {}) {
     add(insight);
   }
 
-  // 4. Civ context + dependency
+  // 4. Civ dependency
   const dep = stats.civ_dependency;
   if (dep && dep.mainGames >= 3) {
-    const kb = knowledgeBase[dep.mainCiv] || {};
-    const archetype = (kb.archetype || 'multiple options').replace(/_/g, ' ');
-    const realSignature = signature.filter(u => u.name !== 'villager').slice(0, 2);
-    const signatureText = realSignature.length
-      ? realSignature.map(u => unitDisplayName(u.name)).join(' / ')
-      : t('app.noData');
-
-    add({
-      id: 'civ_context',
-      category: 'context',
-      type: 'context',
-      priority: 7,
-      confidence: confidenceFromSample(dep.mainGames),
-      titleKey: 'insights.civ_context.title',
-      bodyKey: 'insights.civ_context.body',
-      params: {
-        civ: dep.mainCiv,
-        pct: dep.mainPct,
-        archetype,
-        signature: signatureText,
-      },
-      tooltipKey: 'insights.civ_context.tooltip',
-    });
-
     if (dep.otherGames >= 3 && dep.mainWr - dep.otherWr >= 15) {
       add({
         id: 'civ_dependency',

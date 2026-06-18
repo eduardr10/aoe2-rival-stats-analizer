@@ -212,6 +212,7 @@ function buildExpectedOpeningCard(stats) {
     'fast_feudal_aggressive': '⚡',
     'fast_castle': '🏰',
     'tower_rush': '🏗️',
+    'castle_focus': '🏰',
     'Standard/Unknown': '❓',
     'Mixed/No Data': '❓',
   };
@@ -808,6 +809,7 @@ function formatOpeningName(label) {
     'fast_feudal_aggressive': 'Fast Feudal Aggro',
     'fast_castle': 'Fast Castle',
     'tower_rush': 'Tower Rush',
+    'castle_focus': 'Castle Focus',
     'Standard/Unknown': 'Mixed',
     'Mixed/No Data': 'Mixed',
   };

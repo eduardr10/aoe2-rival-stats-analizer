@@ -587,7 +587,7 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 
   // SECTION 2: Findings (unified insights list)
   const insights = generateInsights(stats, cachedKnowledgeBase || {});
-  html += renderFindingsSection(insights);
+  html += renderFindingsSection(stats, insights);
 
   // SECTION 3: Timing Analysis
   html += `<div class="block">`;
@@ -727,12 +727,13 @@ function renderExecutiveSummary(stats) {
   </div>`;
 }
 
-function renderFindingsSection(insights) {
+function renderFindingsSection(stats, insights) {
   if (!insights || insights.length === 0) return '';
 
-  let html = `<div class="block">`;
-  html += `<div class="section-title">${t('sections.insights')}</div>`;
-  html += `<div class="block-grid block-grid-2">`;
+  const html = `<div class="block">
+    <div class="section-title">${t('sections.insights')}</div>
+    ${renderInsightsVisualSummary(stats, insights)}
+    <div class="block-grid block-grid-2">`;
   
   for (const insight of insights) {
     html += renderInsightCard(insight);
@@ -740,6 +741,77 @@ function renderFindingsSection(insights) {
   
   html += `</div></div>`;
   return html;
+}
+
+function renderInsightsVisualSummary(stats, insights) {
+  const unitEff = stats.unit_effectiveness || {};
+  const dep = stats.civ_dependency;
+
+  let barsHtml = '';
+
+  const strongUnits = Object.entries(unitEff)
+    .filter(([, d]) => d.label === 'strong' && d.matches >= 3 && (d.share || 0) >= 5)
+    .sort((a, b) => b[1].wr - a[1].wr)
+    .slice(0, 3);
+
+  for (const [name, d] of strongUnits) {
+    const wr = d.wr;
+    const barColor = wr >= 65 ? 'var(--accent-green)' : wr >= 55 ? 'var(--accent-blue)' : 'var(--accent-yellow)';
+    barsHtml += `<div class="insight-bar-row">
+      <div class="insight-bar-label">${escapeHtml(name.replace(/_/g, ' '))}</div>
+      <div class="insight-bar-track">
+        <div class="insight-bar-fill" style="width:${wr}%;background:${barColor}"></div>
+      </div>
+      <div class="insight-bar-value">${wr}%</div>
+    </div>`;
+  }
+
+  const weakUnits = Object.entries(unitEff)
+    .filter(([, d]) => d.label === 'weak' && d.matches >= 3 && (d.share || 0) >= 5)
+    .sort((a, b) => a[1].wr - b[1].wr)
+    .slice(0, 3);
+
+  for (const [name, d] of weakUnits) {
+    const wr = d.wr;
+    const barColor = wr <= 35 ? 'var(--accent-red)' : 'var(--accent-orange)';
+    barsHtml += `<div class="insight-bar-row">
+      <div class="insight-bar-label">${escapeHtml(name.replace(/_/g, ' '))}</div>
+      <div class="insight-bar-track">
+        <div class="insight-bar-fill" style="width:${wr}%;background:${barColor}"></div>
+      </div>
+      <div class="insight-bar-value">${wr}%</div>
+    </div>`;
+  }
+
+  if (dep && dep.mainGames >= 3) {
+    const mainWr = dep.mainWr;
+    const otherWr = dep.otherWr;
+    const diff = mainWr - otherWr;
+    if (Math.abs(diff) >= 10 || dep.otherGames >= 3) {
+      const mainColor = mainWr >= otherWr ? 'var(--accent-green)' : 'var(--accent-red)';
+      const otherColor = otherWr >= mainWr ? 'var(--accent-green)' : 'var(--accent-red)';
+      barsHtml += `<div class="insight-bar-row">
+        <div class="insight-bar-label">${escapeHtml(dep.mainCiv)} WR</div>
+        <div class="insight-bar-track">
+          <div class="insight-bar-fill" style="width:${mainWr}%;background:${mainColor}"></div>
+        </div>
+        <div class="insight-bar-value">${mainWr}%</div>
+      </div>`;
+      if (dep.otherGames >= 3) {
+        barsHtml += `<div class="insight-bar-row">
+          <div class="insight-bar-label">Other Civs WR</div>
+          <div class="insight-bar-track">
+            <div class="insight-bar-fill" style="width:${otherWr}%;background:${otherColor}"></div>
+          </div>
+          <div class="insight-bar-value">${otherWr}%</div>
+        </div>`;
+      }
+    }
+  }
+
+  if (!barsHtml) return '';
+
+  return `<div class="insights-summary">${barsHtml}</div>`;
 }
 
 function renderTimingAnalysisCard(stats) {

@@ -312,6 +312,23 @@ export function classifyOpening(features, baselines) {
 
   openings.sort((a, b) => b.score - a.score);
 
+  if (openings.length === 0 && features.t_castle !== null) {
+    const fcCriteria = [];
+    let castleFocusScore = 0;
+    if (features.total_military_by_early <= 5) {
+      castleFocusScore += 0.5;
+      fcCriteria.push(['Low Early Military', '<= 5', '+0.5', features.total_military_by_early]);
+    }
+    if (features.tc_count_first_15min >= 1) {
+      castleFocusScore += 0.3;
+      fcCriteria.push(['TC Started', '>= 1', '+0.3', features.tc_count_first_15min]);
+    }
+    if (castleFocusScore >= 0.5) {
+      openings.push({ label: 'castle_focus', score: castleFocusScore, matched: fcCriteria });
+      openings.sort((a, b) => b.score - a.score);
+    }
+  }
+
   const chosen = openings[0] || { label: 'Standard/Unknown', score: 0, matched: [] };
 
   return {
@@ -1091,6 +1108,7 @@ function formatOpeningName(label) {
     'fast_feudal_aggressive': 'Fast Feudal Aggro',
     'fast_castle': 'Fast Castle',
     'tower_rush': 'Tower Rush',
+    'castle_focus': 'Castle Focus',
     'Standard/Unknown': 'Mixed',
     'Mixed/No Data': 'Mixed',
   };

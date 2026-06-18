@@ -925,13 +925,6 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     };
   }
 
-  // Top 3 real units for signature
-  const signatureUnits = Object.entries(stats.unit_effectiveness)
-    .sort((a, b) => b[1].total - a[1].total)
-    .slice(0, 3)
-    .map(([name, d]) => ({ name, total: d.total, wr: d.wr, share: d.share }));
-  stats.unit_signature = signatureUnits;
-
   // Age consistency + slow impact
   stats.age_time_std = {};
   stats.age_slow_impact = {};

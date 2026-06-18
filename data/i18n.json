@@ -75,11 +75,6 @@
       "context": "Context",
       "recommendation": "Recommendation",
       "smallSampleWarning": "⚠ Small sample size — interpret with caution",
-      "unit_signature": {
-        "title": "Real Army Signature",
-        "body": "Your most produced units are {units}. This is what you actually build, not what your civ can build.",
-        "tooltip": "Shows the units you really created across analyzed matches, ordered by total count. Includes each unit's win rate and share of your total army."
-      },
       "unit_strength": {
         "title": "Effective Unit",
         "body": "You win {wr}% of games when producing {unit} ({avg} avg/game, {games} games, {share}% of your army).",
@@ -89,11 +84,6 @@
         "title": "Ineffective Unit",
         "body": "You win only {wr}% of games when committing to {unit} ({avg} avg/game, {games} games, {share}% of your army).",
         "tooltip": "Identifies a unit with a low win rate, enough games, and at least 5% of your total army. This avoids highlighting units that only appeared in a handful of matches."
-      },
-      "civ_context": {
-        "title": "Civ Context: {civ}",
-        "body": "You play {civ} in {pct}% of games. Although {civ} is known for {archetype}, your actual signature is {signature}.",
-        "tooltip": "Compares the strategic potential of your most-played civilization with the units you really produce. The civ archetype is context, not a claim about your play."
       },
       "civ_dependency": {
         "title": "Civ Dependency",
@@ -216,6 +206,7 @@
       "fast_feudal_aggressive": "Fast Feudal Pressure",
       "fast_castle": "Fast Castle",
       "tower_rush": "Tower Rush",
+      "castle_focus": "Castle Focus",
       "Standard/Unknown": "Mixed",
       "Mixed/No Data": "Mixed"
     }
@@ -292,11 +283,6 @@
       "context": "Contexto",
       "recommendation": "Recomendación",
       "smallSampleWarning": "⚠ Muestra pequeña — interpretar con precaución",
-      "unit_signature": {
-        "title": "Firma Real de Ejército",
-        "body": "Tus unidades más producidas son {units}. Esto es lo que realmente construyes, no lo que tu civ puede construir.",
-        "tooltip": "Muestra las unidades que realmente creaste en las partidas analizadas, ordenadas por cantidad total. Incluye el win rate y el porcentaje de tu ejército total que representa cada una."
-      },
       "unit_strength": {
         "title": "Unidad Efectiva",
         "body": "Ganas el {wr}% de las partidas cuando produces {unit} ({avg} de media/partida, {games} partidas, {share}% de tu ejército).",
@@ -306,11 +292,6 @@
         "title": "Unidad Inefectiva",
         "body": "Solo ganas el {wr}% de las partidas cuando apuestas por {unit} ({avg} de media/partida, {games} partidas, {share}% de tu ejército).",
         "tooltip": "Identifica una unidad con bajo win rate, suficientes partidas y al menos un 5% de tu ejército total. Evita destacar unidades que solo aparecen en un puñado de partidas."
-      },
-      "civ_context": {
-        "title": "Contexto de Civ: {civ}",
-        "body": "Juegas {civ} en el {pct}% de tus partidas. Aunque {civ} es conocida por {archetype}, tu firma real es {signature}.",
-        "tooltip": "Compara el potencial estratégico de tu civilización más jugada con las unidades que realmente produces. El arquetipo de la civ es contexto, no una afirmación sobre tu juego."
       },
       "civ_dependency": {
         "title": "Dependencia de Civilización",
@@ -433,6 +414,7 @@
       "fast_feudal_aggressive": "Presión Fast Feudal",
       "fast_castle": "Fast Castle",
       "tower_rush": "Tower Rush",
+      "castle_focus": "Enfoque Castle",
       "Standard/Unknown": "Mixto",
       "Mixed/No Data": "Mixto"
     }
