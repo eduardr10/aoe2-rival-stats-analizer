@@ -730,7 +730,7 @@ function renderExecutiveSummary(stats) {
 function renderFindingsSection(stats, insights) {
   if (!insights || insights.length === 0) return '';
 
-  const html = `<div class="block">
+  let html = `<div class="block">
     <div class="section-title">${t('sections.insights')}</div>
     ${renderInsightsVisualSummary(stats, insights)}
     <div class="block-grid block-grid-2">`;
