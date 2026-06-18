@@ -3,15 +3,23 @@ import { formatHms } from './utils.js';
 
 export function generateInsights(stats, knowledgeBase = {}) {
   const insights = [];
+  const totalGames = stats.analyzed || 0;
 
   function add(insight) {
     insights.push(insight);
   }
 
-  function confidenceFromSample(n) {
-    if (n >= 10) return 'high';
-    if (n >= 4) return 'medium';
+  function confidenceFromSample(n, total = totalGames) {
+    const pct = total > 0 ? (n / total) * 100 : 0;
+    if (n >= 10 && pct >= 30) return 'high';
+    if (n >= 5 && pct >= 20) return 'medium';
     return 'low';
+  }
+
+  function addSampleSizeWarning(insight, sampleSize, total = totalGames) {
+    if (sampleSize < 5 || (total > 0 && (sampleSize / total) < 0.15)) {
+      insight.warning = 'small_sample';
+    }
   }
 
   function fmtUnitList(units) {
@@ -41,7 +49,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
     .sort((a, b) => b.wr - a.wr || b.matches - a.matches);
   if (effectiveness.length > 0) {
     const top = effectiveness[0];
-    add({
+    const insight = {
       id: 'unit_strength',
       category: 'army',
       type: 'strength',
@@ -57,7 +65,9 @@ export function generateInsights(stats, knowledgeBase = {}) {
         share: top.share,
       },
       tooltipKey: 'insights.unit_strength.tooltip',
-    });
+    };
+    addSampleSizeWarning(insight, top.matches);
+    add(insight);
   }
 
   // 3. Ineffective unit
@@ -67,7 +77,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
     .sort((a, b) => a.wr - b.wr || b.matches - a.matches);
   if (weaknesses.length > 0) {
     const top = weaknesses[0];
-    add({
+    const insight = {
       id: 'unit_weakness',
       category: 'army',
       type: 'weakness',
@@ -83,7 +93,9 @@ export function generateInsights(stats, knowledgeBase = {}) {
         share: top.share,
       },
       tooltipKey: 'insights.unit_weakness.tooltip',
-    });
+    };
+    addSampleSizeWarning(insight, top.matches);
+    add(insight);
   }
 
   // 4. Civ context + dependency
@@ -301,6 +313,10 @@ export function renderInsightCard(insight) {
   const typeLabel = t(`insights.${insight.type}`);
   const typeClass = insight.type;
 
+  const warningHtml = insight.warning === 'small_sample'
+    ? `<div class="insight-warning">${t('insights.smallSampleWarning')}</div>`
+    : '';
+
   return `<div class="card insight-card insight-${typeClass}">
     <div class="insight-header">
       <span class="insight-type">${escapeHtml(typeLabel)}</span>
@@ -311,6 +327,7 @@ export function renderInsightCard(insight) {
     </div>
     <div class="insight-title">${escapeHtml(title)}</div>
     <div class="insight-body">${escapeHtml(body)}</div>
+    ${warningHtml}
   </div>`;
 }
 

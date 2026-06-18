@@ -74,6 +74,7 @@
       "pattern": "Pattern",
       "context": "Context",
       "recommendation": "Recommendation",
+      "smallSampleWarning": "⚠ Small sample size — interpret with caution",
       "unit_signature": {
         "title": "Real Army Signature",
         "body": "Your most produced units are {units}. This is what you actually build, not what your civ can build.",
@@ -290,6 +291,7 @@
       "pattern": "Patrón",
       "context": "Contexto",
       "recommendation": "Recomendación",
+      "smallSampleWarning": "⚠ Muestra pequeña — interpretar con precaución",
       "unit_signature": {
         "title": "Firma Real de Ejército",
         "body": "Tus unidades más producidas son {units}. Esto es lo que realmente construyes, no lo que tu civ puede construir.",

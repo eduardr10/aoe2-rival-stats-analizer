@@ -1,6 +1,7 @@
 /* AoE2 Dashboard — Decision Assistant Full-Page View (Light Mode) */
 
 :root {
+  /* Colors */
   --bg-primary: #f8f9fc;
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
@@ -20,10 +21,33 @@
   --danger-low: var(--accent-green);
   --danger-mid: var(--accent-yellow);
   --danger-high: var(--accent-red);
+  
+  /* Spacing Scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  
+  /* Typography Scale */
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  
+  /* Border Radius */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+  --radius-full: 9999px;
+  
+  /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.10);
@@ -1682,6 +1706,17 @@ body {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.insight-warning {
+  font-size: 11px;
+  color: var(--accent-yellow);
+  background: rgba(202, 138, 4, 0.08);
+  border: 1px solid rgba(202, 138, 4, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-top: 10px;
+  font-weight: 500;
 }
 
 /* ==========================================================================
