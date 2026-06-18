@@ -1721,3 +1721,369 @@ body {
 .key-insight-pattern .key-insight-title { color: var(--accent-cyan); }
 .key-insight-context .key-insight-title { color: var(--accent-purple); }
 .key-insight-recommendation .key-insight-title { color: var(--accent-yellow); }
+
+/* ==========================================================================
+   EXECUTIVE SUMMARY (Consolidated Banner)
+   ========================================================================== */
+
+.executive-summary {
+  padding: 24px;
+}
+
+.executive-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+@media (max-width: 768px) {
+  .executive-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+.executive-summary-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.player-name-large {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.playstyle-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.civs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.civs-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.civ-tag {
+  background: rgba(30, 30, 46, 0.04);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.civ-pct {
+  color: var(--accent-blue);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.executive-summary-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.metric-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(30, 30, 46, 0.02);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.metric-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.metric-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.metric-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.metric-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.metric-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   FINDINGS SECTION (Unified Insights)
+   ========================================================================== */
+
+.findings-section {
+  margin-bottom: 24px;
+}
+
+/* ==========================================================================
+   TIMING ANALYSIS CARD
+   ========================================================================== */
+
+.timing-analysis-card {
+  padding: 20px;
+}
+
+.timing-analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.timing-duration {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.timing-age-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.timing-age-row:last-child {
+  border-bottom: none;
+}
+
+.timing-age-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.timing-age-label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.timing-age-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.timing-diff {
+  font-size: 12px;
+  color: var(--accent-red);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.interpretation-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.interpretation-row:last-child {
+  border-bottom: none;
+}
+
+.interpretation-icon {
+  font-weight: 800;
+  margin-right: 8px;
+}
+
+.interpretation-text {
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   DETAILED ANALYSIS CARD
+   ========================================================================== */
+
+.detailed-analysis-card {
+  padding: 16px;
+}
+
+/* ==========================================================================
+   HISTORICAL DATA CARD
+   ========================================================================== */
+
+.historical-data-card {
+  padding: 12px;
+}
+
+/* ==========================================================================
+   COMPOSITION BARS (Military Panel)
+   ========================================================================== */
+
+.composition-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.composition-bar-label {
+  width: 80px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.composition-bar-track {
+  flex: 1;
+  height: 12px;
+  background: rgba(30, 30, 46, 0.06);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.composition-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease;
+}
+
+.composition-bar-pct {
+  width: 48px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   DIMENSION COMPARISON (Live Match)
+   ========================================================================== */
+
+.dimension-comparison-row {
+  margin-bottom: 12px;
+}
+
+.dimension-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.dimension-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.dimension-value {
+  width: 50px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.dimension-bar-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(30, 30, 46, 0.06);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.dimension-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.8s ease;
+}
+
+.dimension-bar-fill.player {
+  background: linear-gradient(90deg, var(--accent-blue), rgba(37, 99, 235, 0.6));
+}
+
+.dimension-bar-fill.rival {
+  background: linear-gradient(90deg, var(--accent-red), rgba(220, 38, 38, 0.6));
+}
+
+/* ==========================================================================
+   LIVE ADVANTAGE
+   ========================================================================== */
+
+.advantage-text {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 16px 0 12px;
+}
+
+/* ==========================================================================
+   TEMPO ANALYSIS
+   ========================================================================== */
+
+.tempo-summary {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ==========================================================================
+   UTILITY CLASSES
+   ========================================================================== */
+
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mt-2 { margin-top: 8px; }
+.ml-1 { margin-left: 4px; }
+.text-xs { font-size: 11px; }
+.text-sm { font-size: 12px; }
+.text-center { text-align: center; }

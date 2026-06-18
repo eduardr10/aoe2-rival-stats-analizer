@@ -173,6 +173,13 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 export {
   CIV_CANONICAL_NAMES,
   TECH_CATEGORIES,
@@ -187,4 +194,5 @@ export {
   isKeyTech,
   getTechCategory,
   techDisplayName,
+  escapeHtml,
 };
