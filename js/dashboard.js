@@ -589,7 +589,13 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   const insights = generateInsights(stats, cachedKnowledgeBase || {});
   html += renderFindingsSection(stats, insights);
 
-  // SECTION 3: Timing Analysis
+  // SECTION 3: Performance Timeline (new time-series visualizations)
+  html += renderPerformanceTimelineSection(stats);
+
+  // SECTION 4: Build Order Timeline
+  html += renderBuildOrderTimelineSection(stats);
+
+  // SECTION 5: Timing Analysis
   html += `<div class="block">`;
   html += `<div class="section-title">${t('sections.timingAnalysis')}</div>`;
   html += renderTimingAnalysisCard(stats);
@@ -724,7 +730,64 @@ function renderExecutiveSummary(stats) {
         </div>
       </div>
     </div>
+    ${renderExecSignature(stats)}
   </div>`;
+}
+
+function renderExecSignature(stats) {
+  const hasData = (stats.apm_curve_wins || []).some(v => v != null)
+    || (stats.resources_curve_wins || []).some(v => v != null)
+    || (stats.objects_curve_wins || []).some(v => v != null);
+  if (!hasData) return '';
+
+  const apmSpark = renderSparkline(stats.apm_curve_wins, 'var(--accent-blue)');
+  const resSpark = renderSparkline(stats.resources_curve_wins, 'var(--accent-green)');
+  const objSpark = renderSparkline(stats.objects_curve_wins, 'var(--accent-purple)');
+
+  const apmPeak = stats.apm_peak?.wins ?? stats.apm_peak?.losses ?? '—';
+  const resPeak = stats.resource_peak?.wins ?? stats.resource_peak?.losses ?? '—';
+  const objPeak = stats.object_peak?.wins ?? stats.object_peak?.losses ?? '—';
+
+  return `<div class="exec-signature">
+    <div class="exec-signature-title">Performance Signature</div>
+    <div class="exec-signature-grid">
+      <div class="exec-signature-item">
+        <div class="exec-signature-label">APM trajectory</div>
+        <div class="exec-signature-spark">${apmSpark}</div>
+        <div class="exec-signature-value">Peak ${apmPeak}</div>
+      </div>
+      <div class="exec-signature-item">
+        <div class="exec-signature-label">Economy trajectory</div>
+        <div class="exec-signature-spark">${resSpark}</div>
+        <div class="exec-signature-value">Peak ${Math.round(resPeak)}</div>
+      </div>
+      <div class="exec-signature-item">
+        <div class="exec-signature-label">Army trajectory</div>
+        <div class="exec-signature-spark">${objSpark}</div>
+        <div class="exec-signature-value">Peak ${Math.round(objPeak)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSparkline(values, color) {
+  const valid = values.map(v => v == null ? null : Number(v)).filter(v => v != null);
+  if (valid.length < 2) return '<span class="sparkline-empty">—</span>';
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const width = 120;
+  const height = 30;
+  const step = width / (values.length - 1);
+  const points = values.map((v, i) => {
+    if (v == null) return null;
+    const x = i * step;
+    const y = height - ((v - min) / range) * height;
+    return `${x},${y}`;
+  }).filter(Boolean).join(' ');
+  return `<svg viewBox="0 0 ${width} ${height}" class="sparkline" preserveAspectRatio="none">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 }
 
 function renderFindingsSection(stats, insights) {
@@ -944,6 +1007,366 @@ function renderAgeStability(stats) {
     <div class="age-stability-title">${t('ageTimeline') || 'Age Stability'}</div>
     <div class="age-stability-grid">${items.join('')}</div>
   </div>`;
+}
+
+// ============================================================================
+// PERFORMANCE TIMELINE (time-series from Companion data)
+// ============================================================================
+
+function renderPerformanceTimelineSection(stats) {
+  const hasApm = (stats.apm_curve_wins || []).some(v => v != null) || (stats.apm_curve_losses || []).some(v => v != null);
+  const hasResources = (stats.resources_curve_wins || []).some(v => v != null);
+  const hasObjects = (stats.objects_curve_wins || []).some(v => v != null);
+
+  if (!hasApm && !hasResources && !hasObjects) return '';
+
+  const minutes = stats.timeline_minutes || [];
+  const maxMin = minutes.length - 1;
+
+  const apmSeries = [];
+  if (hasApm) {
+    apmSeries.push({
+      label: t('timeline.wins') || 'Wins',
+      color: 'var(--accent-green)',
+      values: stats.apm_curve_wins || [],
+      dashed: false,
+    });
+    apmSeries.push({
+      label: t('timeline.losses') || 'Losses',
+      color: 'var(--accent-red)',
+      values: stats.apm_curve_losses || [],
+      dashed: false,
+    });
+    if ((stats.opp_apm_curve || []).some(v => v != null)) {
+      apmSeries.push({
+        label: t('timeline.rivals') || 'Rivals',
+        color: 'var(--accent-blue)',
+        values: stats.opp_apm_curve || [],
+        dashed: true,
+      });
+    }
+  }
+
+  const resourcesSeries = [];
+  if (hasResources) {
+    resourcesSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.resources_curve_wins || [] });
+    resourcesSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.resources_curve_losses || [] });
+    if ((stats.opp_resources_curve || []).some(v => v != null)) {
+      resourcesSeries.push({ label: t('timeline.rivals') || 'Rivals', color: 'var(--accent-blue)', values: stats.opp_resources_curve || [], dashed: true });
+    }
+  }
+
+  const objectsSeries = [];
+  if (hasObjects) {
+    objectsSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.objects_curve_wins || [] });
+    objectsSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.objects_curve_losses || [] });
+    if ((stats.opp_objects_curve || []).some(v => v != null)) {
+      objectsSeries.push({ label: t('timeline.rivals') || 'Rivals', color: 'var(--accent-blue)', values: stats.opp_objects_curve || [], dashed: true });
+    }
+  }
+
+  return `<div class="block performance-timeline">
+    <div class="section-title">${t('sections.performanceTimeline') || 'Performance Timeline'}</div>
+    <div class="timeline-intro">Average curves across analyzed matches. Solid lines = your wins/losses. Dashed = opponent average.</div>
+    <div class="timeline-grid">
+      ${hasApm ? renderTimelineCard('APM / min', 'Actions per minute', apmSeries, maxMin, { suffix: '' }) : ''}
+      ${hasResources ? renderTimelineCard('Resources', 'Total stockpiled resources', resourcesSeries, maxMin, { suffix: '' }) : ''}
+      ${hasObjects ? renderTimelineCard('Population', 'Total objects (vils + army + buildings)', objectsSeries, maxMin, { suffix: '' }) : ''}
+    </div>
+    ${renderTimelineMetrics(stats)}
+  </div>`;
+}
+
+function renderTimelineCard(title, subtitle, series, maxMin, options = {}) {
+  const chart = renderSvgLineChart(series, maxMin, options);
+  return `<div class="timeline-card">
+    <div class="timeline-card-header">
+      <div class="timeline-card-title">${escapeHtml(title)}</div>
+      <div class="timeline-card-subtitle">${escapeHtml(subtitle)}</div>
+    </div>
+    ${chart}
+  </div>`;
+}
+
+function renderSvgLineChart(series, maxMin, options = {}) {
+  const width = 500;
+  const height = 160;
+  const padding = { top: 10, right: 10, bottom: 30, left: 45 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  // Flatten all values to find global min/max
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const s of series) {
+    for (const v of s.values) {
+      if (v != null) {
+        minY = Math.min(minY, v);
+        maxY = Math.max(maxY, v);
+      }
+    }
+  }
+  if (!isFinite(minY) || !isFinite(maxY)) return '<div class="timeline-no-data">No data</div>';
+  if (minY === maxY) { minY = 0; maxY = maxY * 1.2 || 1; }
+
+  const yRange = maxY - minY;
+  const xStep = maxMin > 0 ? chartW / maxMin : chartW;
+
+  function xFor(i) { return padding.left + i * xStep; }
+  function yFor(v) { return padding.top + chartH - ((v - minY) / yRange) * chartH; }
+
+  // Grid lines (5 horizontal)
+  let gridLines = '';
+  for (let i = 0; i <= 5; i++) {
+    const y = padding.top + (chartH * i) / 5;
+    const val = maxY - (yRange * i) / 5;
+    gridLines += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="timeline-grid-line"/>`;
+    gridLines += `<text x="${padding.left - 8}" y="${y + 3}" class="timeline-axis-text" text-anchor="end">${formatAxisNumber(val)}</text>`;
+  }
+
+  // X axis labels every 10 minutes
+  let xLabels = '';
+  for (let i = 0; i <= maxMin; i += 10) {
+    const x = xFor(i);
+    xLabels += `<text x="${x}" y="${height - 8}" class="timeline-axis-text" text-anchor="middle">${i}</text>`;
+  }
+
+  // Paths and points
+  let paths = '';
+  let points = '';
+  for (const s of series) {
+    let pathD = '';
+    let first = true;
+    for (let i = 0; i < s.values.length; i++) {
+      const v = s.values[i];
+      if (v == null) continue;
+      const x = xFor(i);
+      const y = yFor(v);
+      if (first) { pathD += `M ${x} ${y}`; first = false; }
+      else { pathD += ` L ${x} ${y}`; }
+      points += `<circle cx="${x}" cy="${y}" r="2" fill="${s.color}" class="timeline-point"/>`;
+    }
+    if (pathD) {
+      paths += `<path d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2" ${s.dashed ? 'stroke-dasharray="4,4"' : ''} class="timeline-path"/>`;
+    }
+  }
+
+  // Legend
+  let legend = '';
+  for (const s of series) {
+    legend += `<div class="timeline-legend-item">
+      <span class="timeline-legend-line" style="background:${s.color}; ${s.dashed ? 'background: repeating-linear-gradient(90deg, ' + s.color + ', ' + s.color + ' 4px, transparent 4px, transparent 8px);' : ''}"></span>
+      <span class="timeline-legend-label">${escapeHtml(s.label)}</span>
+    </div>`;
+  }
+
+  return `<div class="timeline-chart-wrap">
+    <svg viewBox="0 0 ${width} ${height}" class="timeline-svg" preserveAspectRatio="none">
+      ${gridLines}
+      ${paths}
+      ${points}
+      ${xLabels}
+    </svg>
+    <div class="timeline-legend">${legend}</div>
+  </div>`;
+}
+
+function formatAxisNumber(n) {
+  if (n >= 1000) return Math.round(n / 100) / 10 + 'k';
+  return Math.round(n).toString();
+}
+
+function renderTimelineMetrics(stats) {
+  const cards = [];
+
+  const apmPeak = stats.apm_peak || {};
+  if (apmPeak.wins != null || apmPeak.losses != null) {
+    const diff = apmPeak.losses != null && apmPeak.wins != null ? apmPeak.wins - apmPeak.losses : null;
+    const diffText = diff != null ? ` (${diff > 0 ? '+' : ''}${Math.round(diff)} in wins)` : '';
+    cards.push(renderMetricCard('Peak APM', `${apmPeak.wins ?? apmPeak.losses ?? '—'}${diffText}`, 'var(--accent-blue)', `Min ${apmPeak.win_minute ?? apmPeak.loss_minute ?? '—'}`));
+  }
+
+  const dropoff = stats.apm_dropoff || {};
+  if (dropoff.wins != null || dropoff.losses != null) {
+    const val = dropoff.wins ?? dropoff.losses;
+    cards.push(renderMetricCard('APM Drop-off', `-${val}`, 'var(--accent-orange)', 'Peak vs late game'));
+  }
+
+  const resPeak = stats.resource_peak || {};
+  if (resPeak.wins != null || resPeak.losses != null) {
+    const diff = resPeak.wins != null && resPeak.losses != null ? resPeak.wins - resPeak.losses : null;
+    const diffText = diff != null ? ` (${diff > 0 ? '+' : ''}${Math.round(diff)})` : '';
+    cards.push(renderMetricCard('Peak Resources', `${Math.round(resPeak.wins ?? resPeak.losses ?? 0)}${diffText}`, 'var(--accent-green)', `Min ${resPeak.win_minute ?? resPeak.loss_minute ?? '—'}`));
+  }
+
+  const objPeak = stats.object_peak || {};
+  if (objPeak.wins != null || objPeak.losses != null) {
+    cards.push(renderMetricCard('Peak Population', Math.round(objPeak.wins ?? objPeak.losses ?? 0), 'var(--accent-purple)', `Min ${objPeak.win_minute ?? objPeak.loss_minute ?? '—'}`));
+  }
+
+  const ageSnap = stats.age_snapshots || {};
+  const castleSnap = ageSnap.castle;
+  if (castleSnap && (castleSnap.wins?.resources != null || castleSnap.losses?.resources != null)) {
+    const val = castleSnap.wins?.resources ?? castleSnap.losses?.resources;
+    const diff = castleSnap.wins?.resources != null && castleSnap.losses?.resources != null ? Math.round(castleSnap.wins.resources - castleSnap.losses.resources) : null;
+    const diffText = diff != null ? ` (${diff > 0 ? '+' : ''}${diff} in wins)` : '';
+    cards.push(renderMetricCard('Res. at Castle', `${Math.round(val)}${diffText}`, 'var(--accent-cyan)', 'Avg stockpile'));
+  }
+
+  if (cards.length === 0) return '';
+  return `<div class="timeline-metrics">${cards.join('')}</div>`;
+}
+
+function renderMetricCard(label, value, color, sub) {
+  return `<div class="timeline-metric-card">
+    <div class="timeline-metric-label">${escapeHtml(label)}</div>
+    <div class="timeline-metric-value" style="color:${color}">${value}</div>
+    <div class="timeline-metric-sub">${escapeHtml(sub)}</div>
+  </div>`;
+}
+
+// ============================================================================
+// BUILD ORDER TIMELINE
+// ============================================================================
+
+function renderBuildOrderTimelineSection(stats) {
+  const bo = stats.build_order;
+  if (!bo) return '';
+
+  const hasBuildings = Object.keys(bo.wins?.buildings || {}).length > 0
+    || Object.keys(bo.losses?.buildings || {}).length > 0;
+  const hasTechs = Object.keys(bo.wins?.techs || {}).length > 0
+    || Object.keys(bo.losses?.techs || {}).length > 0;
+
+  if (!hasBuildings && !hasTechs) return '';
+
+  const maxMin = 40;
+  const timelineMarkers = [];
+
+  // Age up markers from averages
+  for (const age of ['feudal', 'castle', 'imperial']) {
+    const avg = stats['avg_' + age];
+    if (avg != null) {
+      timelineMarkers.push({
+        time: avg,
+        minute: avg / 60,
+        label: t(age),
+        type: 'age',
+        color: age === 'feudal' ? 'var(--accent-green)' : age === 'castle' ? 'var(--accent-blue)' : 'var(--accent-purple)',
+      });
+    }
+  }
+
+  // Building markers
+  const buildingNames = new Set([
+    ...Object.keys(bo.wins?.buildings || {}),
+    ...Object.keys(bo.losses?.buildings || {}),
+  ]);
+  for (const name of buildingNames) {
+    const win = bo.wins?.buildings?.[name];
+    const loss = bo.losses?.buildings?.[name];
+    const val = win?.avg ?? loss?.avg;
+    if (val != null && val / 60 <= maxMin) {
+      timelineMarkers.push({
+        time: val,
+        minute: val / 60,
+        label: formatBuildingName(name),
+        type: 'building',
+        color: 'var(--accent-orange)',
+        winTime: win?.avg_hms,
+        lossTime: loss?.avg_hms,
+      });
+    }
+  }
+
+  // Tech markers
+  const techNames = new Set([
+    ...Object.keys(bo.wins?.techs || {}),
+    ...Object.keys(bo.losses?.techs || {}),
+  ]);
+  for (const name of techNames) {
+    const win = bo.wins?.techs?.[name];
+    const loss = bo.losses?.techs?.[name];
+    const val = win?.avg ?? loss?.avg;
+    if (val != null && val / 60 <= maxMin) {
+      timelineMarkers.push({
+        time: val,
+        minute: val / 60,
+        label: formatTechName(name),
+        type: 'tech',
+        color: 'var(--accent-cyan)',
+        winTime: win?.avg_hms,
+        lossTime: loss?.avg_hms,
+      });
+    }
+  }
+
+  timelineMarkers.sort((a, b) => a.time - b.time);
+
+  if (timelineMarkers.length === 0) return '';
+
+  return `<div class="block build-order-timeline">
+    <div class="section-title">${t('sections.buildOrderTimeline') || 'Build Order Timeline'}</div>
+    <div class="bo-intro">Average first-occurrence timings across analyzed matches. Ages = vertical markers, buildings = orange, techs = cyan.</div>
+    <div class="bo-track">
+      ${renderBoTrack(timelineMarkers, maxMin)}
+    </div>
+    <div class="bo-legend">
+      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-green)"></span> Feudal</span>
+      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-blue)"></span> Castle</span>
+      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-purple)"></span> Imperial</span>
+      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-orange)"></span> Building</span>
+      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-cyan)"></span> Tech</span>
+    </div>
+  </div>`;
+}
+
+function renderBoTrack(markers, maxMin) {
+  const width = 1000;
+  const height = 120;
+  const padding = { top: 20, bottom: 30 };
+  const trackY = 55;
+
+  let svg = `<svg viewBox="0 0 ${width} ${height}" class="bo-svg" preserveAspectRatio="none">`;
+
+  // Horizontal track
+  svg += `<line x1="40" y1="${trackY}" x2="${width - 40}" y2="${trackY}" class="bo-track-line"/>`;
+
+  // Minute ticks every 5 min
+  for (let m = 0; m <= maxMin; m += 5) {
+    const x = 40 + (m / maxMin) * (width - 80);
+    svg += `<line x1="${x}" y1="${trackY - 5}" x2="${x}" y2="${trackY + 5}" class="bo-tick"/>`;
+    svg += `<text x="${x}" y="${height - 8}" class="bo-axis-text" text-anchor="middle">${m}m</text>`;
+  }
+
+  // Markers
+  for (const m of markers) {
+    const x = 40 + (m.minute / maxMin) * (width - 80);
+    const isTop = markers.indexOf(m) % 2 === 0;
+    const labelY = isTop ? trackY - 22 : trackY + 34;
+    const lineY1 = isTop ? trackY - 5 : trackY + 5;
+    const lineY2 = isTop ? trackY - 14 : trackY + 24;
+
+    svg += `<line x1="${x}" y1="${lineY1}" x2="${x}" y2="${lineY2}" stroke="${m.color}" stroke-width="2"/>`;
+    svg += `<circle cx="${x}" cy="${trackY}" r="5" fill="${m.color}"/>`;
+    svg += `<text x="${x}" y="${labelY}" class="bo-marker-text" text-anchor="middle" fill="${m.color}">${escapeHtml(m.label)}</text>`;
+    if (m.winTime || m.lossTime) {
+      const subY = isTop ? trackY - 10 : trackY + 44;
+      const subText = m.winTime && m.lossTime ? `W ${m.winTime} / L ${m.lossTime}` : (m.winTime || m.lossTime);
+      svg += `<text x="${x}" y="${subY}" class="bo-marker-sub" text-anchor="middle">${escapeHtml(subText)}</text>`;
+    }
+  }
+
+  svg += `</svg>`;
+  return svg;
+}
+
+function formatBuildingName(name) {
+  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function formatTechName(name) {
+  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
 function renderTimingAnalysisCard(stats) {

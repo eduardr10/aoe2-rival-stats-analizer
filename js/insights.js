@@ -223,6 +223,79 @@ export function generateInsights(stats, knowledgeBase = {}) {
     });
   }
 
+  // 11. APM dropoff (time-series)
+  const dropoff = stats.apm_dropoff;
+  if (dropoff && (dropoff.wins != null || dropoff.losses != null)) {
+    const winVal = dropoff.wins;
+    const lossVal = dropoff.losses;
+    if (winVal != null && lossVal != null && Math.abs(winVal - lossVal) >= 5) {
+      add({
+        id: 'apm_dropoff',
+        category: 'pattern',
+        type: 'weakness',
+        priority: 7,
+        confidence: confidenceFromSample(stats.analyzed),
+        titleKey: 'insights.apm_dropoff.title',
+        bodyKey: 'insights.apm_dropoff.body',
+        params: {
+          winDropoff: Math.round(winVal),
+          lossDropoff: Math.round(lossVal),
+        },
+        tooltipKey: 'insights.apm_dropoff.tooltip',
+      });
+    }
+  }
+
+  // 12. Economic momentum at Castle (resources stockpiled)
+  const ageSnap = stats.age_snapshots;
+  if (ageSnap && ageSnap.castle) {
+    const castleWins = ageSnap.castle.wins;
+    const castleLosses = ageSnap.castle.losses;
+    if (castleWins?.resources != null && castleLosses?.resources != null) {
+      const diff = castleWins.resources - castleLosses.resources;
+      if (Math.abs(diff) >= 100) {
+        add({
+          id: 'castle_resources',
+          category: 'economy',
+          type: diff > 0 ? 'strength' : 'weakness',
+          priority: 7,
+          confidence: confidenceFromSample(stats.analyzed),
+          titleKey: 'insights.castle_resources.title',
+          bodyKey: 'insights.castle_resources.body',
+          params: {
+            winResources: Math.round(castleWins.resources),
+            lossResources: Math.round(castleLosses.resources),
+            diff: Math.abs(Math.round(diff)),
+          },
+          tooltipKey: 'insights.castle_resources.tooltip',
+        });
+      }
+    }
+  }
+
+  // 13. Army size peak comparison vs opponents
+  const objPeak = stats.object_peak;
+  if (objPeak && objPeak.wins != null && objPeak.losses != null) {
+    const diff = objPeak.wins - objPeak.losses;
+    if (Math.abs(diff) >= 10) {
+      add({
+        id: 'army_peak',
+        category: 'army',
+        type: diff > 0 ? 'strength' : 'weakness',
+        priority: 6,
+        confidence: confidenceFromSample(stats.analyzed),
+        titleKey: 'insights.army_peak.title',
+        bodyKey: 'insights.army_peak.body',
+        params: {
+          winPeak: Math.round(objPeak.wins),
+          lossPeak: Math.round(objPeak.losses),
+          diff: Math.abs(Math.round(diff)),
+        },
+        tooltipKey: 'insights.army_peak.tooltip',
+      });
+    }
+  }
+
   // Sort by priority desc
   insights.sort((a, b) => b.priority - a.priority);
 

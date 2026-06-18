@@ -50,6 +50,32 @@ export function parseGameJson(analysisData, playerId) {
     }
 
     p.events.sort((a, b) => a.time - b.time);
+
+    // Parse per-minute APM curve (raw APM per minute from Companion)
+    p.apmCurve = [];
+    if (p.eapmPerMinute && typeof p.eapmPerMinute === 'object') {
+      const entries = Object.entries(p.eapmPerMinute)
+        .map(([min, apm]) => ({ minute: parseInt(min, 10), apm: Math.round(apm * 100) / 100 }))
+        .filter(d => !isNaN(d.minute))
+        .sort((a, b) => a.minute - b.minute);
+      p.apmCurve = entries;
+    }
+
+    // Parse timeseries: resources and objects over time
+    p.timeseriesCurve = [];
+    if (Array.isArray(p.timeseries)) {
+      for (const point of p.timeseries) {
+        const sec = parseTimestamp(point.timestamp || null);
+        if (sec === null) continue;
+        p.timeseriesCurve.push({
+          time: sec,
+          minute: Math.round(sec / 60 * 100) / 100,
+          resources: point.totalResources || 0,
+          objects: point.totalObjects || 0,
+        });
+      }
+    }
+
     gameRecord[playerKey] = p;
   }
 

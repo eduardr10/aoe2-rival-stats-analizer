@@ -139,6 +139,51 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   let totalMilitaryUnitsWins = 0;
   let totalMilitaryUnitsLosses = 0;
 
+  // Time-series aggregation
+  const MAX_TIMELINE_MIN = 60;
+  function makeTimelineBuckets() {
+    const arr = [];
+    for (let i = 0; i <= MAX_TIMELINE_MIN; i++) arr.push([]);
+    return arr;
+  }
+  const apmCurveWins = makeTimelineBuckets();
+  const apmCurveLosses = makeTimelineBuckets();
+  const resourcesCurveWins = makeTimelineBuckets();
+  const resourcesCurveLosses = makeTimelineBuckets();
+  const objectsCurveWins = makeTimelineBuckets();
+  const objectsCurveLosses = makeTimelineBuckets();
+
+  // Age-up snapshots: resources & objects at the moment of reaching each age
+  const ageSnapshotsWins = { feudal: [], castle: [], imperial: [] };
+  const ageSnapshotsLosses = { feudal: [], castle: [], imperial: [] };
+
+  // Peak values
+  const apmPeaksWins = [];
+  const apmPeaksLosses = [];
+  const resourcePeaksWins = [];
+  const resourcePeaksLosses = [];
+  const objectPeaksWins = [];
+  const objectPeaksLosses = [];
+
+  // Opponent time-series for comparison
+  const oppApmCurve = makeTimelineBuckets();
+  const oppResourcesCurve = makeTimelineBuckets();
+  const oppObjectsCurve = makeTimelineBuckets();
+  const oppAgeSnapshots = { feudal: [], castle: [], imperial: [] };
+
+  // Build-order first-occurrence tracking
+  const KEY_BUILDINGS = ['barracks', 'archery_range', 'stable', 'blacksmith', 'market', 'siege_workshop', 'monastery', 'university'];
+  const KEY_TECHS = ['loom', 'feudal_age', 'castle_age', 'imperial_age', 'wheelbarrow', 'hand_cart', 'double-bit_axe', 'horse_collar', 'bow_saw', 'heavy_plow', 'fletching', 'padded_archer_armor', 'forging', 'scale_barding_armor', 'scale_mail_armor'];
+  function makeFirstOccurrenceTracker() {
+    return {
+      buildings: Object.fromEntries(KEY_BUILDINGS.map(b => [b, { times: [] }])),
+      techs: Object.fromEntries(KEY_TECHS.map(t => [t, { times: [] }])),
+    };
+  }
+  const boTrackerWins = makeFirstOccurrenceTracker();
+  const boTrackerLosses = makeFirstOccurrenceTracker();
+  const boTrackerOpp = makeFirstOccurrenceTracker();
+
   // Unidades por periodo de edad
   const unitsByAgePeriod = {
     'pre-feudal': {},
@@ -598,6 +643,129 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       if (winner) stats.eapm_wins.push(meEapm);
       else stats.eapm_losses.push(meEapm);
     }
+    // ============================================================================
+    // BUILD ORDER FIRST-OCCURRENCE TRACKING
+    // ============================================================================
+    function recordFirst(events, names, tracker) {
+      const seen = new Set();
+      for (const ev of events) {
+        if (!names.includes(ev.name)) continue;
+        if (seen.has(ev.name)) continue;
+        seen.add(ev.name);
+        tracker[ev.name].times.push(ev.time);
+      }
+    }
+
+    const targetBo = winner ? boTrackerWins : boTrackerLosses;
+    recordFirst(mePlayer.events || [], KEY_BUILDINGS, targetBo.buildings);
+    recordFirst(mePlayer.events || [], KEY_TECHS, targetBo.techs);
+    if (oppPlayer && oppPlayer.events) {
+      recordFirst(oppPlayer.events, KEY_BUILDINGS, boTrackerOpp.buildings);
+      recordFirst(oppPlayer.events, KEY_TECHS, boTrackerOpp.techs);
+    }
+
+    // ============================================================================
+    // TIME-SERIES EXTRACTION (APM, resources, objects)
+    // ============================================================================
+    function sampleTimeseries(curve, targetMinutes) {
+      // For each target minute, find the closest sample
+      const result = {};
+      for (const min of targetMinutes) {
+        const targetSec = min * 60;
+        let best = null;
+        let bestDiff = Infinity;
+        for (const pt of curve) {
+          const diff = Math.abs(pt.time - targetSec);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            best = pt;
+          }
+        }
+        if (best) result[min] = best;
+      }
+      return result;
+    }
+
+    function extractSnapshot(curve, targetSec) {
+      if (!curve || curve.length === 0 || targetSec == null) return null;
+      // Find sample just before or at target time
+      let best = null;
+      for (const pt of curve) {
+        if (pt.time <= targetSec) best = pt;
+        else break;
+      }
+      return best;
+    }
+
+    const timelineMinutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
+
+    // Player APM curve
+    if (mePlayer.apmCurve && mePlayer.apmCurve.length > 0) {
+      const peak = mePlayer.apmCurve.reduce((max, pt) => pt.apm > max.apm ? pt : max, mePlayer.apmCurve[0]);
+      const targetArr = winner ? apmCurveWins : apmCurveLosses;
+      for (const pt of mePlayer.apmCurve) {
+        if (pt.minute <= MAX_TIMELINE_MIN) {
+          targetArr[pt.minute].push(pt.apm);
+        }
+      }
+      const peakBucket = winner ? apmPeaksWins : apmPeaksLosses;
+      peakBucket.push({ value: peak.apm, minute: peak.minute });
+    }
+
+    // Player resources/objects curve
+    if (mePlayer.timeseriesCurve && mePlayer.timeseriesCurve.length > 0) {
+      const resPeak = mePlayer.timeseriesCurve.reduce((max, pt) => pt.resources > max.resources ? pt : max, mePlayer.timeseriesCurve[0]);
+      const objPeak = mePlayer.timeseriesCurve.reduce((max, pt) => pt.objects > max.objects ? pt : max, mePlayer.timeseriesCurve[0]);
+      const sampled = sampleTimeseries(mePlayer.timeseriesCurve, timelineMinutes);
+      const resTarget = winner ? resourcesCurveWins : resourcesCurveLosses;
+      const objTarget = winner ? objectsCurveWins : objectsCurveLosses;
+      for (const min of timelineMinutes) {
+        if (sampled[min]) {
+          resTarget[min].push(sampled[min].resources);
+          objTarget[min].push(sampled[min].objects);
+        }
+      }
+      const resPeakBucket = winner ? resourcePeaksWins : resourcePeaksLosses;
+      const objPeakBucket = winner ? objectPeaksWins : objectPeaksLosses;
+      resPeakBucket.push({ value: resPeak.resources, minute: Math.round(resPeak.minute) });
+      objPeakBucket.push({ value: objPeak.objects, minute: Math.round(objPeak.minute) });
+
+      // Age-up snapshots
+      const snapTarget = winner ? ageSnapshotsWins : ageSnapshotsLosses;
+      for (const age of AGES) {
+        const t = meUptimes[age];
+        if (t != null) {
+          const snap = extractSnapshot(mePlayer.timeseriesCurve, t);
+          if (snap) snapTarget[age].push({ resources: snap.resources, objects: snap.objects, time: t });
+        }
+      }
+    }
+
+    // Opponent time-series for comparison (not split by result, just averaged)
+    if (oppPlayer) {
+      if (oppPlayer.apmCurve) {
+        for (const pt of oppPlayer.apmCurve) {
+          if (pt.minute <= MAX_TIMELINE_MIN) oppApmCurve[pt.minute].push(pt.apm);
+        }
+      }
+      if (oppPlayer.timeseriesCurve) {
+        const sampled = sampleTimeseries(oppPlayer.timeseriesCurve, timelineMinutes);
+        for (const min of timelineMinutes) {
+          if (sampled[min]) {
+            oppResourcesCurve[min].push(sampled[min].resources);
+            oppObjectsCurve[min].push(sampled[min].objects);
+          }
+        }
+        for (const age of AGES) {
+          const t = oppUptimes[age];
+          if (t != null) {
+            const snap = extractSnapshot(oppPlayer.timeseriesCurve, t);
+            if (snap) oppAgeSnapshots[age].push({ resources: snap.resources, objects: snap.objects, time: t });
+          }
+        }
+      }
+    }
+
     if (mePreferRandom !== null) stats.prefer_random.push(mePreferRandom ? 1 : 0);
     if (meCiv) {
       stats.civ_played[meCiv] = (stats.civ_played[meCiv] || 0) + 1;
@@ -1032,6 +1200,106 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       .map(([name, avg]) => ({ name, avg: Math.round(avg * 100) / 100 }));
     stats.matchup_weaknesses.push({ civ, wr, games: total, topLossUnits });
   }
+
+  // ============================================================================
+  // TIME-SERIES AGGREGATES
+  // ============================================================================
+  function avgOrNull(arr) {
+    return arr && arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100 : null;
+  }
+
+  stats.timeline_minutes = [];
+  for (let i = 0; i <= MAX_TIMELINE_MIN; i++) stats.timeline_minutes.push(i);
+
+  stats.apm_curve_wins = apmCurveWins.map(avgOrNull);
+  stats.apm_curve_losses = apmCurveLosses.map(avgOrNull);
+  stats.resources_curve_wins = resourcesCurveWins.map(avgOrNull);
+  stats.resources_curve_losses = resourcesCurveLosses.map(avgOrNull);
+  stats.objects_curve_wins = objectsCurveWins.map(avgOrNull);
+  stats.objects_curve_losses = objectsCurveLosses.map(avgOrNull);
+
+  stats.opp_apm_curve = oppApmCurve.map(avgOrNull);
+  stats.opp_resources_curve = oppResourcesCurve.map(avgOrNull);
+  stats.opp_objects_curve = oppObjectsCurve.map(avgOrNull);
+
+  stats.apm_peak = {
+    wins: avgOrNull(apmPeaksWins.map(p => p.value)),
+    losses: avgOrNull(apmPeaksLosses.map(p => p.value)),
+    win_minute: avgOrNull(apmPeaksWins.map(p => p.minute)),
+    loss_minute: avgOrNull(apmPeaksLosses.map(p => p.minute)),
+  };
+  stats.resource_peak = {
+    wins: avgOrNull(resourcePeaksWins.map(p => p.value)),
+    losses: avgOrNull(resourcePeaksLosses.map(p => p.value)),
+    win_minute: avgOrNull(resourcePeaksWins.map(p => p.minute)),
+    loss_minute: avgOrNull(resourcePeaksLosses.map(p => p.minute)),
+  };
+  stats.object_peak = {
+    wins: avgOrNull(objectPeaksWins.map(p => p.value)),
+    losses: avgOrNull(objectPeaksLosses.map(p => p.value)),
+    win_minute: avgOrNull(objectPeaksWins.map(p => p.minute)),
+    loss_minute: avgOrNull(objectPeaksLosses.map(p => p.minute)),
+  };
+
+  stats.age_snapshots = {};
+  for (const age of AGES) {
+    stats.age_snapshots[age] = {
+      wins: {
+        resources: avgOrNull(ageSnapshotsWins[age].map(s => s.resources)),
+        objects: avgOrNull(ageSnapshotsWins[age].map(s => s.objects)),
+      },
+      losses: {
+        resources: avgOrNull(ageSnapshotsLosses[age].map(s => s.resources)),
+        objects: avgOrNull(ageSnapshotsLosses[age].map(s => s.objects)),
+      },
+      opp: {
+        resources: avgOrNull(oppAgeSnapshots[age].map(s => s.resources)),
+        objects: avgOrNull(oppAgeSnapshots[age].map(s => s.objects)),
+      },
+    };
+  }
+
+  // APM dropoff: difference between peak minute and late-game (min 40-60 avg)
+  function lateGameAvg(curve) {
+    const vals = [];
+    for (let i = 40; i <= Math.min(60, curve.length - 1); i++) {
+      if (curve[i] != null) vals.push(curve[i]);
+    }
+    return avgOrNull(vals);
+  }
+  stats.apm_dropoff = {
+    wins: stats.apm_peak.wins != null ? Math.round((stats.apm_peak.wins - lateGameAvg(stats.apm_curve_wins)) * 100) / 100 : null,
+    losses: stats.apm_peak.losses != null ? Math.round((stats.apm_peak.losses - lateGameAvg(stats.apm_curve_losses)) * 100) / 100 : null,
+  };
+
+  // Build-order averages
+  function aggregateBuildOrder(tracker) {
+    const result = { buildings: {}, techs: {} };
+    for (const [name, data] of Object.entries(tracker.buildings)) {
+      if (data.times.length > 0) {
+        result.buildings[name] = {
+          avg: avgOrNull(data.times),
+          avg_hms: formatHms(avgOrNull(data.times)),
+          games: data.times.length,
+        };
+      }
+    }
+    for (const [name, data] of Object.entries(tracker.techs)) {
+      if (data.times.length > 0) {
+        result.techs[name] = {
+          avg: avgOrNull(data.times),
+          avg_hms: formatHms(avgOrNull(data.times)),
+          games: data.times.length,
+        };
+      }
+    }
+    return result;
+  }
+  stats.build_order = {
+    wins: aggregateBuildOrder(boTrackerWins),
+    losses: aggregateBuildOrder(boTrackerLosses),
+    opp: aggregateBuildOrder(boTrackerOpp),
+  };
 
   // APM efficiency
   if (stats.avg_eapm_wins != null && stats.avg_eapm_losses != null) {

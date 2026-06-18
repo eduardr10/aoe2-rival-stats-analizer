@@ -29,6 +29,11 @@
       "mixedOpenings": "Mixed openings",
       "games": "games"
     },
+    "timeline": {
+      "wins": "Wins",
+      "losses": "Losses",
+      "rivals": "Rivals"
+    },
     "controls": {
       "ladder": "Ladder",
       "from": "From",
@@ -61,7 +66,9 @@
       "maps": "Maps",
       "civs": "Civilizations",
       "unitsByAge": "Units by Age",
-      "techs": "Technologies"
+      "techs": "Technologies",
+      "performanceTimeline": "Performance Timeline",
+      "buildOrderTimeline": "Build Order Timeline"
     },
     "insights": {
       "confidenceHigh": "High confidence",
@@ -115,6 +122,21 @@
         "title": "APM Efficiency",
         "body": "Your APM is {winApm} in wins and {lossApm} in losses, but you produce {winUnits} units/min in wins vs {lossUnits} in losses.",
         "tooltip": "Compares actions per minute with actual unit production to see whether speed translates into output."
+      },
+      "apm_dropoff": {
+        "title": "APM Drop-off",
+        "body": "Your APM falls by {winDropoff} in wins and {lossDropoff} in losses between peak and late game, suggesting different stamina patterns.",
+        "tooltip": "Measures the difference between your peak APM and your late-game APM (minutes 40-60) across wins and losses."
+      },
+      "castle_resources": {
+        "title": "Castle-Age Bank",
+        "body": "You reach Castle with {winResources} resources in wins vs {lossResources} in losses (diff: {diff}).",
+        "tooltip": "Compares total stockpiled resources at the moment you reach Castle Age in wins vs losses."
+      },
+      "army_peak": {
+        "title": "Peak Army Size",
+        "body": "Your peak population is {winPeak} in wins vs {lossPeak} in losses (diff: {diff}).",
+        "tooltip": "Compares the maximum number of objects (villagers + army + buildings) reached in wins vs losses."
       },
       "key_insight": {
         "title": "Key Finding",
@@ -233,6 +255,11 @@
       "mixedOpenings": "Aperturas mixtas",
       "games": "partidas"
     },
+    "timeline": {
+      "wins": "Victorias",
+      "losses": "Derrotas",
+      "rivals": "Rivales"
+    },
     "controls": {
       "ladder": "Ladder",
       "from": "Desde",
@@ -265,7 +292,9 @@
       "maps": "Mapas",
       "civs": "Civilizaciones",
       "unitsByAge": "Unidades por Edad",
-      "techs": "Tecnologías"
+      "techs": "Tecnologías",
+      "performanceTimeline": "Línea Temporal de Rendimiento",
+      "buildOrderTimeline": "Línea Temporal de Build Order"
     },
     "insights": {
       "confidenceHigh": "Alta confianza",
@@ -319,6 +348,21 @@
         "title": "Eficiencia de APM",
         "body": "Tu APM es {winApm} en victorias y {lossApm} en derrotas, pero produces {winUnits} unidades/min en victorias frente a {lossUnits} en derrotas.",
         "tooltip": "Compara las acciones por minuto con la producción real de unidades para ver si la velocidad se traduce en output."
+      },
+      "apm_dropoff": {
+        "title": "Caída de APM",
+        "body": "Tu APM cae {winDropoff} en victorias y {lossDropoff} en derrotas entre el pico y el late game, lo que indica diferentes patrones de resistencia.",
+        "tooltip": "Mide la diferencia entre tu APM pico y tu APM en late game (minutos 40-60) en victorias y derrotas."
+      },
+      "castle_resources": {
+        "title": "Banco en Castel",
+        "body": "Llegas a Castel con {winResources} recursos en victorias vs {lossResources} en derrotas (diferencia: {diff}).",
+        "tooltip": "Compara el total de recursos acumulados en el momento de llegar a Castel entre victorias y derrotas."
+      },
+      "army_peak": {
+        "title": "Pico de Población",
+        "body": "Tu pico de población es {winPeak} en victorias vs {lossPeak} en derrotas (diferencia: {diff}).",
+        "tooltip": "Compara el número máximo de objetos (aldeanos + ejército + edificios) alcanzado en victorias y derrotas."
       },
       "key_insight": {
         "title": "Hallazgo Clave",
