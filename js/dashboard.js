@@ -762,7 +762,7 @@ function renderExecSignature(stats) {
         <div class="exec-signature-value">Peak ${Math.round(resPeak)}</div>
       </div>
       <div class="exec-signature-item">
-        <div class="exec-signature-label">Army trajectory</div>
+        <div class="exec-signature-label">Objects trajectory</div>
         <div class="exec-signature-spark">${objSpark}</div>
         <div class="exec-signature-value">Peak ${Math.round(objPeak)}</div>
       </div>
@@ -1071,7 +1071,7 @@ function renderPerformanceTimelineSection(stats) {
     <div class="timeline-grid">
       ${hasApm ? renderTimelineCard('APM / min', 'Actions per minute', apmSeries, maxMin, { suffix: '' }) : ''}
       ${hasResources ? renderTimelineCard('Resources', 'Total stockpiled resources', resourcesSeries, maxMin, { suffix: '' }) : ''}
-      ${hasObjects ? renderTimelineCard('Population', 'Total objects (vils + army + buildings)', objectsSeries, maxMin, { suffix: '' }) : ''}
+      ${hasObjects ? renderTimelineCard('Objects', 'Total objects (vils + army + buildings, not pop cap)', objectsSeries, maxMin, { suffix: '' }) : ''}
     </div>
     ${renderTimelineMetrics(stats)}
   </div>`;
@@ -1201,7 +1201,7 @@ function renderTimelineMetrics(stats) {
 
   const objPeak = stats.object_peak || {};
   if (objPeak.wins != null || objPeak.losses != null) {
-    cards.push(renderMetricCard('Peak Population', Math.round(objPeak.wins ?? objPeak.losses ?? 0), 'var(--accent-purple)', `Min ${objPeak.win_minute ?? objPeak.loss_minute ?? '—'}`));
+    cards.push(renderMetricCard('Peak Objects', Math.round(objPeak.wins ?? objPeak.losses ?? 0), 'var(--accent-purple)', `Min ${objPeak.win_minute ?? objPeak.loss_minute ?? '—'}`));
   }
 
   const ageSnap = stats.age_snapshots || {};
@@ -1226,8 +1226,14 @@ function renderMetricCard(label, value, color, sub) {
 }
 
 // ============================================================================
-// BUILD ORDER TIMELINE
+// BUILD ORDER TIMELINE (swimlane design)
 // ============================================================================
+
+const BO_LANES = [
+  { key: 'age', label: 'Ages', color: 'var(--accent-green)', top: true },
+  { key: 'building', label: 'Buildings', color: 'var(--accent-orange)', top: true },
+  { key: 'tech', label: 'Techs', color: 'var(--accent-cyan)', top: false },
+];
 
 function renderBuildOrderTimelineSection(stats) {
   const bo = stats.build_order;
@@ -1241,17 +1247,16 @@ function renderBuildOrderTimelineSection(stats) {
   if (!hasBuildings && !hasTechs) return '';
 
   const maxMin = 40;
-  const timelineMarkers = [];
+  const lanes = { age: [], building: [], tech: [] };
 
   // Age up markers from averages
   for (const age of ['feudal', 'castle', 'imperial']) {
     const avg = stats['avg_' + age];
     if (avg != null) {
-      timelineMarkers.push({
+      lanes.age.push({
         time: avg,
         minute: avg / 60,
         label: t(age),
-        type: 'age',
         color: age === 'feudal' ? 'var(--accent-green)' : age === 'castle' ? 'var(--accent-blue)' : 'var(--accent-purple)',
       });
     }
@@ -1267,11 +1272,10 @@ function renderBuildOrderTimelineSection(stats) {
     const loss = bo.losses?.buildings?.[name];
     const val = win?.avg ?? loss?.avg;
     if (val != null && val / 60 <= maxMin) {
-      timelineMarkers.push({
+      lanes.building.push({
         time: val,
         minute: val / 60,
         label: formatBuildingName(name),
-        type: 'building',
         color: 'var(--accent-orange)',
         winTime: win?.avg_hms,
         lossTime: loss?.avg_hms,
@@ -1289,11 +1293,10 @@ function renderBuildOrderTimelineSection(stats) {
     const loss = bo.losses?.techs?.[name];
     const val = win?.avg ?? loss?.avg;
     if (val != null && val / 60 <= maxMin) {
-      timelineMarkers.push({
+      lanes.tech.push({
         time: val,
         minute: val / 60,
         label: formatTechName(name),
-        type: 'tech',
         color: 'var(--accent-cyan)',
         winTime: win?.avg_hms,
         lossTime: loss?.avg_hms,
@@ -1301,15 +1304,13 @@ function renderBuildOrderTimelineSection(stats) {
     }
   }
 
-  timelineMarkers.sort((a, b) => a.time - b.time);
-
-  if (timelineMarkers.length === 0) return '';
+  if (lanes.age.length + lanes.building.length + lanes.tech.length === 0) return '';
 
   return `<div class="block build-order-timeline">
     <div class="section-title">${t('sections.buildOrderTimeline') || 'Build Order Timeline'}</div>
-    <div class="bo-intro">Average first-occurrence timings across analyzed matches. Ages = vertical markers, buildings = orange, techs = cyan.</div>
+    <div class="bo-intro">Average first-occurrence timings across analyzed matches. Each category lives on its own lane to avoid overlap.</div>
     <div class="bo-track">
-      ${renderBoTrack(timelineMarkers, maxMin)}
+      ${renderBoSwimlane(lanes, maxMin)}
     </div>
     <div class="bo-legend">
       <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-green)"></span> Feudal</span>
@@ -1321,44 +1322,75 @@ function renderBuildOrderTimelineSection(stats) {
   </div>`;
 }
 
-function renderBoTrack(markers, maxMin) {
+function renderBoSwimlane(lanes, maxMin) {
   const width = 1000;
-  const height = 120;
-  const padding = { top: 20, bottom: 30 };
-  const trackY = 55;
+  const laneHeight = 75;
+  const paddingX = 50;
+  const topPadding = 22;
+  const bottomPadding = 28;
+  const height = topPadding + BO_LANES.length * laneHeight + bottomPadding;
 
   let svg = `<svg viewBox="0 0 ${width} ${height}" class="bo-svg" preserveAspectRatio="none">`;
 
-  // Horizontal track
-  svg += `<line x1="40" y1="${trackY}" x2="${width - 40}" y2="${trackY}" class="bo-track-line"/>`;
+  // Lane labels and horizontal tracks
+  for (let i = 0; i < BO_LANES.length; i++) {
+    const laneDef = BO_LANES[i];
+    const y = topPadding + i * laneHeight + laneHeight / 2;
+    svg += `<text x="8" y="${y + 4}" class="bo-lane-label" text-anchor="start">${escapeHtml(laneDef.label)}</text>`;
+    svg += `<line x1="${paddingX}" y1="${y}" x2="${width - paddingX}" y2="${y}" class="bo-track-line"/>`;
+  }
 
-  // Minute ticks every 5 min
+  // X axis ticks and labels
   for (let m = 0; m <= maxMin; m += 5) {
-    const x = 40 + (m / maxMin) * (width - 80);
-    svg += `<line x1="${x}" y1="${trackY - 5}" x2="${x}" y2="${trackY + 5}" class="bo-tick"/>`;
+    const x = paddingX + (m / maxMin) * (width - 2 * paddingX);
+    svg += `<line x1="${x}" y1="${topPadding}" x2="${x}" y2="${height - bottomPadding}" class="bo-grid-line"/>`;
     svg += `<text x="${x}" y="${height - 8}" class="bo-axis-text" text-anchor="middle">${m}m</text>`;
   }
 
-  // Markers
-  for (const m of markers) {
-    const x = 40 + (m.minute / maxMin) * (width - 80);
-    const isTop = markers.indexOf(m) % 2 === 0;
-    const labelY = isTop ? trackY - 22 : trackY + 34;
-    const lineY1 = isTop ? trackY - 5 : trackY + 5;
-    const lineY2 = isTop ? trackY - 14 : trackY + 24;
+  // Markers per lane
+  for (let i = 0; i < BO_LANES.length; i++) {
+    const laneDef = BO_LANES[i];
+    const laneItems = lanes[laneDef.key] || [];
+    if (laneItems.length === 0) continue;
 
-    svg += `<line x1="${x}" y1="${lineY1}" x2="${x}" y2="${lineY2}" stroke="${m.color}" stroke-width="2"/>`;
-    svg += `<circle cx="${x}" cy="${trackY}" r="5" fill="${m.color}"/>`;
-    svg += `<text x="${x}" y="${labelY}" class="bo-marker-text" text-anchor="middle" fill="${m.color}">${escapeHtml(m.label)}</text>`;
-    if (m.winTime || m.lossTime) {
-      const subY = isTop ? trackY - 10 : trackY + 44;
-      const subText = m.winTime && m.lossTime ? `W ${m.winTime} / L ${m.lossTime}` : (m.winTime || m.lossTime);
-      svg += `<text x="${x}" y="${subY}" class="bo-marker-sub" text-anchor="middle">${escapeHtml(subText)}</text>`;
+    const trackY = topPadding + i * laneHeight + laneHeight / 2;
+    const placed = placeBoLabels(laneItems, width, paddingX, maxMin);
+
+    for (const m of placed) {
+      const x = m.x;
+      const labelY = laneDef.top ? trackY - 14 : trackY + 26;
+      const lineEndY = laneDef.top ? trackY - 8 : trackY + 8;
+
+      svg += `<line x1="${x}" y1="${trackY}" x2="${x}" y2="${lineEndY}" stroke="${m.color}" stroke-width="2"/>`;
+      svg += `<circle cx="${x}" cy="${trackY}" r="5" fill="${m.color}"/>`;
+      svg += `<text x="${x}" y="${labelY}" class="bo-marker-text" text-anchor="middle" fill="${m.color}">${escapeHtml(m.label)}</text>`;
+      if (m.winTime || m.lossTime) {
+        const subY = laneDef.top ? trackY - 24 : trackY + 38;
+        const subText = m.winTime && m.lossTime ? `W ${m.winTime} · L ${m.lossTime}` : (m.winTime || m.lossTime);
+        svg += `<text x="${x}" y="${subY}" class="bo-marker-sub" text-anchor="middle">${escapeHtml(subText)}</text>`;
+      }
     }
   }
 
   svg += `</svg>`;
   return svg;
+}
+
+function placeBoLabels(items, width, paddingX, maxMin) {
+  // Assign x positions and sort by x
+  const placed = items.map(m => ({
+    ...m,
+    x: paddingX + (m.minute / maxMin) * (width - 2 * paddingX),
+  })).sort((a, b) => a.x - b.x);
+
+  // Simple collision avoidance: if two labels would overlap, hide the less important one
+  const minGap = 55;
+  const visible = [];
+  for (const m of placed) {
+    const tooClose = visible.some(v => Math.abs(v.x - m.x) < minGap);
+    if (!tooClose) visible.push(m);
+  }
+  return visible;
 }
 
 function formatBuildingName(name) {

@@ -2331,9 +2331,17 @@ body {
 
 .bo-svg {
   width: 100%;
-  min-width: 600px;
-  height: 140px;
+  min-width: 700px;
+  height: 260px;
   overflow: visible;
+}
+
+.bo-lane-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  fill: var(--text-muted);
 }
 
 .bo-track-line {
@@ -2341,8 +2349,8 @@ body {
   stroke-width: 2;
 }
 
-.bo-tick {
-  stroke: var(--border-subtle);
+.bo-grid-line {
+  stroke: rgba(30, 30, 46, 0.05);
   stroke-width: 1;
 }
 
@@ -2357,7 +2365,7 @@ body {
 }
 
 .bo-marker-sub {
-  font-size: 9px;
+  font-size: 8px;
   fill: var(--text-muted);
 }
 

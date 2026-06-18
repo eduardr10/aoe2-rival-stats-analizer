@@ -130,13 +130,13 @@
       },
       "castle_resources": {
         "title": "Castle-Age Bank",
-        "body": "You reach Castle with {winResources} resources in wins vs {lossResources} in losses (diff: {diff}).",
-        "tooltip": "Compares total stockpiled resources at the moment you reach Castle Age in wins vs losses."
+        "body": "You reach Castle with {winResources} stockpiled resources (wood+food+gold+stone) in wins vs {lossResources} in losses (diff: {diff}).",
+        "tooltip": "Compares total stockpiled resources (sum of wood, food, gold and stone) at the moment you reach Castle Age in wins vs losses."
       },
       "army_peak": {
-        "title": "Peak Army Size",
-        "body": "Your peak population is {winPeak} in wins vs {lossPeak} in losses (diff: {diff}).",
-        "tooltip": "Compares the maximum number of objects (villagers + army + buildings) reached in wins vs losses."
+        "title": "Peak Objects",
+        "body": "Your peak object count (units + buildings) is {winPeak} in wins vs {lossPeak} in losses (diff: {diff}).",
+        "tooltip": "Compares the maximum number of objects (villagers + army + buildings) reached in wins vs losses. This is not population cap."
       },
       "key_insight": {
         "title": "Key Finding",
@@ -355,14 +355,14 @@
         "tooltip": "Mide la diferencia entre tu APM pico y tu APM en late game (minutos 40-60) en victorias y derrotas."
       },
       "castle_resources": {
-        "title": "Banco en Castel",
-        "body": "Llegas a Castel con {winResources} recursos en victorias vs {lossResources} en derrotas (diferencia: {diff}).",
-        "tooltip": "Compara el total de recursos acumulados en el momento de llegar a Castel entre victorias y derrotas."
+        "title": "Banco en Castillo",
+        "body": "Llegas a Castillo con {winResources} recursos acumulados (madera+comida+oro+piedra) en victorias vs {lossResources} en derrotas (diferencia: {diff}).",
+        "tooltip": "Compara el total de recursos acumulados (suma de madera, comida, oro y piedra) en el momento de llegar a Castillo entre victorias y derrotas."
       },
       "army_peak": {
-        "title": "Pico de Población",
-        "body": "Tu pico de población es {winPeak} en victorias vs {lossPeak} en derrotas (diferencia: {diff}).",
-        "tooltip": "Compara el número máximo de objetos (aldeanos + ejército + edificios) alcanzado en victorias y derrotas."
+        "title": "Pico de Objetos",
+        "body": "Tu pico de objetos (unidades + edificios) es {winPeak} en victorias vs {lossPeak} en derrotas (diferencia: {diff}).",
+        "tooltip": "Compara el número máximo de objetos (aldeanos + ejército + edificios) alcanzado en victorias y derrotas. No es el límite de población."
       },
       "key_insight": {
         "title": "Hallazgo Clave",
