@@ -288,7 +288,10 @@ async function searchPlayers(query) {
     const url = `https://data.aoe2companion.com/api/profiles?search=${encodeURIComponent(query)}&extend=profiles.avatar_medium_url,profiles.avatar_full_url&language=es&page=1`;
     const res = await fetch(url, {
       signal: searchAbortController.signal,
-      headers: { 'User-Agent': 'eduardr10-stats-script' },
+      headers: {
+        'User-Agent': 'eduardr10-stats-script',
+        'X-User-Agent': 'eduardr10-stats-script',
+      },
     });
     if (!res.ok) throw new Error('Search failed');
     const data = await res.json();

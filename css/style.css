@@ -816,31 +816,47 @@ body.chroma-ready #aoe2-overlay {
   height: 100%;
 }
 
+/* --- Face-off Panel Base --- */
 .faceoff-col {
   position: absolute;
   top: 50%;
-  width: min(420px, calc(50% - 48px));
-  max-width: 420px;
-  background: rgba(7, 11, 18, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  padding: 24px;
+  width: min(400px, calc(50% - 36px));
+  max-width: 400px;
+  background: rgba(7, 9, 16, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 20px;
+  padding: 22px 24px;
   color: var(--text-primary);
-  box-shadow: 0 28px 100px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   transform: translateY(-50%);
   opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .faceoff-col.left {
-  left: 24px;
-  animation: slideInLeft 0.45s ease forwards;
+  left: 20px;
+  border-left: 3px solid var(--accent-blue);
+  animation: slideInLeft 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .faceoff-col.right {
-  right: 24px;
-  animation: slideInRight 0.45s ease forwards;
+  right: 20px;
+  border-right: 3px solid var(--accent-red);
+  animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Slide-out classes (applied via JS before hide) */
+.faceoff-col.slide-out-left {
+  animation: slideOutLeft 0.4s cubic-bezier(0.55, 0, 1, 0.45) forwards !important;
+}
+
+.faceoff-col.slide-out-right {
+  animation: slideOutRight 0.4s cubic-bezier(0.55, 0, 1, 0.45) forwards !important;
+}
+
+/* Keyframes */
 @keyframes slideInLeft {
   from { transform: translate(-140%, -50%); opacity: 0; }
   to { transform: translate(0, -50%); opacity: 1; }
@@ -851,81 +867,215 @@ body.chroma-ready #aoe2-overlay {
   to { transform: translate(0, -50%); opacity: 1; }
 }
 
+@keyframes slideOutLeft {
+  from { transform: translate(0, -50%); opacity: 1; }
+  to { transform: translate(-140%, -50%); opacity: 0; }
+}
+
+@keyframes slideOutRight {
+  from { transform: translate(0, -50%); opacity: 1; }
+  to { transform: translate(140%, -50%); opacity: 0; }
+}
+
+/* --- Panel Header --- */
+.faceoff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.faceoff-name {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.faceoff-col.left .faceoff-name {
+  color: var(--accent-blue);
+}
+
+.faceoff-col.right .faceoff-name {
+  color: var(--accent-red);
+}
+
+/* --- Live Badge --- */
+.faceoff-live {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-red);
+}
+
+.faceoff-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  box-shadow: 0 0 8px var(--accent-red);
+  animation: livePulse 1.5s ease infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* --- Hero Stats Row --- */
+.faceoff-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.faceoff-hero-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 60px;
+}
+
+.faceoff-hero-value {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.faceoff-hero-value.green { color: var(--accent-green); }
+.faceoff-hero-value.red { color: var(--accent-red); }
+.faceoff-hero-value.blue { color: var(--accent-blue); }
+
+.faceoff-hero-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.faceoff-hero-divider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+/* --- Metrics Grid --- */
+.faceoff-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+  margin-bottom: 14px;
+}
+
+.faceoff-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.faceoff-metric-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.faceoff-metric-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* --- Insights --- */
+.faceoff-insights {
+  display: grid;
+  gap: 8px;
+}
+
+.faceoff-insight-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.faceoff-insight-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.faceoff-insight-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  width: 20px;
+  text-align: center;
+}
+
+.faceoff-insight-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.faceoff-insight-text strong {
+  color: var(--text-primary);
+}
+
+/* --- Reopen / Toggle Button --- */
 .faceoff-reopen-btn {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   z-index: 2;
-  min-width: 180px;
-  padding: 12px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 160px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.96);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 700;
+  background: rgba(7, 9, 16, 0.88);
+  backdrop-filter: blur(12px);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s ease;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .faceoff-reopen-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  transform: translate(-50%, -50%) scale(1.02);
-}
-
-.faceoff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.faceoff-name {
-  font-weight: 800;
-  font-size: 17px;
-}
-
-.faceoff-meta {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-..faceoff-metrics .metric {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 10px;
-}
-
-.faceoff-insights {
-  margin-top: 16px;
-  display: grid;
-  gap: 10px;
-}
-
-.insight-card {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 14px 16px;
-  font-size: 12px;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
-  line-height: 1.5;
+  transform: translate(-50%, -50%) scale(1.03);
 }
 
-.faceoff-col.left .faceoff-header {
-  justify-content: flex-start;
-}
-
-.faceoff-col.right .faceoff-header {
-  justify-content: flex-end;
+.faceoff-reopen-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .live-indicator {

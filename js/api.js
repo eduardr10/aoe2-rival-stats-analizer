@@ -11,7 +11,10 @@ async function apiFetch(url, timeoutMs = 15000) {
   const cacheBuster = url.includes('?') ? '&_t=' : '?_t=';
   try {
     const resp = await fetch(url + cacheBuster + Date.now(), {
-      headers: { 'User-Agent': UA_HEADER },
+      headers: {
+        'User-Agent': UA_HEADER,
+        'X-User-Agent': UA_HEADER,
+      },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!resp.ok) {

@@ -110,24 +110,25 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   const container = document.getElementById('aoe2-overlay');
   if (!container) return;
 
-  // Clear previous hide timeout
   if (container._hideTimeout) clearTimeout(container._hideTimeout);
 
   const leftName = leftStats?.player_name || leftStats?.rival_name || 'Player A';
   const rightName = rightStats?.player_name || rightStats?.rival_name || 'Player B';
   const leftElo = leftStats?.rating || leftStats?.rival_rating || '—';
   const rightElo = rightStats?.rating || rightStats?.rival_rating || '—';
-  const leftWr = leftStats?.win_percent != null ? `${leftStats.win_percent}%` : (leftStats?.win_rate ? `${leftStats.win_rate}%` : '—');
-  const rightWr = rightStats?.win_percent != null ? `${rightStats.win_percent}%` : (rightStats?.win_rate ? `${rightStats.win_rate}%` : '—');
+  const leftWr = leftStats?.win_percent != null ? leftStats.win_percent : (leftStats?.win_rate || 0);
+  const rightWr = rightStats?.win_percent != null ? rightStats.win_percent : (rightStats?.win_rate || 0);
+  const leftGames = leftStats?.analyzed || leftStats?.total || 0;
+  const rightGames = rightStats?.analyzed || rightStats?.total || 0;
 
   function pickInsights(s) {
     const candidates = [];
     if (Array.isArray(s.recommendations)) candidates.push(...s.recommendations);
     if (Array.isArray(s.deep_insights)) candidates.push(...s.deep_insights);
     if (Array.isArray(s.timing_interpretation)) candidates.push(...s.timing_interpretation.map(i => i.conclusion || i));
-    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses.map(w => `Weakness: ${w}`));
-    const unique = [];
+    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses);
     const seen = new Set();
+    const unique = [];
     for (const item of candidates) {
       const text = typeof item === 'string' ? item : (item.text || item.title || item);
       if (!text) continue;
@@ -140,7 +141,25 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
     return unique;
   }
 
-  function getCompactMetrics(s) {
+  function insightIcon(text) {
+    const t = text.toLowerCase();
+    if (t.includes('strength') || t.includes('fuerte') || t.includes('fortaleza') || t.includes('win')) return '⚡';
+    if (t.includes('weakness') || t.includes('debil') || t.includes('vulnerable')) return '⚠️';
+    if (t.includes('aggressiv') || t.includes('agresiv') || t.includes('rush')) return '🔥';
+    if (t.includes('boom') || t.includes('econom') || t.includes('econ')) return '🌾';
+    if (t.includes('defens') || t.includes('turtle')) return '🛡️';
+    if (t.includes('timing') || t.includes('tempo') || t.includes('fast')) return '⏱️';
+    if (t.includes('opening') || t.includes('apertur')) return '🎯';
+    if (t.includes('map') || t.includes('mapa')) return '🗺️';
+    if (t.includes('civ') || t.includes('civiliz')) return '🏛️';
+    if (t.includes('scout') || t.includes('explor')) return '🐴';
+    if (t.includes('archer') || t.includes('arquero')) return '🏹';
+    if (t.includes('castle') || t.includes('castillo')) return '🏰';
+    if (t.includes('drush') || t.includes('maa') || t.includes('infantry')) return '⚔️';
+    return '💡';
+  }
+
+  function getMetrics(s) {
     const pp = s.player_profile || {};
     const primary = pp.primary_opening || s.current_opening?.chosen_opening || 'Unknown';
     const openingPct = pp.per_opening_frequency ? Math.round((pp.per_opening_frequency[primary] || 0) * 100) / 100 : null;
@@ -148,37 +167,90 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
     const topCiv = topCivEntry[0] || 'Unknown';
     const feudal = s.avg_feudal_hms || '—';
     const castle = s.avg_castle_hms || '—';
-    const tc2pct = s.tc_timing?.tc2_pct != null ? `${s.tc_timing.tc2_pct}%` : '—';
-    const tc2time = s.tc_timing?.tc2_avg_hms || '—';
-    const ball = s.key_techs && s.key_techs['ballistics'] ? formatHms(s.key_techs['ballistics'].avg_time) : (s.key_techs && s.key_techs['ballistics'] == null ? '—' : null);
-    return { primary, openingPct, topCiv, feudal, castle, tc2pct, tc2time, ball };
+    const eapm = s.avg_eapm || null;
+    const tc2 = s.tc_timing?.tc2_avg_hms || null;
+    const stability = pp.opening_stability != null ? Math.round(pp.opening_stability * 100) : null;
+    return { primary, openingPct, topCiv, feudal, castle, eapm, tc2, stability };
   }
 
-  const leftTop = pickInsights(leftStats || {});
-  const rightTop = pickInsights(rightStats || {});
-  const lm = getCompactMetrics(leftStats || {});
-  const rm = getCompactMetrics(rightStats || {});
+  function pickKeyUnit(s) {
+    const cats = s.unit_categories || {};
+    const total = Object.values(cats).reduce((sum, c) => sum + (c.count || 0), 0);
+    if (!total) return null;
+    const best = Object.entries(cats).sort((a, b) => (b[1].count || 0) - (a[1].count || 0))[0];
+    if (!best) return null;
+    const pct = Math.round((best[1].count / total) * 100);
+    return `${best[0]} (${pct}%)`;
+  }
 
-  const buildCol = (name, elo, wr, m, insights, side) => `
-    <div class="faceoff-col ${side}">
-      <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(name)}</div><div class="faceoff-meta">${elo} · ${wr}</div></div>
-      <div class="faceoff-metrics">
-        <div class="metric"><strong>Opening:</strong> ${escapeHtml(formatOpeningName(m.primary))}${m.openingPct ? ' · ' + m.openingPct + '%' : ''}</div>
-        <div class="metric"><strong>Civ:</strong> ${escapeHtml(m.topCiv)}</div>
-        <div class="metric"><strong>Feudal / Castle:</strong> ${escapeHtml(m.feudal)} / ${escapeHtml(m.castle)}</div>
-        <div class="metric"><strong>2º TC:</strong> ${escapeHtml(m.tc2pct)} (${escapeHtml(m.tc2time)})</div>
-        ${m.ball ? `<div class="metric"><strong>Ballistics:</strong> ${escapeHtml(m.ball)}</div>` : ''}
+  const leftInsights = pickInsights(leftStats || {});
+  const rightInsights = pickInsights(rightStats || {});
+  const lm = getMetrics(leftStats || {});
+  const rm = getMetrics(rightStats || {});
+  const leftUnit = pickKeyUnit(leftStats || {});
+  const rightUnit = pickKeyUnit(rightStats || {});
+
+  function buildCol(name, elo, wr, games, side, m, insights, unit) {
+    const wrClass = wr >= 55 ? 'green' : wr <= 40 ? 'red' : 'blue';
+    const insightCards = insights.map(i => `
+      <div class="faceoff-insight-card">
+        <span class="faceoff-insight-icon">${insightIcon(i)}</span>
+        <span class="faceoff-insight-text">${escapeHtml(i)}</span>
+      </div>`).join('');
+
+    return `<div class="faceoff-col ${side}">
+      <div class="faceoff-header">
+        <div class="faceoff-name">${escapeHtml(name)}</div>
+        <div class="faceoff-live"><span class="faceoff-live-dot"></span>LIVE</div>
       </div>
-      <div class="faceoff-insights">${insights.map(i => `<div class="insight-card">${escapeHtml(i)}</div>`).join('')}</div>
+      <div class="faceoff-hero">
+        <div class="faceoff-hero-item">
+          <div class="faceoff-hero-value ${wrClass}">${wr}%</div>
+          <div class="faceoff-hero-label">Win Rate</div>
+        </div>
+        <div class="faceoff-hero-divider"></div>
+        <div class="faceoff-hero-item">
+          <div class="faceoff-hero-value blue">${elo}</div>
+          <div class="faceoff-hero-label">Rating</div>
+        </div>
+        <div class="faceoff-hero-divider"></div>
+        <div class="faceoff-hero-item">
+          <div class="faceoff-hero-value">${games}</div>
+          <div class="faceoff-hero-label">Games</div>
+        </div>
+      </div>
+      <div class="faceoff-metrics">
+        <div class="faceoff-metric">
+          <span class="faceoff-metric-label">Opening</span>
+          <span class="faceoff-metric-value">${escapeHtml(formatOpeningName(m.primary))}${m.openingPct != null ? ` · ${m.openingPct}%` : ''}</span>
+        </div>
+        <div class="faceoff-metric">
+          <span class="faceoff-metric-label">Top Civ</span>
+          <span class="faceoff-metric-value">${escapeHtml(m.topCiv)}</span>
+        </div>
+        <div class="faceoff-metric">
+          <span class="faceoff-metric-label">Feudal</span>
+          <span class="faceoff-metric-value">${escapeHtml(m.feudal)}</span>
+        </div>
+        <div class="faceoff-metric">
+          <span class="faceoff-metric-label">Castle</span>
+          <span class="faceoff-metric-value">${escapeHtml(m.castle)}</span>
+        </div>
+        ${m.eapm ? `<div class="faceoff-metric"><span class="faceoff-metric-label">EAPM</span><span class="faceoff-metric-value">${m.eapm}</span></div>` : ''}
+        ${m.tc2 ? `<div class="faceoff-metric"><span class="faceoff-metric-label">2nd TC</span><span class="faceoff-metric-value">${escapeHtml(m.tc2)}</span></div>` : ''}
+        ${unit ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Key Unit</span><span class="faceoff-metric-value">${escapeHtml(unit)}</span></div>` : ''}
+        ${m.stability ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Stability</span><span class="faceoff-metric-value">${m.stability}%</span></div>` : ''}
+      </div>
+      ${insightCards ? `<div class="faceoff-insights">${insightCards}</div>` : ''}
     </div>`;
+  }
 
-  const html = `<div class="faceoff-grid compact">
-    ${buildCol(leftName, leftElo, leftWr, lm, leftTop, 'left')}
-    ${buildCol(rightName, rightElo, rightWr, rm, rightTop, 'right')}
-  </div>
-  <button id="faceoff-reopen-btn" class="faceoff-reopen-btn">Ocultar análisis</button>`;
+  const leftHtml = buildCol(leftName, leftElo, leftWr, leftGames, 'left', lm, leftInsights, leftUnit);
+  const rightHtml = buildCol(rightName, rightElo, rightWr, rightGames, 'right', rm, rightInsights, rightUnit);
 
-  container.innerHTML = html;
+  container.innerHTML = `<div class="faceoff-grid compact">${leftHtml}${rightHtml}</div>
+    <button id="faceoff-reopen-btn" class="faceoff-reopen-btn">Ocultar</button>`;
+
   container.classList.add('overlay-fullscreen');
   document.body.classList.add('chroma-ready');
   container.style.opacity = '1';
@@ -188,37 +260,63 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   const button = container.querySelector('#faceoff-reopen-btn');
   const panels = Array.from(container.querySelectorAll('.faceoff-col'));
 
-  const hidePanels = () => {
-    panels.forEach(panel => panel.style.opacity = '0');
-    if (button) button.textContent = 'Mostrar análisis';
+  const showButton = () => {
+    if (button) button.classList.add('visible');
+  };
+
+  const hideButton = () => {
+    if (button) button.classList.remove('visible');
+  };
+
+  const hidePanels = (animated = true) => {
+    if (animated) {
+      panels.forEach(p => {
+        p.classList.remove('slideInLeft', 'slideInRight');
+        p.classList.add(p.classList.contains('left') ? 'slide-out-left' : 'slide-out-right');
+      });
+      setTimeout(() => {
+        panels.forEach(p => { p.style.opacity = '0'; });
+        hideButton();
+        showButton();
+      }, 380);
+    } else {
+      panels.forEach(p => { p.style.opacity = '0'; });
+      hideButton();
+      showButton();
+    }
     document.body.classList.remove('chroma-ready');
   };
 
   const showPanels = () => {
-    panels.forEach(panel => panel.style.opacity = '1');
-    if (button) button.textContent = 'Ocultar análisis';
+    panels.forEach(p => {
+      p.style.opacity = '';
+      p.classList.remove('slide-out-left', 'slide-out-right');
+      p.style.animation = 'none';
+      void p.offsetHeight;
+      p.style.animation = '';
+    });
+    hideButton();
     document.body.classList.add('chroma-ready');
-    container.classList.add('overlay-fullscreen');
+    if (container._hideTimeout) clearTimeout(container._hideTimeout);
+    container._hideTimeout = setTimeout(() => hidePanels(true), OVERLAY_AUTO_HIDE_MS);
   };
 
+  // Hide panels after 15s
+  container._hideTimeout = setTimeout(() => {
+    hidePanels(true);
+  }, OVERLAY_AUTO_HIDE_MS);
+
+  // Toggle button
   if (button) {
     button.addEventListener('click', () => {
-      const hidden = panels.some(panel => panel.style.opacity === '0');
+      const hidden = panels.some(p => p.style.opacity === '0' || getComputedStyle(p).opacity === '0');
       if (hidden) {
         showPanels();
-        if (container._hideTimeout) clearTimeout(container._hideTimeout);
-        container._hideTimeout = setTimeout(hidePanels, OVERLAY_AUTO_HIDE_MS);
       } else {
-        hidePanels();
+        hidePanels(true);
       }
     });
   }
-
-  // Auto-hide after the same interval as overlay
-  if (container._hideTimeout) clearTimeout(container._hideTimeout);
-  container._hideTimeout = setTimeout(() => {
-    hidePanels();
-  }, OVERLAY_AUTO_HIDE_MS);
 }
 
 // ============================================================================
