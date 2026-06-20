@@ -128,21 +128,61 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
 
   function pickInsights(s) {
     const candidates = [];
-    if (Array.isArray(s.recommendations)) candidates.push(...s.recommendations);
+
+    // Playstyle as first insight
+    const ps = s.playstyle || {};
+    if (ps.label && ps.label !== 'Unknown') {
+      candidates.push(`Playstyle: ${ps.label} (${ps.score || 0})`);
+    }
+
+    // Expected strategy
+    const pred = s.prediction || {};
+    if (pred.expected_strategy && !pred.expected_strategy.includes('Analyzing')) {
+      candidates.push(`Expected: ${pred.expected_strategy}${pred.strategy_probability ? ` (${pred.strategy_probability}%)` : ''}`);
+    }
+
+    // Deep insights (most valuable — data-driven timing diffs)
     if (Array.isArray(s.deep_insights)) candidates.push(...s.deep_insights);
-    if (Array.isArray(s.timing_interpretation)) candidates.push(...s.timing_interpretation.map(i => i.conclusion || i));
-    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses);
+
+    // Threats (data-driven)
+    if (Array.isArray(s.threats)) candidates.push(...s.threats.filter(t => !t.includes('No dominant')));
+
+    // Weaknesses (skip generic fallback)
+    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses.filter(w => !w.includes('No extreme') && !w.includes('No patterns')));
+
+    // Timing interpretations (skip generic)
+    if (Array.isArray(s.timing_interpretation)) {
+      candidates.push(...s.timing_interpretation
+        .map(i => i.conclusion || i)
+        .filter(c => !c.includes('No significant') && !c.includes('within normal')));
+    }
+
+    // Recommendations (data-driven, skip generic)
+    if (Array.isArray(s.recommendations)) {
+      candidates.push(...s.recommendations
+        .map(r => r.text || r)
+        .filter(r => !r.includes('Analyze') && !r.includes('no data')));
+    }
+
+    // Filter and deduplicate
     const seen = new Set();
     const unique = [];
     for (const item of candidates) {
-      const text = typeof item === 'string' ? item : (item.text || item.title || item);
-      if (!text) continue;
-      const normalized = String(text).trim();
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      unique.push(normalized);
-      if (unique.length >= 3) break;
+      const text = String(item).trim();
+      if (!text || text.length < 8 || seen.has(text)) continue;
+      seen.add(text);
+      unique.push(text);
+      if (unique.length >= 4) break;
     }
+
+    // Fallback if nothing useful
+    if (unique.length === 0) {
+      const topCiv = Object.entries(s.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
+      if (topCiv) unique.push(`Prefers ${topCiv[0]} (${topCiv[1]}%)`);
+      const topMap = Object.entries(s.map_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
+      if (topMap) unique.push(`Best map: ${topMap[0]} — ${s.map_win_percent?.[topMap[0]] || 0}% WR`);
+    }
+
     return unique;
   }
 
@@ -166,16 +206,19 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
 
   function getMetrics(s) {
     const pp = s.player_profile || {};
-    const primary = pp.primary_opening || s.current_opening?.chosen_opening || 'Unknown';
-    const openingPct = pp.per_opening_frequency ? Math.round((pp.per_opening_frequency[primary] || 0) * 100) / 100 : null;
+    const primary = pp.primary_opening || s.current_opening?.chosen_opening || '';
+    const rawPct = pp.per_opening_frequency ? pp.per_opening_frequency[primary] : null;
+    const openingPct = (rawPct != null && rawPct > 0) ? Math.round(rawPct * 100) / 100 : null;
     const topCivEntry = Object.entries(s.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0] || [];
-    const topCiv = topCivEntry[0] || 'Unknown';
-    const feudal = s.avg_feudal_hms || '—';
-    const castle = s.avg_castle_hms || '—';
-    const eapm = s.avg_eapm || null;
+    const topCiv = topCivEntry[0] || '';
+    const topCivPct = topCivEntry[1] || null;
+    const feudal = s.avg_feudal_hms || '';
+    const castle = s.avg_castle_hms || '';
+    const eapm = (s.avg_eapm && s.avg_eapm > 0) ? s.avg_eapm : null;
     const tc2 = s.tc_timing?.tc2_avg_hms || null;
-    const stability = pp.opening_stability != null ? Math.round(pp.opening_stability * 100) : null;
-    return { primary, openingPct, topCiv, feudal, castle, eapm, tc2, stability };
+    const stability = (pp.opening_stability != null && pp.opening_stability > 0) ? Math.round(pp.opening_stability * 100) : null;
+    const streak = s.current_streak || null;
+    return { primary, openingPct, topCiv, topCivPct, feudal, castle, eapm, tc2, stability, streak };
   }
 
   function pickKeyUnit(s) {
@@ -203,6 +246,10 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
         <span class="faceoff-insight-text">${escapeHtml(i)}</span>
       </div>`).join('');
 
+    const openingLabel = m.primary ? `${formatOpeningName(m.primary)}${m.openingPct != null ? ` (${m.openingPct}%)` : ''}` : '';
+    const civLabel = m.topCiv ? `${escapeHtml(m.topCiv)}${m.topCivPct != null ? ` ${m.topCivPct}%` : ''}` : '';
+    const streakLabel = m.streak ? (m.streak.type === 'win' ? `+${m.streak.count} streak` : m.streak.type === 'loss' ? `-${m.streak.count} streak` : '') : '';
+
     return `<div class="faceoff-col ${side}">
       <div class="faceoff-header">
         <div class="faceoff-name">${escapeHtml(name)}</div>
@@ -225,26 +272,15 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
         </div>
       </div>
       <div class="faceoff-metrics">
-        <div class="faceoff-metric">
-          <span class="faceoff-metric-label">Opening</span>
-          <span class="faceoff-metric-value">${escapeHtml(formatOpeningName(m.primary))}${m.openingPct != null ? ` · ${m.openingPct}%` : ''}</span>
-        </div>
-        <div class="faceoff-metric">
-          <span class="faceoff-metric-label">Top Civ</span>
-          <span class="faceoff-metric-value">${escapeHtml(m.topCiv)}</span>
-        </div>
-        <div class="faceoff-metric">
-          <span class="faceoff-metric-label">Feudal</span>
-          <span class="faceoff-metric-value">${escapeHtml(m.feudal)}</span>
-        </div>
-        <div class="faceoff-metric">
-          <span class="faceoff-metric-label">Castle</span>
-          <span class="faceoff-metric-value">${escapeHtml(m.castle)}</span>
-        </div>
+        ${openingLabel ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Opening</span><span class="faceoff-metric-value">${openingLabel}</span></div>` : ''}
+        ${civLabel ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Top Civ</span><span class="faceoff-metric-value">${civLabel}</span></div>` : ''}
+        ${m.feudal ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Feudal</span><span class="faceoff-metric-value">${escapeHtml(m.feudal)}</span></div>` : ''}
+        ${m.castle ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Castle</span><span class="faceoff-metric-value">${escapeHtml(m.castle)}</span></div>` : ''}
         ${m.eapm ? `<div class="faceoff-metric"><span class="faceoff-metric-label">EAPM</span><span class="faceoff-metric-value">${m.eapm}</span></div>` : ''}
         ${m.tc2 ? `<div class="faceoff-metric"><span class="faceoff-metric-label">2nd TC</span><span class="faceoff-metric-value">${escapeHtml(m.tc2)}</span></div>` : ''}
         ${unit ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Key Unit</span><span class="faceoff-metric-value">${escapeHtml(unit)}</span></div>` : ''}
-        ${m.stability ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Stability</span><span class="faceoff-metric-value">${m.stability}%</span></div>` : ''}
+        ${m.stability ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Openings</span><span class="faceoff-metric-value">${m.stability}% stable</span></div>` : ''}
+        ${streakLabel ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Streak</span><span class="faceoff-metric-value">${streakLabel}</span></div>` : ''}
       </div>
       ${insightCards ? `<div class="faceoff-insights">${insightCards}</div>` : ''}
     </div>`;
