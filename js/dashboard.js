@@ -636,9 +636,9 @@ function renderExecutiveSummary(stats) {
   const sortedCivs = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const civsLine = sortedCivs.length
     ? sortedCivs.map(([civ, pct]) => {
-        const civWR = stats.civ_win_percent?.[civ] ?? 0;
-        return `${civ} ${pct}% (<span class="${civWR >= 55 ? 'text-green' : civWR <= 40 ? 'text-red' : ''}">${civWR}% WR</span>)`;
-      }).join(' · ')
+      const civWR = stats.civ_win_percent?.[civ] ?? 0;
+      return `${civ} ${pct}% (<span class="${civWR >= 55 ? 'text-green' : civWR <= 40 ? 'text-red' : ''}">${civWR}% WR</span>)`;
+    }).join(' · ')
     : '';
 
   const unitCats = stats.unit_categories || {};
@@ -964,9 +964,8 @@ function renderFindingsSupporting(patterns, extraWeaknesses, extraStrengths) {
   const cards = all.slice(0, 6).map(insight => {
     const title = t(insight.titleKey, insight.params);
     const body = t(insight.bodyKey, insight.params);
-    const confidenceLabel = t(`insights.confidence${
-      insight.confidence === 'high' ? 'High' : insight.confidence === 'medium' ? 'Medium' : 'Low'
-    }`);
+    const confidenceLabel = t(`insights.confidence${insight.confidence === 'high' ? 'High' : insight.confidence === 'medium' ? 'Medium' : 'Low'
+      }`);
     const typeLabel = t(`insights.${insight.type}`);
     return `<div class="findings-mini">
       <div class="findings-mini-header">
@@ -1491,7 +1490,7 @@ function buildOverviewPanel(stats, id) {
   const wins = stats.total_wins || 0;
   const streak = stats.current_streak || { type: 'none', count: 0 };
   const streakText = streak.type === 'win' ? `+${streak.count}` :
-                     streak.type === 'loss' ? `-${streak.count}` : '—';
+    streak.type === 'loss' ? `-${streak.count}` : '—';
 
   return `<div class="tab-panel active" data-panel="${id}">
     <div class="tab-stat-grid">
@@ -1791,7 +1790,7 @@ function renderLiveAdvantage(playerStats, rivalStats) {
   const rivalPct = 100 - playerPct;
 
   const advantageText = playerPct > 55 ? 'Player Advantage' :
-                        playerPct < 45 ? 'Rival Advantage' : 'Even';
+    playerPct < 45 ? 'Rival Advantage' : 'Even';
   const advantageColor = playerPct > 55 ? 'text-green' : playerPct < 45 ? 'text-red' : 'text-yellow';
 
   return `<div class="card">
@@ -1895,6 +1894,51 @@ function renderCriticalTimings(playerStats, rivalStats) {
     </div>`;
   }
 
+  // Additional important timings: Ballistics, 2nd/3rd TC, Blacksmith and key smith upgrades
+  const getTechAvgHms = (s, key) => {
+    if (!s) return 'N/A';
+    return s.build_order?.wins?.techs?.[key]?.avg_hms || s.build_order?.losses?.techs?.[key]?.avg_hms || (s.key_techs && s.key_techs[key] && s.key_techs[key].avg_time ? formatHms(s.key_techs[key].avg_time) : 'N/A');
+  };
+  const getBuildingAvgHms = (s, key) => {
+    if (!s) return 'N/A';
+    return s.build_order?.wins?.buildings?.[key]?.avg_hms || s.build_order?.losses?.buildings?.[key]?.avg_hms || 'N/A';
+  };
+
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${playerStats.tc_timing?.tc2_avg_hms || 'N/A'}</span> <span class="timeline-event">2nd TC (Player)</span>
+    </div>`;
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${rivalStats.tc_timing?.tc2_avg_hms || 'N/A'}</span> <span class="timeline-event">2nd TC (Rival)</span>
+    </div>`;
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${playerStats.tc_timing?.tc3_avg_hms || 'N/A'}</span> <span class="timeline-event">3rd TC (Player)</span>
+    </div>`;
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${rivalStats.tc_timing?.tc3_avg_hms || 'N/A'}</span> <span class="timeline-event">3rd TC (Rival)</span>
+    </div>`;
+
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${getTechAvgHms(playerStats, 'ballistics')}</span> <span class="timeline-event">Ballistics (Player)</span>
+    </div>`;
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${getTechAvgHms(rivalStats, 'ballistics')}</span> <span class="timeline-event">Ballistics (Rival)</span>
+    </div>`;
+
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${getBuildingAvgHms(playerStats, 'blacksmith')}</span> <span class="timeline-event">Blacksmith (Player)</span>
+    </div>`;
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${getBuildingAvgHms(rivalStats, 'blacksmith')}</span> <span class="timeline-event">Blacksmith (Rival)</span>
+    </div>`;
+
+  // Key blacksmith-related upgrades (forging/bodkin/bracer)
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${getTechAvgHms(playerStats, 'forging')}</span> <span class="timeline-event">Forging (Player)</span>
+    </div>`;
+  html += `<div class="timeline-item">
+      <span class="timeline-time">${getTechAvgHms(playerStats, 'bodkin_arrow') || getTechAvgHms(playerStats, 'bodkin arrow')}</span> <span class="timeline-event">Bodkin Arrow (Player)</span>
+    </div>`;
+
   html += `</div></div>`;
   return html;
 }
@@ -1922,8 +1966,8 @@ function renderTimingInsights(playerStats, rivalStats) {
   html += `<ul class="recommendation-list">`;
   for (const insight of insights) {
     const icon = insight.type === 'positive' ? '<span class="check">✓</span>' :
-                 insight.type === 'negative' ? '<span class="danger">⚠</span>' :
-                 '<span class="warn">•</span>';
+      insight.type === 'negative' ? '<span class="danger">⚠</span>' :
+        '<span class="warn">•</span>';
     html += `<li>${icon} ${escapeHtml(insight.text)}</li>`;
   }
   html += `</ul></div>`;

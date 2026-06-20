@@ -158,6 +158,59 @@ export function generateInsights(stats, knowledgeBase = {}) {
     });
   }
 
+  // 7b. Ballistics timing: detect if ballistics tends to be earlier in wins or losses
+  try {
+    const ballWin = stats.key_tech_win_avg && stats.key_tech_win_avg['ballistics'];
+    const ballLoss = stats.key_tech_loss_avg && stats.key_tech_loss_avg['ballistics'];
+    if (ballWin != null && ballLoss != null) {
+      const gap = Math.round((ballLoss - ballWin) * 100) / 100;
+      if (gap >= 15) {
+        add({
+          id: 'timing_ballistics',
+          category: 'economy',
+          type: 'weakness',
+          priority: 8,
+          confidence: confidenceFromSample(stats.analyzed),
+          titleKey: 'insights.timing_ballistics.title',
+          bodyKey: 'insights.timing_ballistics.body',
+          params: { gap: `${gap}s`, winAvg: formatHms(ballWin), lossAvg: formatHms(ballLoss) },
+          tooltipKey: 'insights.timing_ballistics.tooltip',
+        });
+      } else if (gap <= -15) {
+        add({
+          id: 'timing_ballistics_fast',
+          category: 'army',
+          type: 'strength',
+          priority: 7,
+          confidence: confidenceFromSample(stats.analyzed),
+          titleKey: 'insights.timing_ballistics_fast.title',
+          bodyKey: 'insights.timing_ballistics_fast.body',
+          params: { gap: `${Math.abs(gap)}s`, winAvg: formatHms(ballWin), lossAvg: formatHms(ballLoss) },
+          tooltipKey: 'insights.timing_ballistics_fast.tooltip',
+        });
+      }
+    }
+  } catch (e) {
+    // defensive: ignore if stats shape unexpected
+  }
+
+  // 7c. TC2/TC3 (boom) observations
+  if (stats.tc2_pct != null && stats.tc3_pct != null) {
+    if (stats.tc3_pct > 20 || (stats.tc2_pct > 50 && stats.tc3_pct > 10)) {
+      add({
+        id: 'boom_tendency',
+        category: 'economy',
+        type: 'pattern',
+        priority: 7,
+        confidence: confidenceFromSample(stats.analyzed),
+        titleKey: 'insights.boom_tendency.title',
+        bodyKey: 'insights.boom_tendency.body',
+        params: { tc2: stats.tc2_pct, tc3: stats.tc3_pct },
+        tooltipKey: 'insights.boom_tendency.tooltip',
+      });
+    }
+  }
+
   // 8. Matchup weaknesses
   const matchups = stats.matchup_weaknesses || [];
   if (matchups.length > 0) {
@@ -314,9 +367,8 @@ export function renderInsightCard(insight) {
   const title = t(insight.titleKey, insight.params);
   const body = t(insight.bodyKey, insight.params);
   const tooltip = t(insight.tooltipKey);
-  const confidenceLabel = t(`insights.confidence${
-    insight.confidence === 'high' ? 'High' : insight.confidence === 'medium' ? 'Medium' : 'Low'
-  }`);
+  const confidenceLabel = t(`insights.confidence${insight.confidence === 'high' ? 'High' : insight.confidence === 'medium' ? 'Medium' : 'Low'
+    }`);
   const typeLabel = t(`insights.${insight.type}`);
   const typeClass = insight.type;
 

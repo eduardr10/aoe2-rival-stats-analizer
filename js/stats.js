@@ -173,7 +173,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
 
   // Build-order first-occurrence tracking
   const KEY_BUILDINGS = ['barracks', 'archery_range', 'stable', 'blacksmith', 'market', 'siege_workshop', 'monastery', 'university'];
-  const KEY_TECHS = ['loom', 'feudal_age', 'castle_age', 'imperial_age', 'wheelbarrow', 'hand_cart', 'double-bit_axe', 'horse_collar', 'bow_saw', 'heavy_plow', 'fletching', 'padded_archer_armor', 'forging', 'scale_barding_armor', 'scale_mail_armor'];
+  const KEY_TECHS = ['loom', 'feudal_age', 'castle_age', 'imperial_age', 'wheelbarrow', 'hand_cart', 'double-bit_axe', 'horse_collar', 'bow_saw', 'heavy_plow', 'fletching', 'padded_archer_armor', 'forging', 'scale_barding_armor', 'scale_mail_armor', 'ballistics', 'bodkin_arrow', 'bracer'];
   function makeFirstOccurrenceTracker() {
     return {
       buildings: Object.fromEntries(KEY_BUILDINGS.map(b => [b, { times: [] }])),
@@ -971,7 +971,7 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   };
 
   // Boom tendency based on FC % and TC count
-  const fcFreq = stats.all_match_features ? 
+  const fcFreq = stats.all_match_features ?
     stats.all_match_features.filter(f => f.opening?.chosen_opening === 'fast_castle').length : 0;
   const totalFeatures = stats.all_match_features?.length || 1;
   const fcPct = (fcFreq * 100 / totalFeatures);
