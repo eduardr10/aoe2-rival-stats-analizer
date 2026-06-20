@@ -36,15 +36,9 @@ export async function init() {
   const ongoing = params.get('ongoing') === 'true';
   const pages = parseInt(params.get('pages') || '1');
 
-  if (matchId === 'self') {
-    await runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivilization, opponentCiv, ongoing);
-  } else if (matchId && rivalProfileId) {
-    await runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, perPage, playedCivilization, opponentCiv, ongoing);
-  } else {
-    document.getElementById('aoe2-overlay').innerHTML =
-      '<div class="loading-state" style="font-size:13px;">' +
-      'Esperando partida... Asegurate de pasar <code>matchId</code> y <code>rivalProfileId</code>.</div>';
-  }
+  // For overlay mode we don't auto-run analysis here to avoid intermediate flashes.
+  // The websocket callback will trigger parallel analyses when a match is detected.
+  document.getElementById('aoe2-overlay').innerHTML = '<div class="loading-state" style="font-size:13px;">Esperando partida...</div>';
 
   initWebSocket(playerId, matchId, async ({ matchData, rivalProfileId }) => {
     // Auto-analyze both players for overlay face-off when a new match is detected

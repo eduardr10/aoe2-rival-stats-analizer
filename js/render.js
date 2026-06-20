@@ -22,6 +22,9 @@ export function buildOverlay(stats, playerId) {
   const container = document.getElementById('aoe2-overlay');
   if (!container) return;
 
+  // Ensure normal overlay removes fullscreen mode
+  container.classList.remove('overlay-fullscreen');
+
   container._lastStats = stats;
   container._lastPlayerId = playerId;
 
@@ -157,6 +160,7 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   </div>`;
 
   container.innerHTML = html;
+  container.classList.add('overlay-fullscreen');
   container.style.opacity = '1';
   container.style.pointerEvents = 'none';
 
@@ -164,6 +168,7 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   container._hideTimeout = setTimeout(() => {
     container.style.opacity = '0';
     container.style.pointerEvents = 'none';
+    container.classList.remove('overlay-fullscreen');
   }, OVERLAY_AUTO_HIDE_MS);
 }
 
