@@ -810,35 +810,98 @@ body.chroma-ready #aoe2-overlay {
   background: transparent;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 40px;
+  justify-content: center;
+  padding: 0;
   box-shadow: none;
   border-radius: 0;
 }
 
 .faceoff-grid.compact {
-  display: flex;
-  gap: 24px;
+  position: relative;
   width: 100%;
-  justify-content: space-between;
+  height: 100%;
 }
 
 .faceoff-col {
-  width: 360px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px;
+  position: absolute;
+  top: 50%;
+  width: min(380px, calc(50% - 48px));
+  max-width: 420px;
+  background: rgba(8, 12, 18, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 20px;
   color: var(--text-primary);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
+  transform: translateY(-50%);
 }
 
-.faceoff-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:8px }
-.faceoff-name { font-weight:700;font-size:14px }
-.faceoff-meta { font-size:12px;color:var(--text-secondary) }
-.faceoff-metrics .metric { font-size:12px;color:var(--text-secondary);margin-bottom:6px }
-.faceoff-insights { margin-top:8px }
-.insight-item { font-size:12px;color:var(--text-primary);margin-bottom:4px }
+.faceoff-col.left {
+  left: 28px;
+  animation: slideInLeft 0.5s ease forwards;
+}
+
+.faceoff-col.right {
+  right: 28px;
+  animation: slideInRight 0.5s ease forwards;
+}
+
+@keyframes slideInLeft {
+  from { transform: translate(-120%, -50%); opacity: 0; }
+  to { transform: translate(0, -50%); opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translate(120%, -50%); opacity: 0; }
+  to { transform: translate(0, -50%); opacity: 1; }
+}
+
+.faceoff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.faceoff-name {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.faceoff-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.faceoff-metrics .metric {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.faceoff-insights {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.insight-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.faceoff-col.left .faceoff-header {
+  justify-content: flex-start;
+}
+
+.faceoff-col.right .faceoff-header {
+  justify-content: flex-end;
+}
 
 .live-indicator {
   display: flex;

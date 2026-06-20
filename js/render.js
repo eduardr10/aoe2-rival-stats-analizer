@@ -1,6 +1,6 @@
 import { formatHms, techDisplayName } from './utils.js';
 
-const OVERLAY_AUTO_HIDE_MS = 12000;
+const OVERLAY_AUTO_HIDE_MS = 15000;
 
 // App configuration for creator links
 window.app_config = {
@@ -90,7 +90,14 @@ export function buildOverlay(stats, playerId) {
 
 export function restartOverlay() {
   const container = document.getElementById('aoe2-overlay');
-  if (container && container._lastStats && container._lastPlayerId) {
+  if (!container) return;
+
+  if (container._lastFaceOff && container._lastFaceOff.left && container._lastFaceOff.right) {
+    buildFaceOffOverlay(container._lastFaceOff.left, container._lastFaceOff.right);
+    return;
+  }
+
+  if (container._lastStats && container._lastPlayerId) {
     buildOverlay(container._lastStats, container._lastPlayerId);
   }
 }
@@ -115,11 +122,22 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
 
   function pickInsights(s) {
     const candidates = [];
-    if (Array.isArray(s.deep_insights)) candidates.push(...s.deep_insights);
     if (Array.isArray(s.recommendations)) candidates.push(...s.recommendations);
-    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses.map(w => `Weak: ${w}`));
-    if (!candidates.length && s.timing_interpretation) candidates.push(...(s.timing_interpretation || []).map(i => i.conclusion || i));
-    return candidates.slice(0, 3).map(x => (typeof x === 'string' ? x : (x.text || x))).filter(Boolean);
+    if (Array.isArray(s.deep_insights)) candidates.push(...s.deep_insights);
+    if (Array.isArray(s.timing_interpretation)) candidates.push(...s.timing_interpretation.map(i => i.conclusion || i));
+    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses.map(w => `Weakness: ${w}`));
+    const unique = [];
+    const seen = new Set();
+    for (const item of candidates) {
+      const text = typeof item === 'string' ? item : (item.text || item.title || item);
+      if (!text) continue;
+      const normalized = String(text).trim();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      unique.push(normalized);
+      if (unique.length >= 3) break;
+    }
+    return unique;
   }
 
   function getCompactMetrics(s) {
@@ -141,8 +159,8 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   const lm = getCompactMetrics(leftStats || {});
   const rm = getCompactMetrics(rightStats || {});
 
-  const buildCol = (name, elo, wr, m, insights) => `
-    <div class="faceoff-col">
+  const buildCol = (name, elo, wr, m, insights, side) => `
+    <div class="faceoff-col ${side}">
       <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(name)}</div><div class="faceoff-meta">${elo} · ${wr}</div></div>
       <div class="faceoff-metrics">
         <div class="metric"><strong>Opening:</strong> ${escapeHtml(formatOpeningName(m.primary))}${m.openingPct ? ' · ' + m.openingPct + '%' : ''}</div>
@@ -151,12 +169,12 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
         <div class="metric"><strong>2º TC:</strong> ${escapeHtml(m.tc2pct)} (${escapeHtml(m.tc2time)})</div>
         ${m.ball ? `<div class="metric"><strong>Ballistics:</strong> ${escapeHtml(m.ball)}</div>` : ''}
       </div>
-      <div class="faceoff-insights">${insights.map(i => `<div class="insight-item">• ${escapeHtml(i)}</div>`).join('')}</div>
+      <div class="faceoff-insights">${insights.map(i => `<div class="insight-card">${escapeHtml(i)}</div>`).join('')}</div>
     </div>`;
 
   const html = `<div class="faceoff-grid compact">
-    ${buildCol(leftName, leftElo, leftWr, lm, leftTop)}
-    ${buildCol(rightName, rightElo, rightWr, rm, rightTop)}
+    ${buildCol(leftName, leftElo, leftWr, lm, leftTop, 'left')}
+    ${buildCol(rightName, rightElo, rightWr, rm, rightTop, 'right')}
   </div>`;
 
   container.innerHTML = html;
@@ -164,6 +182,7 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   document.body.classList.add('chroma-ready');
   container.style.opacity = '1';
   container.style.pointerEvents = 'none';
+  container._lastFaceOff = { leftStats, rightStats };
 
   // Auto-hide after the same interval as overlay
   container._hideTimeout = setTimeout(() => {
@@ -171,6 +190,7 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
     container.style.pointerEvents = 'none';
     container.classList.remove('overlay-fullscreen');
     document.body.classList.remove('chroma-ready');
+    container.innerHTML = '';
   }, OVERLAY_AUTO_HIDE_MS);
 }
 

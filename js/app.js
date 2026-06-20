@@ -242,7 +242,9 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
 
 async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, buildOverlayFlag = true) {
   const overlay = document.getElementById('aoe2-overlay');
-  overlay.innerHTML = '<div class="loading-state">Cargando analisis...</div>';
+  if (buildOverlayFlag) {
+    overlay.innerHTML = '<div class="loading-state">Cargando análisis...</div>';
+  }
 
   const playedCivNum = resolveCivNumber(playedCivilization);
   const opponentCivNum = resolveCivNumber(opponentCiv);
@@ -288,7 +290,9 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   }
 
   if (matches.length === 0) {
-    overlay.innerHTML = '<div class="loading-state">No se encontraron partidas para analizar.</div>';
+    if (buildOverlayFlag) {
+      overlay.innerHTML = '<div class="loading-state">No se encontraron partidas para analizar.</div>';
+    }
     return;
   }
 
