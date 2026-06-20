@@ -89,15 +89,15 @@ export function buildOverlay(stats, playerId) {
 }
 
 export function restartOverlay() {
+  // First check if we have face-off data
   const container = document.getElementById('aoe2-overlay');
-  if (!container) return;
-
-  if (container._lastFaceOff && container._lastFaceOff.left && container._lastFaceOff.right) {
+  if (container && container._lastFaceOff && container._lastFaceOff.left && container._lastFaceOff.right) {
     buildFaceOffOverlay(container._lastFaceOff.left, container._lastFaceOff.right);
     return;
   }
 
-  if (container._lastStats && container._lastPlayerId) {
+  // Fallback to regular overlay
+  if (container && container._lastStats && container._lastPlayerId) {
     buildOverlay(container._lastStats, container._lastPlayerId);
   }
 }
@@ -107,8 +107,13 @@ export function restartOverlay() {
 // ============================================================================
 
 export function buildFaceOffOverlay(leftStats, rightStats) {
-  const container = document.getElementById('aoe2-overlay');
-  if (!container) return;
+  // Remove old faceoff overlay if exists
+  const old = document.getElementById('faceoff-overlay');
+  if (old) old.remove();
+
+  const container = document.createElement('div');
+  container.id = 'faceoff-overlay';
+  document.body.appendChild(container);
 
   if (container._hideTimeout) clearTimeout(container._hideTimeout);
 
@@ -248,13 +253,11 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   const leftHtml = buildCol(leftName, leftElo, leftWr, leftGames, 'left', lm, leftInsights, leftUnit);
   const rightHtml = buildCol(rightName, rightElo, rightWr, rightGames, 'right', rm, rightInsights, rightUnit);
 
-  container.innerHTML = `<div class="faceoff-grid compact">${leftHtml}${rightHtml}</div>
-    <button id="faceoff-reopen-btn" class="faceoff-reopen-btn">Ocultar</button>`;
+  container.innerHTML = `${leftHtml}${rightHtml}
+    <button id="faceoff-reopen-btn" class="faceoff-reopen-btn">Mostrar</button>`;
 
-  container.classList.add('overlay-fullscreen');
-  document.body.classList.add('chroma-ready');
-  container.style.opacity = '1';
-  container.style.pointerEvents = 'auto';
+  container.classList.add('active');
+  container.style.background = 'transparent'; // panels visible → transparent bg
   container._lastFaceOff = { leftStats, rightStats };
 
   const button = container.querySelector('#faceoff-reopen-btn');
@@ -271,20 +274,20 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   const hidePanels = (animated = true) => {
     if (animated) {
       panels.forEach(p => {
-        p.classList.remove('slideInLeft', 'slideInRight');
         p.classList.add(p.classList.contains('left') ? 'slide-out-left' : 'slide-out-right');
       });
       setTimeout(() => {
         panels.forEach(p => { p.style.opacity = '0'; });
         hideButton();
         showButton();
+        container.style.background = '#00ff00'; // chroma green when hidden
       }, 380);
     } else {
       panels.forEach(p => { p.style.opacity = '0'; });
       hideButton();
       showButton();
+      container.style.background = '#00ff00';
     }
-    document.body.classList.remove('chroma-ready');
   };
 
   const showPanels = () => {
@@ -295,8 +298,8 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
       void p.offsetHeight;
       p.style.animation = '';
     });
+    container.style.background = 'transparent'; // transparent when showing panels
     hideButton();
-    document.body.classList.add('chroma-ready');
     if (container._hideTimeout) clearTimeout(container._hideTimeout);
     container._hideTimeout = setTimeout(() => hidePanels(true), OVERLAY_AUTO_HIDE_MS);
   };

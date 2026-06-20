@@ -70,21 +70,6 @@ body {
   display: flex;
 }
 
-/* Fullscreen chroma mode: show body background and overlay fullscreen */
-body.chroma-ready {
-  background: #00ff00;
-}
-
-body.chroma-ready #aoe2-overlay {
-  display: flex;
-}
-
-/* Override for face-off dual-panel mode — needs display:block for absolute children */
-.overlay-fullscreen#aoe2-overlay,
-body.chroma-ready #aoe2-overlay.overlay-fullscreen {
-  display: block;
-}
-
 /* Header con creador */
 .overlay-header-main {
   display: flex;
@@ -804,25 +789,20 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   margin-bottom: 8px;
 }
 
-/* Fullscreen overlay mode for chroma: two-side faceoff */
-.overlay-fullscreen {
+/* Fullscreen face-off overlay (completely independent from #aoe2-overlay) */
+#faceoff-overlay {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
-  background: transparent;
-  display: block;
+  background: #00ff00; /* chroma key green by default */
   overflow: hidden;
   z-index: 10000;
-  transform: none;
-  border-radius: 0;
-  box-shadow: none;
+  display: none;
 }
 
-.faceoff-grid.compact {
-  position: relative;
-  width: 100%;
-  height: 100%;
+#faceoff-overlay.active {
+  display: block;
 }
 
 /* --- Face-off Panel Base --- */
@@ -841,7 +821,6 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   transform: translateY(-50%);
   opacity: 0;
-  transition: opacity 0.3s ease;
 }
 
 .faceoff-col.left {
@@ -856,7 +835,7 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Slide-out classes (applied via JS before hide) */
+/* Slide-out classes */
 .faceoff-col.slide-out-left {
   animation: slideOutLeft 0.4s cubic-bezier(0.55, 0, 1, 0.45) forwards !important;
 }
@@ -865,7 +844,6 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   animation: slideOutRight 0.4s cubic-bezier(0.55, 0, 1, 0.45) forwards !important;
 }
 
-/* Keyframes */
 @keyframes slideInLeft {
   from { transform: translate(-140%, -50%); opacity: 0; }
   to { transform: translate(0, -50%); opacity: 1; }
@@ -906,13 +884,8 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   text-overflow: ellipsis;
 }
 
-.faceoff-col.left .faceoff-name {
-  color: var(--accent-blue);
-}
-
-.faceoff-col.right .faceoff-name {
-  color: var(--accent-red);
-}
+.faceoff-col.left .faceoff-name { color: var(--accent-blue); }
+.faceoff-col.right .faceoff-name { color: var(--accent-red); }
 
 /* --- Live Badge --- */
 .faceoff-live {
@@ -1028,12 +1001,6 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.faceoff-insight-card:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .faceoff-insight-icon {
@@ -1049,11 +1016,7 @@ body.chroma-ready #aoe2-overlay.overlay-fullscreen {
   min-width: 0;
 }
 
-.faceoff-insight-text strong {
-  color: var(--text-primary);
-}
-
-/* --- Reopen / Toggle Button --- */
+/* --- Reopen Button --- */
 .faceoff-reopen-btn {
   position: absolute;
   left: 50%;

@@ -397,15 +397,24 @@ function setupButtons() {
   const overlay = document.getElementById('aoe2-overlay');
   const supportModal = document.getElementById('support-modal');
 
-  if (btnToggle && overlay) {
+  if (btnToggle) {
     btnToggle.addEventListener('click', () => {
-      if (overlay.style.opacity === '0' || overlay.style.opacity === '') {
-        overlay.style.opacity = '1';
-        overlay.style.pointerEvents = 'auto';
-        restartOverlay();
-      } else {
-        overlay.style.opacity = '0';
-        overlay.style.pointerEvents = 'none';
+      // Check if face-off overlay is active
+      const faceoff = document.getElementById('faceoff-overlay');
+      if (faceoff && faceoff.classList.contains('active')) {
+        faceoff.remove();
+        return;
+      }
+      // Fallback to regular overlay
+      if (overlay) {
+        if (overlay.style.opacity === '0' || overlay.style.opacity === '') {
+          overlay.style.opacity = '1';
+          overlay.style.pointerEvents = 'auto';
+          restartOverlay();
+        } else {
+          overlay.style.opacity = '0';
+          overlay.style.pointerEvents = 'none';
+        }
       }
     });
   }
