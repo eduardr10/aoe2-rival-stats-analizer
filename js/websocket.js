@@ -7,7 +7,8 @@ export function initWebSocket(playerId, existingMatchId, onNewMatch = null) {
 
   function getRivalProfileId(matchData, myProfileId) {
     if (!matchData || !Array.isArray(matchData.players)) return null;
-    const rival = matchData.players.find(p => p.profileId !== myProfileId);
+    const myId = parseInt(myProfileId, 10);
+    const rival = matchData.players.find(p => p.profileId != myId);
     return rival ? rival.profileId : null;
   }
 

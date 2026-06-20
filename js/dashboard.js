@@ -740,9 +740,9 @@ function renderExecSignature(stats) {
     || (stats.objects_curve_wins || []).some(v => v != null);
   if (!hasData) return '';
 
-  const apmSpark = renderSparkline(stats.apm_curve_wins, 'var(--accent-blue)');
-  const resSpark = renderSparkline(stats.resources_curve_wins, 'var(--accent-green)');
-  const objSpark = renderSparkline(stats.objects_curve_wins, 'var(--accent-purple)');
+  const apmSpark = renderSparkline(stats.apm_curve_wins || [], 'var(--accent-blue)');
+  const resSpark = renderSparkline(stats.resources_curve_wins || [], 'var(--accent-green)');
+  const objSpark = renderSparkline(stats.objects_curve_wins || [], 'var(--accent-purple)');
 
   const apmPeak = stats.apm_peak?.wins ?? stats.apm_peak?.losses ?? '—';
   const resPeak = stats.resource_peak?.wins ?? stats.resource_peak?.losses ?? '—';
@@ -771,6 +771,7 @@ function renderExecSignature(stats) {
 }
 
 function renderSparkline(values, color) {
+  if (!Array.isArray(values) || values.length === 0) return '<span class="sparkline-empty">—</span>';
   const valid = values.map(v => v == null ? null : Number(v)).filter(v => v != null);
   if (valid.length < 2) return '<span class="sparkline-empty">—</span>';
   const min = Math.min(...valid);
@@ -1711,6 +1712,10 @@ function renderHistoricalDataCard(stats) {
 function renderLiveMatch(playerStats, rivalStats, matchData) {
   const container = document.getElementById('live-match-content');
   if (!container) return;
+  if (!playerStats || !rivalStats) {
+    container.innerHTML = '<div class="loading-state">Waiting for player/rival data...</div>';
+    return;
+  }
 
   const playerName = playerStats.player_name || 'Player';
   const rivalName = rivalStats.rival_name || currentRivalName || 'Rival';
