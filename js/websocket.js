@@ -15,9 +15,17 @@ export function initWebSocket(playerId, existingMatchId, onNewMatch = null) {
   function createSocket(handlerName) {
     const socketUrl = `wss://socket.aoe2companion.com/listen?handler=${handlerName}&profile_ids=${playerId}`;
     let socket = new WebSocket(socketUrl);
+    let reconnectTimer = null;
 
     socket.onopen = () => {
       console.log(`Connected to ${handlerName}`);
+      // Force reconnection every 45s to pick up new matches
+      // (server may not push events for new matches on an open socket)
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        console.log(`Reconnecting ${handlerName} to check for new matches`);
+        socket.close();
+      }, 45000);
     };
 
     socket.onmessage = (event) => {
@@ -58,6 +66,7 @@ export function initWebSocket(playerId, existingMatchId, onNewMatch = null) {
     };
 
     socket.onclose = (event) => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       console.warn(`Connection closed in ${handlerName}, retrying in 3s...`, event.code, event.reason);
       setTimeout(() => {
         socket = createSocket(handlerName);
