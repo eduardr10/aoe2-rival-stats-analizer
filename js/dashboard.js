@@ -101,16 +101,17 @@ export async function initDashboard() {
     container.innerHTML = `<div class="loading-state">${t('app.error')}</div>`;
   }
 
-  initWebSocket(cfg.playerId, 'self', async ({ matchData, rivalProfileId }) => {
+  initWebSocket(cfg.playerId, 'self', ({ matchData, rivalProfileId }) => {
     const banner = document.getElementById('live-match-section');
     const info = document.getElementById('live-match-info');
     const rivalName = matchData.players?.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
 
+    // Only mark that the player is currently in a match. Do NOT auto-run analysis from websocket in dashboard.
     currentRivalId = rivalProfileId;
     currentRivalName = rivalName;
     liveMatchData = matchData;
 
-    if (info) info.innerHTML = `<span>vs ${escapeHtml(rivalName)}</span><span class="text-sm text-muted ml-2">en ${escapeHtml(matchData.mapName || '???')}</span>`;
+    if (info) info.innerHTML = `<span>En partida — vs ${escapeHtml(rivalName)}</span><span class="text-sm text-muted ml-2">en ${escapeHtml(matchData.mapName || '???')}</span>`;
     if (banner) banner.classList.remove('hidden');
 
     const btnProfile = document.getElementById('btn-rival-profile');
@@ -120,14 +121,11 @@ export async function initDashboard() {
       btnProfile.href = url.toString();
     }
 
+    // Keep analyze button available for manual runs; do not trigger automatic analysis here.
     const btnAnalyze = document.getElementById('btn-analyze-rival');
     if (btnAnalyze) {
       btnAnalyze.textContent = 'Analizar Rival';
       btnAnalyze.disabled = false;
-    }
-
-    if (!isAnalyzingRival && currentRivalId) {
-      await analyzeAndShowRival(cfg, rivalProfileId);
     }
   });
 }
