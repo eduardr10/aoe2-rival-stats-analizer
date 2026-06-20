@@ -54,21 +54,26 @@ export async function init() {
       const banner = document.getElementById('aoe2-overlay');
       if (banner) banner.innerHTML = '<div class="loading-state">Partida detectada — analizando rivales...</div>';
 
-      const leftStats = await runRivalAnalysis(playerId, rivalProfileId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing);
-      const rightStats = await runRivalAnalysis(rivalProfileId, playerId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing);
+      // Run both analyses in parallel without rendering intermediate overlays
+      const pMain = runRivalAnalysis(playerId, null, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, false);
+      const pRival = runRivalAnalysis(playerId, rivalProfileId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, false);
 
-      // Use face-off build if available
-      try {
-        // import render function dynamically to avoid circular issues
-        const render = await import('./render.js');
-        if (render && render.buildFaceOffOverlay) {
-          render.buildFaceOffOverlay(leftStats, rightStats);
-        } else {
-          // fallback: show leftStats
-          buildOverlay(leftStats, playerId);
+      const results = await Promise.allSettled([pMain, pRival]);
+      const leftStats = results[0].status === 'fulfilled' ? results[0].value : null;
+      const rightStats = results[1].status === 'fulfilled' ? results[1].value : null;
+
+      // If at least one succeeded, render face-off overlay (use available data)
+      if (leftStats || rightStats) {
+        try {
+          const render = await import('./render.js');
+          if (render && render.buildFaceOffOverlay) {
+            render.buildFaceOffOverlay(leftStats || {}, rightStats || {});
+          } else if (leftStats) {
+            buildOverlay(leftStats, playerId);
+          }
+        } catch (e) {
+          if (leftStats) buildOverlay(leftStats, playerId);
         }
-      } catch (e) {
-        buildOverlay(leftStats, playerId);
       }
     } catch (err) {
       console.error('Error in overlay auto-analysis:', err);
@@ -242,7 +247,7 @@ async function runSelfAnalysis(playerId, leaderboard, pages, perPage, playedCivi
   buildOverlay(stats, playerId);
 }
 
-async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, perPage, playedCivilization, opponentCiv, ongoing) {
+async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, buildOverlayFlag = true) {
   const overlay = document.getElementById('aoe2-overlay');
   overlay.innerHTML = '<div class="loading-state">Cargando analisis...</div>';
 
@@ -369,7 +374,7 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
 
   stats.matches = matches;
 
-  buildOverlay(stats, playerId);
+  if (buildOverlayFlag) buildOverlay(stats, playerId);
   return stats;
 }
 

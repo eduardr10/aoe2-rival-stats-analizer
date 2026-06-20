@@ -103,41 +103,58 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   // Clear previous hide timeout
   if (container._hideTimeout) clearTimeout(container._hideTimeout);
 
-  const leftName = leftStats.player_name || leftStats.rival_name || 'Player A';
-  const rightName = rightStats.player_name || rightStats.rival_name || 'Player B';
-  const leftElo = leftStats.rating || leftStats.rival_rating || '—';
-  const rightElo = rightStats.rating || rightStats.rival_rating || '—';
-  const leftWr = leftStats.win_percent != null ? `${leftStats.win_percent}%` : (leftStats.win_rate ? `${leftStats.win_rate}%` : '—');
-  const rightWr = rightStats.win_percent != null ? `${rightStats.win_percent}%` : (rightStats.win_rate ? `${rightStats.win_rate}%` : '—');
+  const leftName = leftStats?.player_name || leftStats?.rival_name || 'Player A';
+  const rightName = rightStats?.player_name || rightStats?.rival_name || 'Player B';
+  const leftElo = leftStats?.rating || leftStats?.rival_rating || '—';
+  const rightElo = rightStats?.rating || rightStats?.rival_rating || '—';
+  const leftWr = leftStats?.win_percent != null ? `${leftStats.win_percent}%` : (leftStats?.win_rate ? `${leftStats.win_rate}%` : '—');
+  const rightWr = rightStats?.win_percent != null ? `${rightStats.win_percent}%` : (rightStats?.win_rate ? `${rightStats.win_rate}%` : '—');
 
-  function topInsights(s) {
-    const arr = s.deep_insights || s.recommendations || s.deep_insights || [];
-    if (!Array.isArray(arr)) return [];
-    return arr.slice(0, 4).map(x => (typeof x === 'string' ? x : (x.text || x))).filter(Boolean);
+  function pickInsights(s) {
+    const candidates = [];
+    if (Array.isArray(s.deep_insights)) candidates.push(...s.deep_insights);
+    if (Array.isArray(s.recommendations)) candidates.push(...s.recommendations);
+    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses.map(w => `Weak: ${w}`));
+    if (!candidates.length && s.timing_interpretation) candidates.push(...(s.timing_interpretation || []).map(i => i.conclusion || i));
+    return candidates.slice(0, 3).map(x => (typeof x === 'string' ? x : (x.text || x))).filter(Boolean);
   }
 
-  const leftTop = topInsights(leftStats);
-  const rightTop = topInsights(rightStats);
-
-  let html = '';
-  html += `<div class="faceoff-grid">
-    <div class="faceoff-col faceoff-left">
-      <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(leftName)}</div><div class="faceoff-meta">${leftElo} · ${leftWr}</div></div>
-      <div class="faceoff-insights">`;
-  for (const t of leftTop) {
-    html += `<div class="insight-item">• ${escapeHtml(t)}</div>`;
+  function getCompactMetrics(s) {
+    const pp = s.player_profile || {};
+    const primary = pp.primary_opening || s.current_opening?.chosen_opening || 'Unknown';
+    const openingPct = pp.per_opening_frequency ? Math.round((pp.per_opening_frequency[primary] || 0) * 100) / 100 : null;
+    const topCivEntry = Object.entries(s.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0] || [];
+    const topCiv = topCivEntry[0] || 'Unknown';
+    const feudal = s.avg_feudal_hms || '—';
+    const castle = s.avg_castle_hms || '—';
+    const tc2pct = s.tc_timing?.tc2_pct != null ? `${s.tc_timing.tc2_pct}%` : '—';
+    const tc2time = s.tc_timing?.tc2_avg_hms || '—';
+    const ball = s.key_techs && s.key_techs['ballistics'] ? formatHms(s.key_techs['ballistics'].avg_time) : (s.key_techs && s.key_techs['ballistics'] == null ? '—' : null);
+    return { primary, openingPct, topCiv, feudal, castle, tc2pct, tc2time, ball };
   }
-  html += `</div></div>`;
 
-  html += `<div class="faceoff-col faceoff-right">
-      <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(rightName)}</div><div class="faceoff-meta">${rightElo} · ${rightWr}</div></div>
-      <div class="faceoff-insights">`;
-  for (const t of rightTop) {
-    html += `<div class="insight-item">• ${escapeHtml(t)}</div>`;
-  }
-  html += `</div></div>`;
+  const leftTop = pickInsights(leftStats || {});
+  const rightTop = pickInsights(rightStats || {});
+  const lm = getCompactMetrics(leftStats || {});
+  const rm = getCompactMetrics(rightStats || {});
 
-  html += `</div>`;
+  const buildCol = (name, elo, wr, m, insights) => `
+    <div class="faceoff-col">
+      <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(name)}</div><div class="faceoff-meta">${elo} · ${wr}</div></div>
+      <div class="faceoff-metrics">
+        <div class="metric"><strong>Opening:</strong> ${escapeHtml(formatOpeningName(m.primary))}${m.openingPct ? ' · ' + m.openingPct + '%' : ''}</div>
+        <div class="metric"><strong>Civ:</strong> ${escapeHtml(m.topCiv)}</div>
+        <div class="metric"><strong>Feudal / Castle:</strong> ${escapeHtml(m.feudal)} / ${escapeHtml(m.castle)}</div>
+        <div class="metric"><strong>2º TC:</strong> ${escapeHtml(m.tc2pct)} (${escapeHtml(m.tc2time)})</div>
+        ${m.ball ? `<div class="metric"><strong>Ballistics:</strong> ${escapeHtml(m.ball)}</div>` : ''}
+      </div>
+      <div class="faceoff-insights">${insights.map(i => `<div class="insight-item">• ${escapeHtml(i)}</div>`).join('')}</div>
+    </div>`;
+
+  const html = `<div class="faceoff-grid compact">
+    ${buildCol(leftName, leftElo, leftWr, lm, leftTop)}
+    ${buildCol(rightName, rightElo, rightWr, rm, rightTop)}
+  </div>`;
 
   container.innerHTML = html;
   container.style.opacity = '1';
