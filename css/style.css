@@ -801,19 +801,13 @@ body.chroma-ready #aoe2-overlay {
 /* Fullscreen overlay mode for chroma: two-side faceoff */
 .overlay-fullscreen {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  box-shadow: none;
-  border-radius: 0;
+  display: block;
+  overflow: hidden;
+  z-index: 10000;
 }
 
 .faceoff-grid.compact {
@@ -825,34 +819,35 @@ body.chroma-ready #aoe2-overlay {
 .faceoff-col {
   position: absolute;
   top: 50%;
-  width: min(380px, calc(50% - 48px));
+  width: min(420px, calc(50% - 48px));
   max-width: 420px;
-  background: rgba(8, 12, 18, 0.96);
+  background: rgba(7, 11, 18, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
-  padding: 20px;
+  border-radius: 24px;
+  padding: 24px;
   color: var(--text-primary);
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 28px 100px rgba(0, 0, 0, 0.35);
   transform: translateY(-50%);
+  opacity: 0;
 }
 
 .faceoff-col.left {
-  left: 28px;
-  animation: slideInLeft 0.5s ease forwards;
+  left: 24px;
+  animation: slideInLeft 0.45s ease forwards;
 }
 
 .faceoff-col.right {
-  right: 28px;
-  animation: slideInRight 0.5s ease forwards;
+  right: 24px;
+  animation: slideInRight 0.45s ease forwards;
 }
 
 @keyframes slideInLeft {
-  from { transform: translate(-120%, -50%); opacity: 0; }
+  from { transform: translate(-140%, -50%); opacity: 0; }
   to { transform: translate(0, -50%); opacity: 1; }
 }
 
 @keyframes slideInRight {
-  from { transform: translate(120%, -50%); opacity: 0; }
+  from { transform: translate(140%, -50%); opacity: 0; }
   to { transform: translate(0, -50%); opacity: 1; }
 }
 
@@ -860,12 +855,18 @@ body.chroma-ready #aoe2-overlay {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .faceoff-name {
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 800;
+  font-size: 17px;
 }
 
 .faceoff-meta {
@@ -873,26 +874,26 @@ body.chroma-ready #aoe2-overlay {
   color: var(--text-secondary);
 }
 
-.faceoff-metrics .metric {
+..faceoff-metrics .metric {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .faceoff-insights {
-  margin-top: 14px;
+  margin-top: 16px;
   display: grid;
   gap: 10px;
 }
 
 .insight-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 14px 16px;
   font-size: 12px;
   color: var(--text-primary);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .faceoff-col.left .faceoff-header {
