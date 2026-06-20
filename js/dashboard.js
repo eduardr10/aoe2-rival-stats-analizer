@@ -585,6 +585,11 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderExecutiveSummary(stats);
   html += `</div>`;
 
+  // Quick one-paragraph summary for copy/paste
+  html += `<div class="block">`;
+  html += renderPlayerClipboardSummary(stats);
+  html += `</div>`;
+
   // SECTION 2: Findings (unified insights list)
   const insights = generateInsights(stats, cachedKnowledgeBase || {});
   html += renderFindingsSection(stats, insights);
@@ -731,6 +736,36 @@ function renderExecutiveSummary(stats) {
       </div>
     </div>
     ${renderExecSignature(stats)}
+  </div>`;
+}
+
+function renderPlayerClipboardSummary(stats) {
+  const name = stats.player_name || 'Player';
+  const rating = stats.rating || '—';
+  const wr = stats.win_percent != null ? `${stats.win_percent}%` : '—';
+  const games = stats.analyzed || 0;
+  const pp = stats.player_profile || {};
+  const primaryOpening = pp.primary_opening || (stats.current_opening?.chosen_opening) || 'Unknown';
+  const openingPct = pp.per_opening_frequency ? Math.round((pp.per_opening_frequency[primaryOpening] || 0) * 100) / 100 : null;
+  const civs = stats.civ_played_percent || {};
+  const topCivEntry = Object.entries(civs).sort((a, b) => b[1] - a[1])[0] || [];
+  const topCiv = topCivEntry[0] || 'Unknown';
+  const topCivPct = topCivEntry[1] != null ? `${topCivEntry[1]}%` : '—';
+  const feudal = stats.avg_feudal_hms || '—';
+  const castle = stats.avg_castle_hms || '—';
+  const tc2pct = stats.tc_timing?.tc2_pct != null ? `${stats.tc_timing.tc2_pct}%` : '—';
+  const tc2time = stats.tc_timing?.tc2_avg_hms || '—';
+  const tc3pct = stats.tc_timing?.tc3_pct != null ? `${stats.tc_timing.tc3_pct}%` : '—';
+  const tc3time = stats.tc_timing?.tc3_avg_hms || '—';
+  const eapm = stats.avg_eapm != null ? Math.round(stats.avg_eapm) : '—';
+  const boom = stats.boom_tendency || '—';
+
+  const paragraph = `${name} (${rating}) — ${wr} over ${games} games. Main civ: ${topCiv} (${topCivPct}). Primary opening: ${primaryOpening}${openingPct != null ? ' (' + openingPct + '%)' : ''}. Avg timings: Feudal ${feudal}, Castle ${castle}. 2nd TC: ${tc2pct} (avg ${tc2time}), 3rd TC: ${tc3pct} (avg ${tc3time}). Avg EAPM: ${eapm}. Boom tendency: ${boom}.`;
+
+  return `<div class="card">
+    <div class="card-label">Resumen rápido (copiar)</div>
+    <div class="card-subtitle">Párrafo listo para pegar en chat</div>
+    <div class="mt-2"><textarea readonly class="clipboard-text" style="width:100%;height:72px">${escapeHtml(paragraph)}</textarea></div>
   </div>`;
 }
 
