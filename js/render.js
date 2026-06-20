@@ -161,6 +161,7 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
 
   container.innerHTML = html;
   container.classList.add('overlay-fullscreen');
+  document.body.classList.add('chroma-ready');
   container.style.opacity = '1';
   container.style.pointerEvents = 'none';
 
@@ -169,6 +170,7 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
     container.style.opacity = '0';
     container.style.pointerEvents = 'none';
     container.classList.remove('overlay-fullscreen');
+    document.body.classList.remove('chroma-ready');
   }, OVERLAY_AUTO_HIDE_MS);
 }
 

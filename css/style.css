@@ -31,7 +31,14 @@
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-/* Panel principal */
+/* Panel principal — hidden by default until content is ready */
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: var(--font-main);
+}
+
 #aoe2-overlay {
   position: fixed;
   top: 50%;
@@ -54,8 +61,22 @@
   opacity: 1;
   transition: opacity 0.4s ease;
   overflow: hidden;
-  display: flex;
+  display: none;
   flex-direction: column;
+}
+
+/* Show overlay when it has actual content */
+#aoe2-overlay:not(:empty) {
+  display: flex;
+}
+
+/* Fullscreen chroma mode: show body background and overlay fullscreen */
+body.chroma-ready {
+  background: #00ff00;
+}
+
+body.chroma-ready #aoe2-overlay {
+  display: flex;
 }
 
 /* Header con creador */
