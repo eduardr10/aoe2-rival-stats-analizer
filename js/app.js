@@ -47,13 +47,19 @@ export async function init() {
       const mid = matchData.matchId || matchData.match_id || null;
       if (!mid || !rivalProfileId) return;
 
-      // Run both analyses in parallel without rendering intermediate overlays
-      const pMain = runRivalAnalysis(playerId, null, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, false);
-      const pRival = runRivalAnalysis(playerId, rivalProfileId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, false);
-
-      const results = await Promise.allSettled([pMain, pRival]);
-      const leftStats = results[0].status === 'fulfilled' ? results[0].value : null;
-      const rightStats = results[1].status === 'fulfilled' ? results[1].value : null;
+      // Run analyses sequentially to avoid overwhelming the API
+      let leftStats = null;
+      let rightStats = null;
+      try {
+        leftStats = await runRivalAnalysis(playerId, null, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, false);
+      } catch (e) {
+        console.warn('Left player analysis failed:', e);
+      }
+      try {
+        rightStats = await runRivalAnalysis(playerId, rivalProfileId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing, false);
+      } catch (e) {
+        console.warn('Right player analysis failed:', e);
+      }
 
       // If at least one succeeded, render face-off overlay (use available data)
       if (leftStats || rightStats) {

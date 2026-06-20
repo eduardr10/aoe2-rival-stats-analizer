@@ -79,6 +79,12 @@ body.chroma-ready #aoe2-overlay {
   display: flex;
 }
 
+/* Override for face-off dual-panel mode — needs display:block for absolute children */
+.overlay-fullscreen#aoe2-overlay,
+body.chroma-ready #aoe2-overlay.overlay-fullscreen {
+  display: block;
+}
+
 /* Header con creador */
 .overlay-header-main {
   display: flex;
@@ -808,6 +814,9 @@ body.chroma-ready #aoe2-overlay {
   display: block;
   overflow: hidden;
   z-index: 10000;
+  transform: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .faceoff-grid.compact {
