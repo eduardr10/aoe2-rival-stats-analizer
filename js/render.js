@@ -93,6 +93,64 @@ export function restartOverlay() {
 }
 
 // ============================================================================
+// FACE-OFF OVERLAY (two players insights, temporary)
+// ============================================================================
+
+export function buildFaceOffOverlay(leftStats, rightStats) {
+  const container = document.getElementById('aoe2-overlay');
+  if (!container) return;
+
+  // Clear previous hide timeout
+  if (container._hideTimeout) clearTimeout(container._hideTimeout);
+
+  const leftName = leftStats.player_name || leftStats.rival_name || 'Player A';
+  const rightName = rightStats.player_name || rightStats.rival_name || 'Player B';
+  const leftElo = leftStats.rating || leftStats.rival_rating || '—';
+  const rightElo = rightStats.rating || rightStats.rival_rating || '—';
+  const leftWr = leftStats.win_percent != null ? `${leftStats.win_percent}%` : (leftStats.win_rate ? `${leftStats.win_rate}%` : '—');
+  const rightWr = rightStats.win_percent != null ? `${rightStats.win_percent}%` : (rightStats.win_rate ? `${rightStats.win_rate}%` : '—');
+
+  function topInsights(s) {
+    const arr = s.deep_insights || s.recommendations || s.deep_insights || [];
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(0, 4).map(x => (typeof x === 'string' ? x : (x.text || x))).filter(Boolean);
+  }
+
+  const leftTop = topInsights(leftStats);
+  const rightTop = topInsights(rightStats);
+
+  let html = '';
+  html += `<div class="faceoff-grid">
+    <div class="faceoff-col faceoff-left">
+      <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(leftName)}</div><div class="faceoff-meta">${leftElo} · ${leftWr}</div></div>
+      <div class="faceoff-insights">`;
+  for (const t of leftTop) {
+    html += `<div class="insight-item">• ${escapeHtml(t)}</div>`;
+  }
+  html += `</div></div>`;
+
+  html += `<div class="faceoff-col faceoff-right">
+      <div class="faceoff-header"><div class="faceoff-name">${escapeHtml(rightName)}</div><div class="faceoff-meta">${rightElo} · ${rightWr}</div></div>
+      <div class="faceoff-insights">`;
+  for (const t of rightTop) {
+    html += `<div class="insight-item">• ${escapeHtml(t)}</div>`;
+  }
+  html += `</div></div>`;
+
+  html += `</div>`;
+
+  container.innerHTML = html;
+  container.style.opacity = '1';
+  container.style.pointerEvents = 'none';
+
+  // Auto-hide after the same interval as overlay
+  container._hideTimeout = setTimeout(() => {
+    container.style.opacity = '0';
+    container.style.pointerEvents = 'none';
+  }, OVERLAY_AUTO_HIDE_MS);
+}
+
+// ============================================================================
 // HEADER
 // ============================================================================
 
@@ -346,8 +404,8 @@ function buildStrategicRecommendations(stats) {
   if (recs.length > 0) {
     for (const rec of recs.slice(0, 5)) {
       const icon = rec.type === 'must' ? '<span class="check">✓</span>' :
-                   rec.type === 'warn' ? '<span class="warn">⚠</span>' :
-                   '<span class="danger">✗</span>';
+        rec.type === 'warn' ? '<span class="warn">⚠</span>' :
+          '<span class="danger">✗</span>';
       html += `<li>${icon} ${escapeHtml(rec.text)}</li>`;
     }
   } else {
@@ -424,8 +482,8 @@ function buildOverviewPanel(stats, id) {
   const streak = stats.current_streak || { type: 'none', count: 0 };
 
   const streakText = streak.type === 'win' ? `+${streak.count} wins` :
-                       streak.type === 'loss' ? `-${streak.count} losses` :
-                       'No streak';
+    streak.type === 'loss' ? `-${streak.count} losses` :
+      'No streak';
 
   return `<div class="tab-panel active" data-panel="${id}">
     <div class="tab-stat-grid">

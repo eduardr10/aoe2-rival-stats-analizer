@@ -46,7 +46,34 @@ export async function init() {
       'Esperando partida... Asegurate de pasar <code>matchId</code> y <code>rivalProfileId</code>.</div>';
   }
 
-  initWebSocket(playerId, matchId);
+  initWebSocket(playerId, matchId, async ({ matchData, rivalProfileId }) => {
+    // Auto-analyze both players for overlay face-off when a new match is detected
+    try {
+      const mid = matchData.matchId || matchData.match_id || null;
+      if (!mid || !rivalProfileId) return;
+      const banner = document.getElementById('aoe2-overlay');
+      if (banner) banner.innerHTML = '<div class="loading-state">Partida detectada — analizando rivales...</div>';
+
+      const leftStats = await runRivalAnalysis(playerId, rivalProfileId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing);
+      const rightStats = await runRivalAnalysis(rivalProfileId, playerId, mid, leaderboard, perPage, playedCivilization, opponentCiv, ongoing);
+
+      // Use face-off build if available
+      try {
+        // import render function dynamically to avoid circular issues
+        const render = await import('./render.js');
+        if (render && render.buildFaceOffOverlay) {
+          render.buildFaceOffOverlay(leftStats, rightStats);
+        } else {
+          // fallback: show leftStats
+          buildOverlay(leftStats, playerId);
+        }
+      } catch (e) {
+        buildOverlay(leftStats, playerId);
+      }
+    } catch (err) {
+      console.error('Error in overlay auto-analysis:', err);
+    }
+  });
 }
 
 function is1v1Match(m) {
@@ -343,6 +370,7 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   stats.matches = matches;
 
   buildOverlay(stats, playerId);
+  return stats;
 }
 
 function formatDurationHms(seconds) {
