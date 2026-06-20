@@ -175,22 +175,49 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
   const html = `<div class="faceoff-grid compact">
     ${buildCol(leftName, leftElo, leftWr, lm, leftTop, 'left')}
     ${buildCol(rightName, rightElo, rightWr, rm, rightTop, 'right')}
-  </div>`;
+  </div>
+  <button id="faceoff-reopen-btn" class="faceoff-reopen-btn">Ocultar análisis</button>`;
 
   container.innerHTML = html;
   container.classList.add('overlay-fullscreen');
   document.body.classList.add('chroma-ready');
   container.style.opacity = '1';
-  container.style.pointerEvents = 'none';
+  container.style.pointerEvents = 'auto';
   container._lastFaceOff = { leftStats, rightStats };
 
-  // Auto-hide after the same interval as overlay
-  container._hideTimeout = setTimeout(() => {
-    container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
-    container.classList.remove('overlay-fullscreen');
+  const button = container.querySelector('#faceoff-reopen-btn');
+  const panels = Array.from(container.querySelectorAll('.faceoff-col'));
+
+  const hidePanels = () => {
+    panels.forEach(panel => panel.style.opacity = '0');
+    if (button) button.textContent = 'Mostrar análisis';
     document.body.classList.remove('chroma-ready');
-    container.innerHTML = '';
+  };
+
+  const showPanels = () => {
+    panels.forEach(panel => panel.style.opacity = '1');
+    if (button) button.textContent = 'Ocultar análisis';
+    document.body.classList.add('chroma-ready');
+    container.classList.add('overlay-fullscreen');
+  };
+
+  if (button) {
+    button.addEventListener('click', () => {
+      const hidden = panels.some(panel => panel.style.opacity === '0');
+      if (hidden) {
+        showPanels();
+        if (container._hideTimeout) clearTimeout(container._hideTimeout);
+        container._hideTimeout = setTimeout(hidePanels, OVERLAY_AUTO_HIDE_MS);
+      } else {
+        hidePanels();
+      }
+    });
+  }
+
+  // Auto-hide after the same interval as overlay
+  if (container._hideTimeout) clearTimeout(container._hideTimeout);
+  container._hideTimeout = setTimeout(() => {
+    hidePanels();
   }, OVERLAY_AUTO_HIDE_MS);
 }
 
