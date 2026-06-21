@@ -61,7 +61,7 @@ export async function fetchFullProfile(playerId) {
 export async function fetchMatches(playerId, leaderboard, page, perPage) {
   const cached = await getCachedMatches(playerId, leaderboard, page, perPage);
   if (cached) {
-    console.log(`[cache] matches page ${page} (${cached.length} items)`);
+    console.debug(`[cache] matches page ${page} (${cached.length} items)`);
     return cached;
   }
 
@@ -85,7 +85,7 @@ export async function fetchMatches(playerId, leaderboard, page, perPage) {
 export async function fetchAnalysis(matchId) {
   const cached = await getCachedAnalysis(matchId);
   if (cached) {
-    console.log(`[cache] analysis ${matchId}`);
+    console.debug(`[cache] analysis ${matchId}`);
     return { data: cached, fromCache: true };
   }
 

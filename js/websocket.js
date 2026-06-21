@@ -18,12 +18,10 @@ export function initWebSocket(playerId, existingMatchId, onNewMatch = null) {
     let reconnectTimer = null;
 
     socket.onopen = () => {
-      console.log(`Connected to ${handlerName}`);
       // Force reconnection every 45s to pick up new matches
       // (server may not push events for new matches on an open socket)
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(() => {
-        console.log(`Reconnecting ${handlerName} to check for new matches`);
         socket.close();
       }, 45000);
     };

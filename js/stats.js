@@ -39,8 +39,6 @@ function categorizeUnit(unitName) {
   for (const [cat, units] of Object.entries(UNIT_CATEGORIES)) {
     if (units.includes(n)) return cat;
   }
-  // Debug: log unidades no categorizadas para expandir la lista
-  console.log('[unit debug] uncategorized:', unitName, '->', n);
   return 'other';
 }
 
