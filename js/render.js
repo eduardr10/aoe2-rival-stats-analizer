@@ -316,13 +316,13 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
         panels.forEach(p => { p.style.opacity = '0'; });
         hideButton();
         showButton();
-        container.style.background = '#00ff00'; // chroma green when hidden
+        container.style.background = 'transparent';
       }, 380);
     } else {
       panels.forEach(p => { p.style.opacity = '0'; });
       hideButton();
       showButton();
-      container.style.background = '#00ff00';
+      container.style.background = 'transparent';
     }
   };
 
