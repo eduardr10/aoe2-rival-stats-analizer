@@ -42,13 +42,10 @@ export function initWebSocket(playerId, existingMatchId, onNewMatch = null) {
         return;
       }
 
-      const lsKey = `aoe2_analysis_${matchData.matchId}`;
-      const lastAnalysis = localStorage.getItem(lsKey);
-      const now = Date.now();
-      if (lastAnalysis && now - parseInt(lastAnalysis) < 2 * 60 * 1000) {
+      const lsKey = `aoe2_shown_match_${matchData.matchId}`;
+      if (analyzedMatchIds.has(matchData.matchId) || localStorage.getItem(lsKey)) {
         return;
       }
-      localStorage.setItem(lsKey, now.toString());
       analyzedMatchIds.add(matchData.matchId);
 
       const rivalProfileId = getRivalProfileId(matchData, playerId);

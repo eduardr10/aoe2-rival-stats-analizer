@@ -43,8 +43,9 @@ export async function init() {
 
   initWebSocket(playerId, matchId, async ({ matchData, rivalProfileId }) => {
     // Auto-analyze both players for overlay face-off when a new match is detected
+    let mid = null;
     try {
-      const mid = matchData.matchId || matchData.match_id || null;
+      mid = matchData.matchId || matchData.match_id || null;
       if (!mid || !rivalProfileId) return;
 
       // Run analyses sequentially to avoid overwhelming the API
@@ -62,17 +63,26 @@ export async function init() {
       }
 
       // If at least one succeeded, render face-off overlay (use available data)
+      let overlayBuilt = false;
       if (leftStats || rightStats) {
         try {
           const render = await import('./render.js');
           if (render && render.buildFaceOffOverlay) {
             render.buildFaceOffOverlay(leftStats || {}, rightStats || {});
+            overlayBuilt = true;
           } else if (leftStats) {
             buildOverlay(leftStats, playerId);
+            overlayBuilt = true;
           }
         } catch (e) {
-          if (leftStats) buildOverlay(leftStats, playerId);
+          if (leftStats) {
+            buildOverlay(leftStats, playerId);
+            overlayBuilt = true;
+          }
         }
+      }
+      if (overlayBuilt && mid) {
+        localStorage.setItem(`aoe2_shown_match_${mid}`, '1');
       }
     } catch (err) {
       console.error('Error in overlay auto-analysis:', err);

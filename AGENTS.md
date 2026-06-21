@@ -134,4 +134,5 @@ The app caches all API responses in IndexedDB to avoid redundant requests:
 `api.js` checks cache before making any fetch. If cached data exists and is not expired, it returns the cached version. The cache is cleared via the "Limpiar cache" button.
 
 ## Overlay behavior
-The overlay auto-hides after 12 seconds (fade-out). The "Toggle" button can show/hide it manually at any time. This is intentional for streaming — it appears, shows data, then disappears so it doesn't block the game view.
+- The overlay auto-hides after 12 seconds (fade-out). The "Toggle" button can show/hide it manually at any time. This is intentional for streaming — it appears, shows data, then disappears so it doesn't block the game view.
+- **WebSocket match dedup**: Once a game has been analyzed and shown on the overlay, it is marked in `localStorage` (`aoe2_shown_match_{matchId}`) so the same game is never auto-shown again (even after page refresh). The in-memory `analyzedMatchIds` Set in `websocket.js` provides session-level dedup. The localStorage key is set in `app.js` only after the overlay renders successfully.
