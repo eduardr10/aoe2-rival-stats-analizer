@@ -68,7 +68,8 @@
       "unitsByAge": "Units by Age",
       "techs": "Technologies",
       "performanceTimeline": "Performance Timeline",
-      "buildOrderTimeline": "Build Order Timeline"
+      "buildOrderTimeline": "Build Order Timeline",
+      "winLossPatterns": "Win & Loss Patterns"
     },
     "insights": {
       "confidenceHigh": "High confidence",
@@ -294,7 +295,8 @@
       "unitsByAge": "Unidades por Edad",
       "techs": "Tecnologías",
       "performanceTimeline": "Línea Temporal de Rendimiento",
-      "buildOrderTimeline": "Línea Temporal de Build Order"
+      "buildOrderTimeline": "Línea Temporal de Build Order",
+      "winLossPatterns": "Patrones de Victoria y Derrota"
     },
     "insights": {
       "confidenceHigh": "Alta confianza",

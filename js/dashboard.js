@@ -595,6 +595,9 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   const insights = generateInsights(stats, cachedKnowledgeBase || {});
   html += renderFindingsSection(stats, insights);
 
+  // SECTION 2b: Win & Loss Patterns (how the player wins/loses)
+  html += renderWinLossPatterns(stats);
+
   // SECTION 3: Performance Timeline (new time-series visualizations)
   html += renderPerformanceTimelineSection(stats);
 
@@ -2067,6 +2070,298 @@ function renderLiveDetailedMetrics(playerStats, rivalStats) {
     <div class="mb-2"><strong>Player:</strong> ${formatOpeningName(playerStats.player_profile?.primary_opening || 'Unknown')}</div>
     <div><strong>Rival:</strong> ${formatOpeningName(rivalStats.player_profile?.primary_opening || 'Unknown')}</div>
   </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ============================================================================
+// WIN & LOSS PATTERNS — What wins/loses this player games
+// ============================================================================
+
+function computeWinLossPatterns(stats) {
+  const winPatterns = [];
+  const lossPatterns = [];
+  const traits = [];
+  const games = stats.analyzed || 0;
+  const wins = stats.total_wins || 0;
+  const losses = games - wins;
+  if (games < 5) return { winPatterns, lossPatterns, traits, confidence: 'Low' };
+
+  const confidence = games >= 20 ? 'High' : games >= 10 ? 'Medium' : 'Low';
+
+  // ---- WIN PATTERNS ----
+
+  // 1. Early military pressure
+  const ep = stats.early_pressure || {};
+  const ep10w = parseFloat(ep.before10?.wins) || 0;
+  const ep10l = parseFloat(ep.before10?.losses) || 0;
+  if (ep10w > 0.05 && ep10l > 0.02 && ep10w > ep10l * 1.25) {
+    const pct = Math.round(((ep10w - ep10l) / ep10l) * 100);
+    winPatterns.push({
+      icon: '\u{1F525}',
+      text: `Early military pressure before 10 min correlates with ${pct}% more wins`,
+      metric: null,
+      type: 'win'
+    });
+  }
+
+  // 2. Unit composition advantage in wins
+  const catWinAvg = stats.unit_cat_win_avg || {};
+  const catLossAvg = stats.unit_cat_loss_avg || {};
+  const catNames = { cavalry: 'Cavalry', archers: 'Archers', infantry: 'Infantry', siege: 'Siege' };
+  const catIcons = { cavalry: '\u{1F434}', archers: '\u{1F3F9}', infantry: '\u2694\uFE0F', siege: '\u{1F4A3}' };
+  for (const cat of ['cavalry', 'archers', 'infantry', 'siege']) {
+    const wAvg = parseFloat(catWinAvg[cat]) || 0;
+    const lAvg = parseFloat(catLossAvg[cat]) || 0;
+    if (wAvg > 2 && wAvg > lAvg * 1.25) {
+      winPatterns.push({
+        icon: catIcons[cat],
+        text: `Produces ${(wAvg - lAvg).toFixed(1)} more ${catNames[cat]} per game in wins`,
+        metric: `${wAvg.toFixed(1)} vs ${lAvg.toFixed(1)} avg`,
+        type: 'win'
+      });
+      break; // only the top one
+    }
+  }
+
+  // 3. Age timing advantage
+  const ages = [
+    { key: 'feudal', label: 'Feudal Age', icon: '\u23F1\uFE0F' },
+    { key: 'castle', label: 'Castle Age', icon: '\u{1F3F0}' },
+    { key: 'imperial', label: 'Imperial Age', icon: '\u{1F451}' },
+  ];
+  const winAvgAges = stats.age_time_win_avg || {};
+  const lossAvgAges = stats.age_time_loss_avg || {};
+  for (const age of ages) {
+    const wTime = winAvgAges[age.key];
+    const lTime = lossAvgAges[age.key];
+    if (wTime != null && lTime != null && lTime - wTime > 20) {
+      const diff = Math.round(lTime - wTime);
+      const wHms = formatHms(wTime);
+      const lHms = formatHms(lTime);
+      winPatterns.push({
+        icon: age.icon,
+        text: `Reaches ${age.label} ${diff}s faster in wins`,
+        metric: `${wHms} vs ${lHms}`,
+        type: 'win'
+      });
+      break;
+    }
+  }
+
+  // 4. EAPM advantage
+  const wEapm = stats.avg_eapm_wins || 0;
+  const lEapm = stats.avg_eapm_losses || 0;
+  if (wEapm > 15 && lEapm > 10 && wEapm - lEapm >= 3) {
+    winPatterns.push({
+      icon: '\u26A1',
+      text: `Plays ${(wEapm - lEapm).toFixed(1)} higher EAPM in wins`,
+      metric: `${wEapm.toFixed(0)} vs ${lEapm.toFixed(0)}`,
+      type: 'win'
+    });
+  }
+
+  // 5. Key tech timing advantage
+  const techWinAvg = stats.key_tech_win_avg || {};
+  const techLossAvg = stats.key_tech_loss_avg || {};
+  const keyTechs = [
+    { key: 'wheelbarrow', label: 'Wheelbarrow', icon: '\u{1F33E}' },
+    { key: 'fletching', label: 'Fletching', icon: '\u{1F3F9}' },
+    { key: 'bloodlines', label: 'Bloodlines', icon: '\u{1F434}' },
+    { key: 'ballistics', label: 'Ballistics', icon: '\u{1F3AF}' },
+  ];
+  for (const tech of keyTechs) {
+    const wTime = techWinAvg[tech.key];
+    const lTime = techLossAvg[tech.key];
+    if (wTime != null && lTime != null && lTime - wTime > 30) {
+      const diff = Math.round(lTime - wTime);
+      const wHms = formatHms(wTime);
+      const lHms = formatHms(lTime);
+      winPatterns.push({
+        icon: tech.icon,
+        text: `Researches ${tech.label} ${diff}s earlier in wins`,
+        metric: `${wHms} vs ${lHms}`,
+        type: 'win'
+      });
+      break;
+    }
+  }
+
+  // ---- LOSS PATTERNS ----
+
+  // 1. Opponent unit threat in losses
+  const oppCatWinAvg = stats.opp_unit_cat_win_avg || {};
+  const oppCatLossAvg = stats.opp_unit_cat_loss_avg || {};
+  for (const cat of ['cavalry', 'archers', 'infantry', 'siege']) {
+    const wAvg = parseFloat(oppCatWinAvg[cat]) || 0;
+    const lAvg = parseFloat(oppCatLossAvg[cat]) || 0;
+    if (lAvg > 2.5 && lAvg > wAvg * 1.3) {
+      lossPatterns.push({
+        icon: catIcons[cat],
+        text: `Opponent fields ${(lAvg - wAvg).toFixed(1)} more ${catNames[cat]} per game when you lose`,
+        metric: `${lAvg.toFixed(1)} in losses vs ${wAvg.toFixed(1)} in wins`,
+        type: 'loss'
+      });
+      break;
+    }
+  }
+
+  // 2. Opponent age timing in losses
+  const oppWinAvgAges = stats.opp_age_time_win_avg || {};
+  const oppLossAvgAges = stats.opp_age_time_loss_avg || {};
+  for (const age of ages) {
+    const wTime = oppWinAvgAges[age.key];
+    const lTime = oppLossAvgAges[age.key];
+    if (wTime != null && lTime != null && lTime - wTime < -20) {
+      const diff = Math.round(wTime - lTime);
+      const lHms = formatHms(lTime);
+      lossPatterns.push({
+        icon: '\u26A0\uFE0F',
+        text: `Opponent reaches ${age.label} ${diff}s faster in your losses`,
+        metric: `${lHms} vs ${formatHms(wTime)}`,
+        type: 'loss'
+      });
+      break;
+    }
+  }
+
+  // 3. Civ matchup weaknesses
+  const weaknesses = stats.matchup_weaknesses || [];
+  if (weaknesses.length > 0) {
+    const top = weaknesses[0];
+    lossPatterns.push({
+      icon: '\u{1F3DB}\uFE0F',
+      text: `Struggles vs ${top.civ}: ${top.wr}% WR over ${top.games} games`,
+      metric: top.topLossUnits?.map(u => `${u.name} (${u.avg.toFixed(1)})`).join(', ') || '',
+      type: 'loss'
+    });
+  }
+
+  // 4. APM drop-off in losses
+  const dropoff = stats.apm_dropoff || {};
+  const dWin = dropoff.wins || 0;
+  const dLoss = dropoff.losses || 0;
+  if (dLoss != null && dWin != null && dLoss > 5 && dLoss > dWin * 1.3) {
+    lossPatterns.push({
+      icon: '\u{1F4C9}',
+      text: `APM drops ${dLoss.toFixed(0)} in losses vs ${dWin.toFixed(0)} in wins`,
+      metric: `${dLoss.toFixed(0)} vs ${dWin.toFixed(0)} late-game`,
+      type: 'loss'
+    });
+  }
+
+  // ---- DISTINCTIVE TRAITS ----
+
+  // Unit signature: top 3 most produced units
+  const ue = stats.unit_effectiveness || {};
+  const unitEntries = Object.entries(ue).filter(([, d]) => d.total > 0 && d.matches >= 2).sort((a, b) => b[1].total - a[1].total).slice(0, 4);
+  if (unitEntries.length > 0) {
+    traits.push(...unitEntries.map(([name, data]) => ({
+      icon: data.label === 'strong' ? '\u26A1' : data.label === 'weak' ? '\u26A0\uFE0F' : '\u{1F396}\uFE0F',
+      text: `${unitDisplayName(name)}: ${data.total} total (${data.avg.toFixed(1)}/game)`,
+      metric: data.wr != null ? `${data.wr}% WR` : null,
+      type: data.label === 'strong' ? 'strong' : data.label === 'weak' ? 'weak' : 'neutral',
+      share: data.share != null ? `${data.share}% army` : null
+    })));
+  }
+
+  // Opening stability trait
+  const pp = stats.player_profile || {};
+  if (pp.opening_stability != null && pp.opening_stability > 0.5 && pp.primary_opening) {
+    traits.push({
+      icon: '\u{1F3AF}',
+      text: `${Math.round(pp.opening_stability * 100)}% opening stability: ${formatOpeningName(pp.primary_opening)}`,
+      metric: null,
+      type: 'trait'
+    });
+  }
+
+  // Civ dependency trait
+  const cd = stats.civ_dependency || {};
+  if (cd.mainGames >= 3 && cd.otherGames >= 3 && cd.mainWr != null && cd.otherWr != null && Math.abs(cd.mainWr - cd.otherWr) >= 10) {
+    const diff = Math.abs(cd.mainWr - cd.otherWr);
+    traits.push({
+      icon: '\u{1F3DB}\uFE0F',
+      text: `${cd.mainCiv}: ${cd.mainWr}% WR vs ${cd.otherWr}% with other civs`,
+      metric: `${diff}% gap — civ ${cd.mainWr > cd.otherWr ? 'specialist' : 'flexible'}`,
+      type: 'trait'
+    });
+  }
+
+  // Boom tendency trait
+  if (stats.boom_tendency && stats.boom_tendency !== 'Medium') {
+    traits.push({
+      icon: stats.boom_tendency.includes('High') ? '\u{1F33E}' : '\u{1F525}',
+      text: `Boom tendency: ${stats.boom_tendency}`,
+      metric: stats.tc_timing ? `2nd TC ${stats.tc_timing.tc2_avg_hms || '—'} · 3rd ${stats.tc_timing.tc3_avg_hms || '—'}` : null,
+      type: 'trait'
+    });
+  }
+
+  return { winPatterns, lossPatterns, traits, confidence };
+}
+
+function renderWinLossPatterns(stats) {
+  const { winPatterns, lossPatterns, traits, confidence } = computeWinLossPatterns(stats);
+  const totalPatterns = winPatterns.length + lossPatterns.length + traits.length;
+  if (totalPatterns === 0) return '';
+
+  let html = `<div class="block">`;
+  html += `<div class="section-title">${t('sections.winLossPatterns') || 'Win & Loss Patterns'}</div>`;
+  html += `<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Data-driven analysis of what wins and loses games. Confidence: <span class="conf-${confidence.toLowerCase()}">${confidence}</span> (${stats.analyzed || 0} games)</p>`;
+
+  html += '<div class="wlp-grid">';
+
+  // Win patterns column
+  html += '<div class="wlp-col wlp-win">';
+  html += '<div class="wlp-col-title win">How you win</div>';
+  if (winPatterns.length > 0) {
+    for (const p of winPatterns) {
+      html += `<div class="wlp-card win">
+        <span class="wlp-icon">${p.icon}</span>
+        <span class="wlp-text">${escapeHtml(p.text)}</span>
+        ${p.metric ? `<span class="wlp-metric">${escapeHtml(p.metric)}</span>` : ''}
+      </div>`;
+    }
+  } else {
+    html += '<div class="wlp-empty">Not enough data to identify clear win patterns yet.</div>';
+  }
+  html += '</div>';
+
+  // Loss patterns column
+  html += '<div class="wlp-col wlp-loss">';
+  html += '<div class="wlp-col-title loss">How you lose</div>';
+  if (lossPatterns.length > 0) {
+    for (const p of lossPatterns) {
+      html += `<div class="wlp-card loss">
+        <span class="wlp-icon">${p.icon}</span>
+        <span class="wlp-text">${escapeHtml(p.text)}</span>
+        ${p.metric ? `<span class="wlp-metric">${escapeHtml(p.metric)}</span>` : ''}
+      </div>`;
+    }
+  } else {
+    html += '<div class="wlp-empty">Not enough data to identify clear loss patterns yet.</div>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  // Distinctive traits row
+  if (traits.length > 0) {
+    html += '<div class="wlp-traits">';
+    html += '<div class="wlp-traits-title">Distinctive Traits</div>';
+    html += '<div class="wlp-traits-grid">';
+    for (const t of traits) {
+      html += `<div class="wlp-trait ${t.type}">
+        <span class="wlp-icon">${t.icon}</span>
+        <span class="wlp-text">${escapeHtml(t.text)}</span>
+        ${t.metric ? `<span class="wlp-metric">${escapeHtml(t.metric)}</span>` : ''}
+        ${t.share ? `<span class="wlp-metric">${escapeHtml(t.share)}</span>` : ''}
+      </div>`;
+    }
+    html += '</div></div>';
+  }
 
   html += `</div>`;
   return html;

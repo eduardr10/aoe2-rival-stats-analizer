@@ -2959,6 +2959,142 @@ body::before {
 }
 
 /* ==========================================================================
+   WIN & LOSS PATTERNS
+   ========================================================================== */
+
+.wlp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.wlp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wlp-col-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.wlp-col-title.win {
+  background: rgba(34, 197, 94, 0.08);
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.15);
+}
+
+.wlp-col-title.loss {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.wlp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.wlp-card.win {
+  border-left: 3px solid var(--accent-green);
+}
+
+.wlp-card.loss {
+  border-left: 3px solid var(--accent-red);
+}
+
+.wlp-icon {
+  font-size: 16px;
+}
+
+.wlp-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.wlp-metric {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.wlp-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 16px 10px;
+  text-align: center;
+}
+
+/* Traits section */
+.wlp-traits {
+  margin-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 14px;
+}
+
+.wlp-traits-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--accent-yellow);
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.12);
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.wlp-traits-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.wlp-trait {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.wlp-trait.strong {
+  border-left: 3px solid var(--accent-green);
+}
+
+.wlp-trait.weak {
+  border-left: 3px solid var(--accent-red);
+}
+
+.wlp-trait.neutral,
+.wlp-trait.trait {
+  border-left: 3px solid var(--accent-blue);
+}
+
+.conf-high { color: var(--accent-green); font-weight: 700; }
+.conf-medium { color: var(--accent-yellow); font-weight: 700; }
+.conf-low { color: var(--accent-red); font-weight: 700; }
+
+/* ==========================================================================
    UTILITY CLASSES
    ========================================================================== */
 
