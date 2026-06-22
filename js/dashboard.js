@@ -1128,13 +1128,12 @@ function renderTimelineCard(title, subtitle, series, maxMin, options = {}) {
 }
 
 function renderSvgLineChart(series, maxMin, options = {}) {
-  const width = 500;
-  const height = 160;
-  const padding = { top: 10, right: 10, bottom: 30, left: 45 };
+  const width = 520;
+  const height = 180;
+  const padding = { top: 12, right: 14, bottom: 32, left: 48 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  // Flatten all values to find global min/max
   let minY = Infinity;
   let maxY = -Infinity;
   for (const s of series) {
@@ -1154,20 +1153,25 @@ function renderSvgLineChart(series, maxMin, options = {}) {
   function xFor(i) { return padding.left + i * xStep; }
   function yFor(v) { return padding.top + chartH - ((v - minY) / yRange) * chartH; }
 
-  // Grid lines (5 horizontal)
-  let gridLines = '';
+  // Horizontal grid lines (5) + axis labels
+  let hGrid = '';
   for (let i = 0; i <= 5; i++) {
     const y = padding.top + (chartH * i) / 5;
     const val = maxY - (yRange * i) / 5;
-    gridLines += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="timeline-grid-line"/>`;
-    gridLines += `<text x="${padding.left - 8}" y="${y + 3}" class="timeline-axis-text" text-anchor="end">${formatAxisNumber(val)}</text>`;
+    hGrid += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="timeline-grid-line"/>`;
+    hGrid += `<text x="${padding.left - 8}" y="${y + 3}" class="timeline-axis-text" text-anchor="end">${formatAxisNumber(val)}</text>`;
   }
 
-  // X axis labels every 10 minutes
+  // Vertical grid lines every 5 minutes + minute labels
+  let vGrid = '';
   let xLabels = '';
-  for (let i = 0; i <= maxMin; i += 10) {
+  // X-axis baseline
+  vGrid += `<line x1="${padding.left}" y1="${padding.top + chartH}" x2="${width - padding.right}" y2="${padding.top + chartH}" class="timeline-axis-line"/>`;
+  for (let i = 0; i <= maxMin; i += 5) {
     const x = xFor(i);
-    xLabels += `<text x="${x}" y="${height - 8}" class="timeline-axis-text" text-anchor="middle">${i}</text>`;
+    vGrid += `<line x1="${x}" y1="${padding.top}" x2="${x}" y2="${padding.top + chartH}" class="timeline-grid-line"/>`;
+    vGrid += `<line x1="${x}" y1="${padding.top + chartH}" x2="${x}" y2="${padding.top + chartH + 5}" class="timeline-axis-line"/>`;
+    xLabels += `<text x="${x}" y="${height - 6}" class="timeline-axis-text" text-anchor="middle" style="font-weight:700;">${i}m</text>`;
   }
 
   // Paths and points
@@ -1200,8 +1204,9 @@ function renderSvgLineChart(series, maxMin, options = {}) {
   }
 
   return `<div class="timeline-chart-wrap">
-    <svg viewBox="0 0 ${width} ${height}" class="timeline-svg" preserveAspectRatio="none">
-      ${gridLines}
+    <svg viewBox="0 0 ${width} ${height}" class="timeline-svg" preserveAspectRatio="xMidYMid meet">
+      ${hGrid}
+      ${vGrid}
       ${paths}
       ${points}
       ${xLabels}

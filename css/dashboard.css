@@ -2335,6 +2335,11 @@ body::before {
   stroke-width: 1;
 }
 
+.timeline-axis-line {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
 .timeline-axis-text {
   font-size: 9px;
   fill: var(--text-muted);
