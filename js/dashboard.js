@@ -1021,25 +1021,41 @@ function renderFindingsSupporting(patterns, extraWeaknesses, extraStrengths) {
 
 function renderAgeStability(stats) {
   const ages = ['feudal', 'castle', 'imperial'];
+  const baselines = stats.baselines || {};
+  const blKeys = { feudal: 't_feudal', castle: 't_castle', imperial: null };
   const items = [];
   for (const age of ages) {
     const data = stats.age_slow_impact?.[age];
     const avg = stats['avg_' + age + '_hms'] || '—';
-    const gap = data ? Math.round(data.std) : 0;
+    const bl = blKeys[age] ? baselines[blKeys[age]] : null;
+
     if (!data || data.slowCount < 2) {
       items.push(`<div class="age-stability-item">
         <div class="age-stability-label">${t(age)}</div>
         <div class="age-stability-value">${avg}</div>
         <div class="age-stability-gap">—</div>
       </div>`);
-    } else {
-      const gapClass = gap > 45 ? 'text-red' : gap > 25 ? 'text-yellow' : 'text-green';
-      items.push(`<div class="age-stability-item">
-        <div class="age-stability-label">${t(age)}</div>
-        <div class="age-stability-value">${avg}</div>
-        <div class="age-stability-gap ${gapClass}">±${gap}s · ${data.slowWr}% WR slow</div>
-      </div>`);
+      continue;
     }
+
+    // Use IQR from baselines when available (more robust than stddev for skewed data)
+    const iqr = bl ? Math.round(bl.iqr) : Math.round(data.std);
+    const gapClass = iqr > 45 ? 'text-red' : iqr > 25 ? 'text-yellow' : 'text-green';
+
+    // Build percentile context line from baselines
+    let pctLine = '';
+    if (bl) {
+      const p25 = bl.p25 != null ? formatHms(bl.p25) : '';
+      const p75 = bl.p75 != null ? formatHms(bl.p75) : '';
+      if (p25 && p75) pctLine = `p25 ${p25} · p75 ${p75}`;
+    }
+
+    items.push(`<div class="age-stability-item">
+      <div class="age-stability-label">${t(age)}</div>
+      <div class="age-stability-value">${avg}</div>
+      <div class="age-stability-gap ${gapClass}">IQR ±${iqr}s · ${data.slowWr}% WR slow</div>
+      ${pctLine ? `<div class="age-stability-pct">${pctLine}</div>` : ''}
+    </div>`);
   }
 
   return `<div class="age-stability">
@@ -1069,12 +1085,14 @@ function renderPerformanceTimelineSection(stats) {
       color: 'var(--accent-green)',
       values: stats.apm_curve_wins || [],
       dashed: false,
+      role: 'wins',
     });
     apmSeries.push({
       label: t('timeline.losses') || 'Losses',
       color: 'var(--accent-red)',
       values: stats.apm_curve_losses || [],
       dashed: false,
+      role: 'losses',
     });
     if ((stats.opp_apm_curve || []).some(v => v != null)) {
       apmSeries.push({
@@ -1088,8 +1106,8 @@ function renderPerformanceTimelineSection(stats) {
 
   const resourcesSeries = [];
   if (hasResources) {
-    resourcesSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.resources_curve_wins || [] });
-    resourcesSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.resources_curve_losses || [] });
+    resourcesSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.resources_curve_wins || [], role: 'wins' });
+    resourcesSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.resources_curve_losses || [], role: 'losses' });
     if ((stats.opp_resources_curve || []).some(v => v != null)) {
       resourcesSeries.push({ label: t('timeline.rivals') || 'Rivals', color: 'var(--accent-blue)', values: stats.opp_resources_curve || [], dashed: true });
     }
@@ -1097,8 +1115,8 @@ function renderPerformanceTimelineSection(stats) {
 
   const objectsSeries = [];
   if (hasObjects) {
-    objectsSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.objects_curve_wins || [] });
-    objectsSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.objects_curve_losses || [] });
+    objectsSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.objects_curve_wins || [], role: 'wins' });
+    objectsSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.objects_curve_losses || [], role: 'losses' });
     if ((stats.opp_objects_curve || []).some(v => v != null)) {
       objectsSeries.push({ label: t('timeline.rivals') || 'Rivals', color: 'var(--accent-blue)', values: stats.opp_objects_curve || [], dashed: true });
     }
@@ -1128,15 +1146,33 @@ function renderTimelineCard(title, subtitle, series, maxMin, options = {}) {
 }
 
 function renderSvgLineChart(series, maxMin, options = {}) {
+  const gradId = 'gapGrad_' + (renderSvgLineChart._uid = (renderSvgLineChart._uid || 0) + 1);
   const width = 520;
   const height = 180;
   const padding = { top: 12, right: 14, bottom: 32, left: 48 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
+  // ---- Moving average smoothing (3-min window) ----
+  function smooth(values) {
+    const result = [];
+    for (let i = 0; i < values.length; i++) {
+      let sum = 0;
+      let count = 0;
+      for (let j = Math.max(0, i - 1); j <= Math.min(values.length - 1, i + 1); j++) {
+        if (values[j] != null) { sum += values[j]; count++; }
+      }
+      result.push(count > 0 ? sum / count : null);
+    }
+    return result;
+  }
+
+  const smoothed = series.map(s => ({ ...s, values: smooth(s.values) }));
+
+  // Flatten all values to find global min/max
   let minY = Infinity;
   let maxY = -Infinity;
-  for (const s of series) {
+  for (const s of smoothed) {
     for (const v of s.values) {
       if (v != null) {
         minY = Math.min(minY, v);
@@ -1153,7 +1189,7 @@ function renderSvgLineChart(series, maxMin, options = {}) {
   function xFor(i) { return padding.left + i * xStep; }
   function yFor(v) { return padding.top + chartH - ((v - minY) / yRange) * chartH; }
 
-  // Horizontal grid lines (5) + axis labels
+  // ---- Horizontal grid lines + axis labels ----
   let hGrid = '';
   for (let i = 0; i <= 5; i++) {
     const y = padding.top + (chartH * i) / 5;
@@ -1162,10 +1198,9 @@ function renderSvgLineChart(series, maxMin, options = {}) {
     hGrid += `<text x="${padding.left - 8}" y="${y + 3}" class="timeline-axis-text" text-anchor="end">${formatAxisNumber(val)}</text>`;
   }
 
-  // Vertical grid lines every 5 minutes + minute labels
+  // ---- Vertical grid lines every 5 min + labels ----
   let vGrid = '';
   let xLabels = '';
-  // X-axis baseline
   vGrid += `<line x1="${padding.left}" y1="${padding.top + chartH}" x2="${width - padding.right}" y2="${padding.top + chartH}" class="timeline-axis-line"/>`;
   for (let i = 0; i <= maxMin; i += 5) {
     const x = xFor(i);
@@ -1174,12 +1209,44 @@ function renderSvgLineChart(series, maxMin, options = {}) {
     xLabels += `<text x="${x}" y="${height - 6}" class="timeline-axis-text" text-anchor="middle" style="font-weight:700;">${i}m</text>`;
   }
 
-  // Paths and points
+  // ---- Win/Loss gap fill area ----
+  let gapFill = '';
+  const winSeries = smoothed.find(s => s.role === 'wins');
+  const lossSeries = smoothed.find(s => s.role === 'losses');
+  if (winSeries && lossSeries && winSeries.values.length > 0 && lossSeries.values.length > 0) {
+    let topPath = '';   // whichever is higher (wins or losses)
+    let botPath = '';
+    let first = true;
+    for (let i = 0; i <= maxMin; i++) {
+      const wv = winSeries.values[i];
+      const lv = lossSeries.values[i];
+      if (wv == null || lv == null) continue;
+      const wy = yFor(wv);
+      const ly = yFor(lv);
+      const topY = Math.min(wy, ly);
+      const botY = Math.max(wy, ly);
+      if (first) {
+        topPath += `M ${xFor(i)} ${topY}`;
+        botPath = `L ${xFor(i)} ${botY} ` + botPath; // reverse order later
+        first = false;
+      } else {
+        topPath += ` L ${xFor(i)} ${topY}`;
+        botPath = `L ${xFor(i)} ${botY} ` + botPath;
+      }
+    }
+    if (!first) {
+      botPath = botPath.trim();
+      gapFill = `<path d="${topPath} ${botPath} Z" fill="url(#${gradId})" class="timeline-gap-fill" opacity="0.38"/>`;
+    }
+  }
+
+  // ---- Paths and points ----
   let paths = '';
   let points = '';
   for (const s of series) {
     let pathD = '';
     let first = true;
+    // Points use original (unsmoothed) values for accuracy
     for (let i = 0; i < s.values.length; i++) {
       const v = s.values[i];
       if (v == null) continue;
@@ -1187,14 +1254,26 @@ function renderSvgLineChart(series, maxMin, options = {}) {
       const y = yFor(v);
       if (first) { pathD += `M ${x} ${y}`; first = false; }
       else { pathD += ` L ${x} ${y}`; }
-      points += `<circle cx="${x}" cy="${y}" r="2" fill="${s.color}" class="timeline-point"/>`;
+      points += `<circle cx="${x}" cy="${y}" r="1.5" fill="${s.color}" class="timeline-point"/>`;
     }
-    if (pathD) {
-      paths += `<path d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2" ${s.dashed ? 'stroke-dasharray="4,4"' : ''} class="timeline-path"/>`;
+    // Path uses smoothed values
+    const smoothedVals = smoothed.find(ss => ss === s)?.values || s.values;
+    let smoothD = '';
+    let sf = true;
+    for (let i = 0; i < smoothedVals.length; i++) {
+      const v = smoothedVals[i];
+      if (v == null) continue;
+      const x = xFor(i);
+      const y = yFor(v);
+      if (sf) { smoothD += `M ${x} ${y}`; sf = false; }
+      else { smoothD += ` L ${x} ${y}`; }
+    }
+    if (smoothD) {
+      paths += `<path d="${smoothD}" fill="none" stroke="${s.color}" stroke-width="2.5" ${s.dashed ? 'stroke-dasharray="5,4"' : ''} class="timeline-path"/>`;
     }
   }
 
-  // Legend
+  // ---- Legend ----
   let legend = '';
   for (const s of series) {
     legend += `<div class="timeline-legend-item">
@@ -1205,8 +1284,15 @@ function renderSvgLineChart(series, maxMin, options = {}) {
 
   return `<div class="timeline-chart-wrap">
     <svg viewBox="0 0 ${width} ${height}" class="timeline-svg" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent-green)" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="var(--accent-red)" stop-opacity="0.15"/>
+        </linearGradient>
+      </defs>
       ${hGrid}
       ${vGrid}
+      ${gapFill}
       ${paths}
       ${points}
       ${xLabels}

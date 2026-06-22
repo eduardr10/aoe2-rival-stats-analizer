@@ -2267,6 +2267,13 @@ body::before {
   margin-top: 2px;
 }
 
+.age-stability-pct {
+  font-size: 10px;
+  color: var(--text-disabled);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ==========================================================================
    PERFORMANCE TIMELINE
    ========================================================================== */
@@ -2355,6 +2362,10 @@ body::before {
 .timeline-point {
   opacity: 0;
   transition: opacity 0.2s ease;
+}
+
+.timeline-gap-fill {
+  pointer-events: none;
 }
 
 .timeline-svg:hover .timeline-point {
