@@ -107,7 +107,6 @@ export function restartOverlay() {
 // ============================================================================
 
 export function buildFaceOffOverlay(leftStats, rightStats) {
-  // Remove old faceoff overlay if exists
   const old = document.getElementById('faceoff-overlay');
   if (old) old.remove();
 
@@ -117,195 +116,382 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
 
   if (container._hideTimeout) clearTimeout(container._hideTimeout);
 
-  const leftName = leftStats?.player_name || leftStats?.rival_name || 'Player A';
-  const rightName = rightStats?.player_name || rightStats?.rival_name || 'Player B';
-  const leftElo = leftStats?.rating || leftStats?.rival_rating || '—';
-  const rightElo = rightStats?.rating || rightStats?.rival_rating || '—';
-  const leftWr = leftStats?.win_percent != null ? leftStats.win_percent : (leftStats?.win_rate || 0);
-  const rightWr = rightStats?.win_percent != null ? rightStats.win_percent : (rightStats?.win_rate || 0);
-  const leftGames = leftStats?.analyzed || leftStats?.total || 0;
-  const rightGames = rightStats?.analyzed || rightStats?.total || 0;
+  const left = leftStats || {};
+  const right = rightStats || {};
 
-  function pickInsights(s) {
-    const candidates = [];
+  const leftName = left.player_name || left.rival_name || 'Player A';
+  const rightName = right.player_name || right.rival_name || 'Player B';
+  const leftElo = left.rating || left.rival_rating || '—';
+  const rightElo = right.rating || right.rival_rating || '—';
+  const leftWr = left.win_percent != null ? left.win_percent : (left.win_rate || 0);
+  const rightWr = right.win_percent != null ? right.win_percent : (right.win_rate || 0);
+  const leftGames = left.analyzed || left.total || 0;
+  const rightGames = right.analyzed || right.total || 0;
+  const leftConf = left.confidence || 'Low';
+  const rightConf = right.confidence || 'Low';
 
-    // Playstyle as first insight
-    const ps = s.playstyle || {};
-    if (ps.label && ps.label !== 'Unknown') {
-      candidates.push(`Playstyle: ${ps.label} (${ps.score || 0})`);
-    }
+  // ==========================================================================
+  // DATA EXTRACTION HELPERS
+  // ==========================================================================
 
-    // Expected strategy
+  function getOpening(s) {
+    const pp = s.player_profile || {};
+    const primary = pp.primary_opening || s.current_opening?.chosen_opening || '';
+    if (!primary) return null;
+    const freq = pp.per_opening_frequency || {};
+    const pct = freq[primary] || 0;
+    return { name: primary, pct, label: formatOpeningName(primary) };
+  }
+
+  function getStratSeq(s) {
     const pred = s.prediction || {};
-    if (pred.expected_strategy && !pred.expected_strategy.includes('Analyzing')) {
-      candidates.push(`Expected: ${pred.expected_strategy}${pred.strategy_probability ? ` (${pred.strategy_probability}%)` : ''}`);
+    if (pred.expected_strategy && !pred.expected_strategy.includes('Analyzing') && !pred.expected_strategy.includes('Mixed')) {
+      return pred.expected_strategy;
     }
-
-    // Deep insights (most valuable — data-driven timing diffs)
-    if (Array.isArray(s.deep_insights)) candidates.push(...s.deep_insights);
-
-    // Threats (data-driven)
-    if (Array.isArray(s.threats)) candidates.push(...s.threats.filter(t => !t.includes('No dominant')));
-
-    // Weaknesses (skip generic fallback)
-    if (Array.isArray(s.weaknesses)) candidates.push(...s.weaknesses.filter(w => !w.includes('No extreme') && !w.includes('No patterns')));
-
-    // Timing interpretations (skip generic)
-    if (Array.isArray(s.timing_interpretation)) {
-      candidates.push(...s.timing_interpretation
-        .map(i => i.conclusion || i)
-        .filter(c => !c.includes('No significant') && !c.includes('within normal')));
+    const sa = s.strategic_analysis || {};
+    const tf = sa.transition_forecast;
+    if (Array.isArray(tf) && tf.length > 0) {
+      const top = tf.slice(0, 2).map(t => t.name || t).join(' → ');
+      if (top) return top;
     }
+    return null;
+  }
 
-    // Recommendations (data-driven, skip generic)
+  function getUnitBars(s) {
+    const cats = s.unit_categories || {};
+    const total = Object.values(cats).reduce((sum, c) => sum + (c.count || 0), 0);
+    if (!total) return null;
+    const order = ['cavalry', 'archers', 'infantry', 'siege'];
+    const colors = { cavalry: '#f59e0b', archers: '#eab308', infantry: '#ef4444', siege: '#a855f7' };
+    const names = { cavalry: 'Cav', archers: 'Arch', infantry: 'Inf', siege: 'Siege' };
+    const bars = [];
+    for (const cat of order) {
+      const data = cats[cat];
+      if (!data || !data.count) continue;
+      const pct = Math.round((data.count / total) * 100);
+      if (pct < 5) continue;
+      bars.push({ name: names[cat] || cat, pct, color: colors[cat] || '#888' });
+    }
+    if (bars.length === 0) return null;
+    return bars;
+  }
+
+  function getUnitEffectiveness(s, maxStrong, maxWeak) {
+    const ue = s.unit_effectiveness || {};
+    const entries = Object.entries(ue).filter(([, d]) => d.label && d.label !== 'neutral' && (d.wins + d.losses) >= 3);
+    if (entries.length === 0) return null;
+    const strong = entries.filter(([, d]) => d.label === 'strong').sort((a, b) => b[1].wr - a[1].wr).slice(0, maxStrong);
+    const weak = entries.filter(([, d]) => d.label === 'weak' && d.share >= 5).sort((a, b) => a[1].wr - b[1].wr).slice(0, maxWeak);
+    return { strong, weak };
+  }
+
+  function getEarlyPressureSignal(s) {
+    const ep = s.early_pressure || {};
+    const w10 = ep.before10?.wins;
+    const l10 = ep.before10?.losses;
+    if (w10 == null || l10 == null) return null;
+    const w = Number(w10);
+    const l = Number(l10);
+    if (isNaN(w) || isNaN(l)) return null;
+    if (w > l * 1.3) return `Early military pressure wins more games`;
+    if (l > w * 1.3) return `Boomear to Castle wins more games`;
+    return null;
+  }
+
+  function getMatchup(leftS, rightS) {
+    const lElo = leftS.rating || 0;
+    const rElo = rightS.rating || 0;
+    const diff = lElo - rElo;
+    if (diff > 50) return { label: 'FAVORITO', diff: `+${Math.round(diff)} ELO`, cls: 'fav' };
+    if (diff < -50) return { label: 'UNDERDOG', diff: `${Math.round(diff)} ELO`, cls: 'dog' };
+    return { label: 'EVEN', diff: '', cls: 'even' };
+  }
+
+  function getCounterRecs(s) {
+    const pred = s.prediction || {};
+    const recs = pred.counter_recommendations || [];
+    if (!Array.isArray(recs)) return null;
+    return recs.filter(r => r && !r.includes('Insufficient') && !r.includes('no data')).slice(0, 3);
+  }
+
+  function getTimingRow(s) {
+    const feudal = s.avg_feudal_hms || '';
+    const castle = s.avg_castle_hms || '';
+    if (!feudal && !castle) return null;
+    const parts = [];
+    if (feudal) parts.push(`Fed ${feudal}`);
+    if (castle) parts.push(`Cas ${castle}`);
+    return parts.join(' · ');
+  }
+
+  function getTopInsights(s) {
+    const candidates = [];
+    if (Array.isArray(s.deep_insights)) {
+      candidates.push(...s.deep_insights.filter(i => i && i.length > 15));
+    }
+    if (Array.isArray(s.threats)) {
+      candidates.push(...s.threats.filter(t => t && !t.includes('No dominant') && t.length > 10));
+    }
+    if (Array.isArray(s.weaknesses)) {
+      candidates.push(...s.weaknesses.filter(w => w && !w.includes('No extreme') && !w.includes('No patterns') && w.length > 10));
+    }
     if (Array.isArray(s.recommendations)) {
-      candidates.push(...s.recommendations
-        .map(r => r.text || r)
-        .filter(r => !r.includes('Analyze') && !r.includes('no data')));
+      candidates.push(...s.recommendations.map(r => r.text || r).filter(r => r && !r.includes('Analyze') && !r.includes('no data') && r.length > 10));
     }
-
-    // Filter and deduplicate
     const seen = new Set();
     const unique = [];
     for (const item of candidates) {
       const text = String(item).trim();
-      if (!text || text.length < 8 || seen.has(text)) continue;
+      if (!text || seen.has(text)) continue;
       seen.add(text);
       unique.push(text);
-      if (unique.length >= 4) break;
+      if (unique.length >= 2) break;
     }
-
-    // Fallback if nothing useful
     if (unique.length === 0) {
       const topCiv = Object.entries(s.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
-      if (topCiv) unique.push(`Prefers ${topCiv[0]} (${topCiv[1]}%)`);
-      const topMap = Object.entries(s.map_played_percent || {}).sort((a, b) => b[1] - a[1])[0];
-      if (topMap) unique.push(`Best map: ${topMap[0]} — ${s.map_win_percent?.[topMap[0]] || 0}% WR`);
+      if (topCiv) unique.push(`Prefers ${topCiv[0]} (${topCiv[1]}% of games)`);
     }
-
     return unique;
+  }
+
+  function unitIcon(unitName) {
+    const n = (unitName || '').toLowerCase();
+    if (n.includes('knight') || n.includes('caval') || n.includes('scout') || n.includes('camel') || n.includes('cavalry')) return '\u{1F434}';
+    if (n.includes('archer') || n.includes('crossbow') || n.includes('arbalest') || n.includes('skirm') || n.includes('cav_archer')) return '\u{1F3F9}';
+    if (n.includes('militia') || n.includes('spear') || n.includes('pikeman') || n.includes('halberdier') || n.includes('champion') || n.includes('eagle')) return '\u2694\uFE0F';
+    if (n.includes('siege') || n.includes('mangonel') || n.includes('scorpion') || n.includes('ram') || n.includes('trebuchet')) return '\u{1F4A3}';
+    return '\u{1F396}\uFE0F';
   }
 
   function insightIcon(text) {
     const t = text.toLowerCase();
-    if (t.includes('strength') || t.includes('fuerte') || t.includes('fortaleza') || t.includes('win')) return '⚡';
-    if (t.includes('weakness') || t.includes('debil') || t.includes('vulnerable')) return '⚠️';
-    if (t.includes('aggressiv') || t.includes('agresiv') || t.includes('rush')) return '🔥';
-    if (t.includes('boom') || t.includes('econom') || t.includes('econ')) return '🌾';
-    if (t.includes('defens') || t.includes('turtle')) return '🛡️';
-    if (t.includes('timing') || t.includes('tempo') || t.includes('fast')) return '⏱️';
-    if (t.includes('opening') || t.includes('apertur')) return '🎯';
-    if (t.includes('map') || t.includes('mapa')) return '🗺️';
-    if (t.includes('civ') || t.includes('civiliz')) return '🏛️';
-    if (t.includes('scout') || t.includes('explor')) return '🐴';
-    if (t.includes('archer') || t.includes('arquero')) return '🏹';
-    if (t.includes('castle') || t.includes('castillo')) return '🏰';
-    if (t.includes('drush') || t.includes('maa') || t.includes('infantry')) return '⚔️';
-    return '💡';
+    if (t.includes('strength') || t.includes('fuerte') || t.includes('win')) return '\u26A1';
+    if (t.includes('weakness') || t.includes('vulnerable') || t.includes('debil')) return '\u26A0\uFE0F';
+    if (t.includes('aggress') || t.includes('rush') || t.includes('presion')) return '\u{1F525}';
+    if (t.includes('boom') || t.includes('econom')) return '\u{1F33E}';
+    if (t.includes('timing') || t.includes('fast') || t.includes('rapid')) return '\u23F1\uFE0F';
+    if (t.includes('opening') || t.includes('apertur')) return '\u{1F3AF}';
+    if (t.includes('map') || t.includes('mapa')) return '\u{1F5FA}\uFE0F';
+    if (t.includes('civ') || t.includes('civiliz')) return '\u{1F3DB}\uFE0F';
+    if (t.includes('scout') || t.includes('explor')) return '\u{1F434}';
+    if (t.includes('archer') || t.includes('arquero')) return '\u{1F3F9}';
+    if (t.includes('castle')) return '\u{1F3F0}';
+    if (t.includes('knight') || t.includes('caval')) return '\u2694\uFE0F';
+    return '\u{1F4A1}';
   }
 
-  function getMetrics(s) {
-    const pp = s.player_profile || {};
-    const primary = pp.primary_opening || s.current_opening?.chosen_opening || '';
-    const rawPct = pp.per_opening_frequency ? pp.per_opening_frequency[primary] : null;
-    const openingPct = (rawPct != null && rawPct > 0) ? Math.round(rawPct * 100) / 100 : null;
-    const topCivEntry = Object.entries(s.civ_played_percent || {}).sort((a, b) => b[1] - a[1])[0] || [];
-    const topCiv = topCivEntry[0] || '';
-    const topCivPct = topCivEntry[1] || null;
-    const feudal = s.avg_feudal_hms || '';
-    const castle = s.avg_castle_hms || '';
-    const eapm = (s.avg_eapm && s.avg_eapm > 0) ? s.avg_eapm : null;
-    const tc2 = s.tc_timing?.tc2_avg_hms || null;
-    const stability = (pp.opening_stability != null && pp.opening_stability > 0) ? Math.round(pp.opening_stability * 100) : null;
-    const streak = s.current_streak || null;
-    return { primary, openingPct, topCiv, topCivPct, feudal, castle, eapm, tc2, stability, streak };
-  }
+  // ==========================================================================
+  // BUILD PANELS
+  // ==========================================================================
 
-  function pickKeyUnit(s) {
-    const cats = s.unit_categories || {};
-    const total = Object.values(cats).reduce((sum, c) => sum + (c.count || 0), 0);
-    if (!total) return null;
-    const best = Object.entries(cats).sort((a, b) => (b[1].count || 0) - (a[1].count || 0))[0];
-    if (!best) return null;
-    const pct = Math.round((best[1].count / total) * 100);
-    return `${best[0]} (${pct}%)`;
-  }
+  function buildCol(name, elo, wr, games, conf, side, s) {
+    const opening = getOpening(s);
+    const stratSeq = getStratSeq(s);
+    const unitBars = getUnitBars(s);
+    const unitEff = getUnitEffectiveness(s, 2, 1);
+    const timing = getTimingRow(s);
+    const insights = getTopInsights(s);
 
-  const leftInsights = pickInsights(leftStats || {});
-  const rightInsights = pickInsights(rightStats || {});
-  const lm = getMetrics(leftStats || {});
-  const rm = getMetrics(rightStats || {});
-  const leftUnit = pickKeyUnit(leftStats || {});
-  const rightUnit = pickKeyUnit(rightStats || {});
+    const wrClass = wr >= 55 ? 'green' : wr <= 40 ? 'red' : 'neutral';
+    const wrColor = wr >= 55 ? 'var(--accent-blue)' : wr <= 40 ? 'var(--accent-red)' : 'var(--text-primary)';
 
-  function buildCol(name, elo, wr, games, side, m, insights, unit) {
-    const wrClass = wr >= 55 ? 'green' : wr <= 40 ? 'red' : 'blue';
-    const insightCards = insights.map(i => `
-      <div class="faceoff-insight-card">
-        <span class="faceoff-insight-icon">${insightIcon(i)}</span>
-        <span class="faceoff-insight-text">${escapeHtml(i)}</span>
-      </div>`).join('');
-
-    const openingLabel = m.primary ? `${formatOpeningName(m.primary)}${m.openingPct != null ? ` (${m.openingPct}%)` : ''}` : '';
-    const civLabel = m.topCiv ? `${escapeHtml(m.topCiv)}${m.topCivPct != null ? ` ${m.topCivPct}%` : ''}` : '';
-    const streakLabel = m.streak ? (m.streak.type === 'win' ? `+${m.streak.count} streak` : m.streak.type === 'loss' ? `-${m.streak.count} streak` : '') : '';
-
-    return `<div class="faceoff-col ${side}">
+    // Hero row
+    let html = `<div class="faceoff-col ${side}">
       <div class="faceoff-header">
         <div class="faceoff-name">${escapeHtml(name)}</div>
         <div class="faceoff-live"><span class="faceoff-live-dot"></span>LIVE</div>
       </div>
-      <div class="faceoff-hero">
-        <div class="faceoff-hero-item">
-          <div class="faceoff-hero-value ${wrClass}">${wr}%</div>
-          <div class="faceoff-hero-label">Win Rate</div>
-        </div>
-        <div class="faceoff-hero-divider"></div>
-        <div class="faceoff-hero-item">
-          <div class="faceoff-hero-value blue">${elo}</div>
-          <div class="faceoff-hero-label">Rating</div>
-        </div>
-        <div class="faceoff-hero-divider"></div>
-        <div class="faceoff-hero-item">
-          <div class="faceoff-hero-value">${games}</div>
-          <div class="faceoff-hero-label">Games</div>
-        </div>
-      </div>
-      <div class="faceoff-metrics">
-        ${openingLabel ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Opening</span><span class="faceoff-metric-value">${openingLabel}</span></div>` : ''}
-        ${civLabel ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Top Civ</span><span class="faceoff-metric-value">${civLabel}</span></div>` : ''}
-        ${m.feudal ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Feudal</span><span class="faceoff-metric-value">${escapeHtml(m.feudal)}</span></div>` : ''}
-        ${m.castle ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Castle</span><span class="faceoff-metric-value">${escapeHtml(m.castle)}</span></div>` : ''}
-        ${m.eapm ? `<div class="faceoff-metric"><span class="faceoff-metric-label">EAPM</span><span class="faceoff-metric-value">${m.eapm}</span></div>` : ''}
-        ${m.tc2 ? `<div class="faceoff-metric"><span class="faceoff-metric-label">2nd TC</span><span class="faceoff-metric-value">${escapeHtml(m.tc2)}</span></div>` : ''}
-        ${unit ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Key Unit</span><span class="faceoff-metric-value">${escapeHtml(unit)}</span></div>` : ''}
-        ${m.stability ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Openings</span><span class="faceoff-metric-value">${m.stability}% stable</span></div>` : ''}
-        ${streakLabel ? `<div class="faceoff-metric"><span class="faceoff-metric-label">Streak</span><span class="faceoff-metric-value">${streakLabel}</span></div>` : ''}
-      </div>
-      ${insightCards ? `<div class="faceoff-insights">${insightCards}</div>` : ''}
-    </div>`;
+      <div class="faceoff-hero-v2">
+        <div class="fh-el"><div class="fh-val" style="color:${wrColor}">${wr}%</div><div class="fh-lbl">WR</div></div>
+        <div class="fh-div"></div>
+        <div class="fh-el"><div class="fh-val">${elo}</div><div class="fh-lbl">ELO</div></div>
+        <div class="fh-div"></div>
+        <div class="fh-el"><div class="fh-val">${games}</div><div class="fh-lbl">Games</div></div>
+      </div>`;
+
+    // Opening badge (prominent)
+    if (opening) {
+      const icons = { drush: '\u2694\uFE0F', maa_rush: '\u{1F6E1}\uFE0F', scout_rush: '\u{1F434}', archer_rush: '\u{1F3F9}', fast_feudal_aggressive: '\u26A1', fast_castle: '\u{1F3F0}', tower_rush: '\u{1F3D7}\uFE0F', castle_focus: '\u{1F3F0}' };
+      const oicon = icons[opening.name] || '\u{1F3AF}';
+      html += `<div class="faceoff-opening">
+        <span class="fop-icon">${oicon}</span>
+        <span class="fop-text">${opening.label}</span>
+        <span class="fop-pct">${opening.pct}%</span>
+      </div>`;
+    }
+
+    // Strategy sequence
+    if (stratSeq) {
+      html += `<div class="faceoff-strat-seq">${escapeHtml(stratSeq)}</div>`;
+    }
+
+    // Unit composition bars
+    if (unitBars) {
+      html += '<div class="faceoff-unit-bars">';
+      for (const b of unitBars) {
+        html += `<div class="fub-row"><span class="fub-label">${b.name}</span><div class="fub-track"><div class="fub-fill" style="width:${b.pct}%;background:${b.color}"></div></div><span class="fub-pct">${b.pct}%</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Unit effectiveness badges
+    if (unitEff) {
+      html += '<div class="faceoff-unit-eff">';
+      for (const [uname, udata] of unitEff.strong) {
+        html += `<div class="fue-badge strong"><span class="fue-icon">${unitIcon(uname)}</span><span class="fue-name">${formatUnitName(uname)}</span><span class="fue-stat">${udata.wr}% WR</span></div>`;
+      }
+      for (const [uname, udata] of unitEff.weak) {
+        html += `<div class="fue-badge weak"><span class="fue-icon">${unitIcon(uname)}</span><span class="fue-name">${formatUnitName(uname)}</span><span class="fue-stat">WR ${udata.wr}%</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Timings
+    if (timing) {
+      html += `<div class="faceoff-timings">${escapeHtml(timing)}</div>`;
+    }
+
+    // Insights
+    if (insights.length > 0) {
+      html += '<div class="faceoff-insights-v2">';
+      for (const ins of insights) {
+        html += `<div class="foi-card"><span class="foi-icon">${insightIcon(ins)}</span><span class="foi-text">${escapeHtml(ins)}</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
   }
 
-  const leftHtml = buildCol(leftName, leftElo, leftWr, leftGames, 'left', lm, leftInsights, leftUnit);
-  const rightHtml = buildCol(rightName, rightElo, rightWr, rightGames, 'right', rm, rightInsights, rightUnit);
+  function buildRightCol(name, elo, wr, games, conf, side, s) {
+    const opening = getOpening(s);
+    const stratSeq = getStratSeq(s);
+    const unitBars = getUnitBars(s);
+    const unitEff = getUnitEffectiveness(s, 1, 1);
+    const timing = getTimingRow(s);
+    const insights = getTopInsights(s);
+    const counterRecs = getCounterRecs(s);
+    const earlySignal = getEarlyPressureSignal(s);
+    const matchup = getMatchup(left, right);
+
+    const wrClass = wr >= 55 ? 'green' : wr <= 40 ? 'red' : 'neutral';
+    const wrColor = wr >= 55 ? 'var(--accent-blue)' : wr <= 40 ? 'var(--accent-red)' : 'var(--text-primary)';
+
+    let html = `<div class="faceoff-col ${side}">
+      <div class="faceoff-header">
+        <div class="faceoff-name">${escapeHtml(name)}</div>
+        <div class="faceoff-live"><span class="faceoff-live-dot"></span>LIVE</div>
+      </div>
+      <div class="faceoff-hero-v2">
+        <div class="fh-el"><div class="fh-val" style="color:${wrColor}">${wr}%</div><div class="fh-lbl">WR</div></div>
+        <div class="fh-div"></div>
+        <div class="fh-el"><div class="fh-val">${elo}</div><div class="fh-lbl">ELO</div></div>
+        <div class="fh-div"></div>
+        <div class="fh-el"><div class="fh-val">${games}</div><div class="fh-lbl">Games</div></div>
+      </div>`;
+
+    // Opening badge
+    if (opening) {
+      const icons = { drush: '\u2694\uFE0F', maa_rush: '\u{1F6E1}\uFE0F', scout_rush: '\u{1F434}', archer_rush: '\u{1F3F9}', fast_feudal_aggressive: '\u26A1', fast_castle: '\u{1F3F0}', tower_rush: '\u{1F3D7}\uFE0F', castle_focus: '\u{1F3F0}' };
+      const oicon = icons[opening.name] || '\u{1F3AF}';
+      html += `<div class="faceoff-opening">
+        <span class="fop-icon">${oicon}</span>
+        <span class="fop-text">${opening.label}</span>
+        <span class="fop-pct">${opening.pct}%</span>
+      </div>`;
+    }
+
+    // Strategy sequence
+    if (stratSeq) {
+      html += `<div class="faceoff-strat-seq">${escapeHtml(stratSeq)}</div>`;
+    }
+
+    // Matchup prediction
+    if (matchup && matchup.label !== 'EVEN') {
+      const mColor = matchup.cls === 'fav' ? 'var(--accent-blue)' : 'var(--accent-red)';
+      html += `<div class="faceoff-matchup" style="border-color:${mColor}">
+        <span class="fmu-label" style="color:${mColor}">${matchup.label}</span>
+        <span class="fmu-diff">${matchup.diff}</span>
+      </div>`;
+    }
+
+    // Counter recommendations
+    if (counterRecs && counterRecs.length > 0) {
+      html += '<div class="faceoff-counters">';
+      for (const rec of counterRecs) {
+        html += `<div class="fco-item">→ ${escapeHtml(rec)}</div>`;
+      }
+      html += '</div>';
+    }
+
+    // Early pressure signal
+    if (earlySignal) {
+      html += `<div class="faceoff-pressure">${escapeHtml(earlySignal)}</div>`;
+    }
+
+    // Unit composition bars
+    if (unitBars) {
+      html += '<div class="faceoff-unit-bars">';
+      for (const b of unitBars) {
+        html += `<div class="fub-row"><span class="fub-label">${b.name}</span><div class="fub-track"><div class="fub-fill" style="width:${b.pct}%;background:${b.color}"></div></div><span class="fub-pct">${b.pct}%</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Unit effectiveness badges
+    if (unitEff) {
+      html += '<div class="faceoff-unit-eff">';
+      for (const [uname, udata] of unitEff.strong) {
+        html += `<div class="fue-badge strong"><span class="fue-icon">${unitIcon(uname)}</span><span class="fue-name">${formatUnitName(uname)}</span><span class="fue-stat">${udata.wr}% WR</span></div>`;
+      }
+      for (const [uname, udata] of unitEff.weak) {
+        html += `<div class="fue-badge weak"><span class="fue-icon">${unitIcon(uname)}</span><span class="fue-name">${formatUnitName(uname)}</span><span class="fue-stat">WR ${udata.wr}%</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Timings
+    if (timing) {
+      html += `<div class="faceoff-timings">${escapeHtml(timing)}</div>`;
+    }
+
+    // Insights
+    if (insights.length > 0) {
+      html += '<div class="faceoff-insights-v2">';
+      for (const ins of insights) {
+        html += `<div class="foi-card"><span class="foi-icon">${insightIcon(ins)}</span><span class="foi-text">${escapeHtml(ins)}</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  // Build both panels
+  // Left = self (your gameplan with matchup + counters)
+  // Right = rival (enemy intel with unit comp + effectiveness)
+
+  // Check which has more data to decide what goes where
+  // selfStats (left) shows: opening + matchup + counters + early pressure
+  // rivalStats (right) shows: opening + unit comp + unit effectiveness + weaknesses
+
+  const leftHtml = buildRightCol(leftName, leftElo, leftWr, leftGames, leftConf, 'left', left);
+  const rightHtml = buildCol(rightName, rightElo, rightWr, rightGames, rightConf, 'right', right);
 
   container.innerHTML = `${leftHtml}${rightHtml}
     <button id="faceoff-reopen-btn" class="faceoff-reopen-btn">Mostrar</button>`;
 
   container.classList.add('active');
-  container.style.background = 'transparent'; // panels visible → transparent bg
+  container.style.background = 'transparent';
   container._lastFaceOff = { leftStats, rightStats };
 
   const button = container.querySelector('#faceoff-reopen-btn');
   const panels = Array.from(container.querySelectorAll('.faceoff-col'));
 
-  const showButton = () => {
-    if (button) button.classList.add('visible');
-  };
-
-  const hideButton = () => {
-    if (button) button.classList.remove('visible');
-  };
+  const showButton = () => { if (button) button.classList.add('visible'); };
+  const hideButton = () => { if (button) button.classList.remove('visible'); };
 
   const hidePanels = (animated = true) => {
     if (animated) {
@@ -314,13 +500,11 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
       });
       setTimeout(() => {
         panels.forEach(p => { p.style.opacity = '0'; });
-        hideButton();
         showButton();
         container.style.background = 'transparent';
       }, 380);
     } else {
       panels.forEach(p => { p.style.opacity = '0'; });
-      hideButton();
       showButton();
       container.style.background = 'transparent';
     }
@@ -334,18 +518,14 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
       void p.offsetHeight;
       p.style.animation = '';
     });
-    container.style.background = 'transparent'; // transparent when showing panels
+    container.style.background = 'transparent';
     hideButton();
     if (container._hideTimeout) clearTimeout(container._hideTimeout);
     container._hideTimeout = setTimeout(() => hidePanels(true), OVERLAY_AUTO_HIDE_MS);
   };
 
-  // Hide panels after 15s
-  container._hideTimeout = setTimeout(() => {
-    hidePanels(true);
-  }, OVERLAY_AUTO_HIDE_MS);
+  container._hideTimeout = setTimeout(() => hidePanels(true), OVERLAY_AUTO_HIDE_MS);
 
-  // Toggle button
   if (button) {
     button.addEventListener('click', () => {
       const hidden = panels.some(p => p.style.opacity === '0' || getComputedStyle(p).opacity === '0');
@@ -356,6 +536,11 @@ export function buildFaceOffOverlay(leftStats, rightStats) {
       }
     });
   }
+}
+
+function formatUnitName(name) {
+  if (!name) return '';
+  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
 // ============================================================================

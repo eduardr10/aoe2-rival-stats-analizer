@@ -1150,6 +1150,303 @@ margin-top: 4px;
   pointer-events: auto;
 }
 
+/* ==========================================================================
+   FACE-OFF v2: Compact Hero Row
+   ========================================================================== */
+.faceoff-hero-v2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 14px;
+}
+
+.fh-el {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+}
+
+.fh-val {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.fh-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.fh-div {
+  width: 1px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  margin: 0 8px;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Opening Badge (prominent)
+   ========================================================================== */
+.faceoff-opening {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  margin-bottom: 10px;
+}
+
+.fop-icon {
+  font-size: 20px;
+}
+
+.fop-text {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.fop-pct {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.12);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Strategy Sequence
+   ========================================================================== */
+.faceoff-strat-seq {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  letter-spacing: 0.2px;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Matchup Prediction
+   ========================================================================== */
+.faceoff-matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.fmu-label {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.fmu-diff {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Counter Recommendations
+   ========================================================================== */
+.faceoff-counters {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  border-radius: 12px;
+}
+
+.fco-item {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 3px 0;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Early Pressure Signal
+   ========================================================================== */
+.faceoff-pressure {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-yellow);
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.15);
+  border-radius: 10px;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Unit Composition Bars
+   ========================================================================== */
+.faceoff-unit-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.fub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fub-label {
+  width: 42px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.fub-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fub-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+
+.fub-pct {
+  width: 32px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Unit Effectiveness Badges
+   ========================================================================== */
+.faceoff-unit-eff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.fue-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fue-badge.strong {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.fue-badge.weak {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.fue-icon {
+  font-size: 13px;
+}
+
+.fue-name {
+  font-weight: 700;
+}
+
+.fue-stat {
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Timing Row
+   ========================================================================== */
+.faceoff-timings {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  letter-spacing: 0.3px;
+}
+
+/* ==========================================================================
+   FACE-OFF v2: Insights Cards
+   ========================================================================== */
+.faceoff-insights-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.foi-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.foi-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.foi-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   FACE-OFF: Live indicator (reused in main overlay)
+   ========================================================================== */
 .live-indicator {
   display: flex;
   align-items: center;

@@ -133,6 +133,18 @@ The app caches all API responses in IndexedDB to avoid redundant requests:
 
 `api.js` checks cache before making any fetch. If cached data exists and is not expired, it returns the cached version. The cache is cleared via the "Limpiar cache" button.
 
+## Data presentation philosophy (CRITICAL)
+
+Every metric, label, or conclusion shown to the user MUST be:
+
+1. **Data-driven** — Anchored to real numbers from match analysis, never subjective labels alone. "Knights WR 72% (strong)" is valid. "Defensive style" without data backing is NOT.
+2. **Self-explanatory** — A new viewer must understand what the number means in under 3 seconds. No acronyms without context, no internal scores (like "aggression: 19/100") without explanation.
+3. **Actionable or contextual** — Every data point either helps the player make a decision (counter unit, opening choice) or sets context (rating comparison, confidence level). Purely descriptive labels that lead nowhere are noise.
+4. **Credible** — Show sample size and confidence where the data is thin. Hide metrics when the data is insufficient rather than show misleading numbers.
+5. **Concrete over abstract** — Prefer "Wins 62% of games when producing 3+ scouts early" over "Aggressive playstyle". Prefer "Archers 60% of army composition" over "Ranged focus".
+
+This applies to: face-off overlay, main overlay, insights cards, and all UI text.
+
 ## Overlay behavior
 - The overlay auto-hides after 12 seconds (fade-out). The "Toggle" button can show/hide it manually at any time. This is intentional for streaming — it appears, shows data, then disappears so it doesn't block the game view.
 - **WebSocket match dedup**: Once a game has been analyzed and shown on the overlay, it is marked in `localStorage` (`aoe2_shown_match_{matchId}`) so the same game is never auto-shown again (even after page refresh). The in-memory `analyzedMatchIds` Set in `websocket.js` provides session-level dedup. The localStorage key is set in `app.js` only after the overlay renders successfully.

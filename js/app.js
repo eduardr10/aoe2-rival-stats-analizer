@@ -336,6 +336,7 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   stats.rival_name = matches[0]?.player_name || 'Rival';
   stats.rating = await fetchRating(parseInt(playerId));
   stats.rival_rating = await fetchRating(parseInt(analyzeId));
+  stats.player_profile = computePlayerPrimaryOpenings(parseInt(analyzeId), stats.all_match_features || []);
   stats.archetype = classifyPlayerArchetype(stats);
 
   // NEW: Intelligence features
@@ -346,6 +347,8 @@ async function runRivalAnalysis(playerId, rivalProfileId, matchId, leaderboard, 
   stats.threats = detectThreats(stats);
   stats.recommendations = generateDataDrivenRecommendations(stats);
   stats.prediction = generatePrediction(stats);
+  stats.opp_patterns = analyzeOpponentPatterns(stats);
+  stats.deep_insights = generateDeepInsights(stats);
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(matches);
 
