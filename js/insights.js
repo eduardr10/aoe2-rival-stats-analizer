@@ -299,7 +299,7 @@ export function generateInsights(stats, knowledgeBase = {}) {
     }
   }
 
-  // 12. Economic momentum at Castle (resources stockpiled)
+  // 12. Economic momentum at Castle (resources stockpiled) + cross-referenced context
   const ageSnap = stats.age_snapshots;
   if (ageSnap && ageSnap.castle) {
     const castleWins = ageSnap.castle.wins;
@@ -307,6 +307,9 @@ export function generateInsights(stats, knowledgeBase = {}) {
     if (castleWins?.resources != null && castleLosses?.resources != null) {
       const diff = castleWins.resources - castleLosses.resources;
       if (Math.abs(diff) >= 100) {
+        const ctx = stats.castle_context || {};
+        const wCtx = ctx.wins || {};
+        const lCtx = ctx.losses || {};
         add({
           id: 'castle_resources',
           category: 'economy',
@@ -319,6 +322,14 @@ export function generateInsights(stats, knowledgeBase = {}) {
             winResources: Math.round(castleWins.resources),
             lossResources: Math.round(castleLosses.resources),
             diff: Math.abs(Math.round(diff)),
+            winVillagers: wCtx.villagers != null ? Math.round(wCtx.villagers) : 0,
+            lossVillagers: lCtx.villagers != null ? Math.round(lCtx.villagers) : 0,
+            winMilitary: wCtx.military != null ? Math.round(wCtx.military) : 0,
+            lossMilitary: lCtx.military != null ? Math.round(lCtx.military) : 0,
+            winFarms: wCtx.farms != null ? Math.round(wCtx.farms) : 0,
+            lossFarms: lCtx.farms != null ? Math.round(lCtx.farms) : 0,
+            vilDiff: Math.abs(Math.round((wCtx.villagers || 0) - (lCtx.villagers || 0))),
+            milDiff: Math.abs(Math.round((wCtx.military || 0) - (lCtx.military || 0))),
           },
           tooltipKey: 'insights.castle_resources.tooltip',
         });

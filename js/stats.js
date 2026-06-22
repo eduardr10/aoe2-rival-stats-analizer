@@ -135,6 +135,18 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   const midPressureWins = []; // military/villager ratio before 15 min
   const midPressureLosses = [];
 
+  // Castle-age cross-referenced context (villagers, military, farms, resources, objects at Castle age-up)
+  const castleVilWins = [];
+  const castleVilLosses = [];
+  const castleMilWins = [];
+  const castleMilLosses = [];
+  const castleFarmWins = [];
+  const castleFarmLosses = [];
+  const castleResWins = [];
+  const castleResLosses = [];
+  const castleObjWins = [];
+  const castleObjLosses = [];
+
   // Total military unit counts by result (for APM efficiency)
   let totalMilitaryUnitsWins = 0;
   let totalMilitaryUnitsLosses = 0;
@@ -409,6 +421,29 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
         .sort((a, b) => a.time - b.time);
       if (tcEvents.length >= 1 && tcEvents[0]) tc2Times.push(tcEvents[0].time);
       if (tcEvents.length >= 2 && tcEvents[1]) tc3Times.push(tcEvents[1].time);
+
+      // Castle-age cross-referenced context
+      let cVils = 0, cMil = 0, cFarms = 0;
+      for (const e of mePlayer.events) {
+        if (e.time >= meUptimes.castle) break;
+        if (e.type === 'unit' && e.name === 'villager') cVils += (e.amount || 1);
+        else if (e.type === 'unit' && e.name !== 'king') cMil += (e.amount || 1);
+        else if (e.type === 'building' && (e.name === 'farm' || e.name === 'farms')) cFarms += (e.amount || 1);
+      }
+      let cRes = 0, cObj = 0;
+      if (mePlayer.timeseriesCurve) {
+        for (const ts of mePlayer.timeseriesCurve) {
+          if (ts.time <= meUptimes.castle) { cRes = ts.resources || 0; cObj = ts.objects || 0; }
+          else break;
+        }
+      }
+      if (winner) {
+        castleVilWins.push(cVils); castleMilWins.push(cMil); castleFarmWins.push(cFarms);
+        castleResWins.push(cRes); castleObjWins.push(cObj);
+      } else {
+        castleVilLosses.push(cVils); castleMilLosses.push(cMil); castleFarmLosses.push(cFarms);
+        castleResLosses.push(cRes); castleObjLosses.push(cObj);
+      }
     }
 
     // --- Oponente: tiempos de edad ---
@@ -826,6 +861,24 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     stats['opp_avg_' + age] = average(stats.opp_age_times[age]);
     stats['opp_avg_' + age + '_hms'] = stats['opp_avg_' + age] !== null ? formatHms(stats['opp_avg_' + age]) : 'N/A';
   }
+
+  // Castle-age cross-referenced context averages
+  stats.castle_context = {
+    wins: {
+      villagers: average(castleVilWins),
+      military: average(castleMilWins),
+      farms: average(castleFarmWins),
+      resources: average(castleResWins),
+      objects: average(castleObjWins),
+    },
+    losses: {
+      villagers: average(castleVilLosses),
+      military: average(castleMilLosses),
+      farms: average(castleFarmLosses),
+      resources: average(castleResLosses),
+      objects: average(castleObjLosses),
+    },
+  };
 
   stats.avg_eapm = average(stats.eapm);
   stats.avg_eapm_wins = average(stats.eapm_wins);

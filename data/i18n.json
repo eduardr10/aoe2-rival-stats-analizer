@@ -131,8 +131,8 @@
       },
       "castle_resources": {
         "title": "Castle-Age Bank",
-        "body": "You reach Castle with {winResources} stockpiled resources (wood+food+gold+stone) in wins vs {lossResources} in losses (diff: {diff}).",
-        "tooltip": "Compares total stockpiled resources (sum of wood, food, gold and stone) at the moment you reach Castle Age in wins vs losses."
+        "body": "Reach Castle with {winResources} resources in wins vs {lossResources} in losses (gap: {diff}). In wins: {winVillagers} vills, {winMilitary} military, {winFarms} farms. Losses: {lossVillagers} vills, {lossMilitary} military, {lossFarms} farms.",
+        "tooltip": "Compares total stockpiled resources, villagers, military units, and farms produced at the moment of reaching Castle Age in wins vs losses."
       },
       "army_peak": {
         "title": "Peak Objects",
@@ -358,8 +358,8 @@
       },
       "castle_resources": {
         "title": "Banco en Castillo",
-        "body": "Llegas a Castillo con {winResources} recursos acumulados (madera+comida+oro+piedra) en victorias vs {lossResources} en derrotas (diferencia: {diff}).",
-        "tooltip": "Compara el total de recursos acumulados (suma de madera, comida, oro y piedra) en el momento de llegar a Castillo entre victorias y derrotas."
+        "body": "Llegas a Castillo con {winResources} recursos en victorias vs {lossResources} en derrotas (brecha: {diff}). Victorias: {winVillagers} aldeanos, {winMilitary} militares, {winFarms} granjas. Derrotas: {lossVillagers} aldeanos, {lossMilitary} militares, {lossFarms} granjas.",
+        "tooltip": "Compara recursos acumulados, aldeanos, unidades militares y granjas producidas al llegar a Castillo entre victorias y derrotas."
       },
       "army_peak": {
         "title": "Pico de Objetos",

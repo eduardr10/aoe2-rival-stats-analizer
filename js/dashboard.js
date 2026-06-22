@@ -873,15 +873,27 @@ function renderHeroCard(insight, fallbackType, stats) {
   let barColor = '';
 
   if (typeClass === 'strength') {
-    metricNumber = `${insight.params.wr}%`;
-    metricUnit = unitDisplayName(insight.params.unit);
-    barWidth = insight.params.wr;
-    barColor = insight.params.wr >= 65 ? 'var(--accent-green)' : 'var(--accent-blue)';
+    if (insight.id === 'castle_resources') {
+      metricNumber = `+${insight.params.diff}`;
+      metricUnit = 'resources at Castle';
+      barWidth = Math.min(insight.params.diff / 3, 100);
+      barColor = 'var(--accent-green)';
+    } else {
+      metricNumber = `${insight.params.wr}%`;
+      metricUnit = unitDisplayName(insight.params.unit);
+      barWidth = insight.params.wr;
+      barColor = insight.params.wr >= 65 ? 'var(--accent-green)' : 'var(--accent-blue)';
+    }
   } else if (typeClass === 'weakness') {
     if (insight.id === 'civ_dependency') {
       metricNumber = `${insight.params.mainWr}%`;
       metricUnit = insight.params.civ;
       barWidth = insight.params.mainWr;
+      barColor = 'var(--accent-red)';
+    } else if (insight.id === 'castle_resources') {
+      metricNumber = `-${insight.params.diff}`;
+      metricUnit = 'resources at Castle';
+      barWidth = Math.min(insight.params.diff / 3, 100);
       barColor = 'var(--accent-red)';
     } else if (insight.id.startsWith('timing_')) {
       const gapVal = parseFloat(String(insight.params.gap).replace(/[^0-9.]/g, '')) || 0;
@@ -2340,6 +2352,33 @@ function computeWinLossPatterns(stats) {
       metric: `${dLoss.toFixed(0)} vs ${dWin.toFixed(0)} late-game`,
       type: 'loss'
     });
+  }
+
+  // 5. Castle-age resource gap explained
+  const cc = stats.castle_context || {};
+  const ccWins = cc.wins || {};
+  const ccLosses = cc.losses || {};
+  if (ccWins.resources != null && ccLosses.resources != null) {
+    const resDiff = Math.abs(Math.round(ccWins.resources - ccLosses.resources));
+    const vilDiff = Math.abs(Math.round((ccWins.villagers || 0) - (ccLosses.villagers || 0)));
+    const milDiff = Math.abs(Math.round((ccWins.military || 0) - (ccLosses.military || 0)));
+    if (resDiff >= 100 && (vilDiff >= 2 || milDiff >= 2)) {
+      const moreVils = (ccWins.villagers || 0) > (ccLosses.villagers || 0);
+      const moreMil = (ccWins.military || 0) > (ccLosses.military || 0);
+      let explanation = '';
+      if (moreVils && vilDiff >= 2) explanation += `${vilDiff} more villagers`;
+      if (moreMil && milDiff >= 2) {
+        if (explanation) explanation += ' and ';
+        explanation += `${milDiff} more military`;
+      }
+      const resDiffSign = ccWins.resources > ccLosses.resources ? '+' : '-';
+      lossPatterns.push({
+        icon: '\u{1F3F0}',
+        text: `At Castle: ${Math.round(ccWins.resources)} resources in wins vs ${Math.round(ccLosses.resources)} in losses`,
+        metric: `Because: ${explanation} in losses — ${Math.round(ccWins.villagers || 0)}v/${Math.round(ccWins.military || 0)}m vs ${Math.round(ccLosses.villagers || 0)}v/${Math.round(ccLosses.military || 0)}m`,
+        type: 'loss'
+      });
+    }
   }
 
   // ---- DISTINCTIVE TRAITS ----
