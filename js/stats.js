@@ -421,15 +421,29 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
         .sort((a, b) => a.time - b.time);
       if (tcEvents.length >= 1 && tcEvents[0]) tc2Times.push(tcEvents[0].time);
       if (tcEvents.length >= 2 && tcEvents[1]) tc3Times.push(tcEvents[1].time);
+    }
 
-      // Castle-age cross-referenced context
+    // Castle-age cross-referenced context (use queuedUnits directly, consistent with rest of code)
+    if (meUptimes.castle != null) {
       let cVils = 0, cMil = 0, cFarms = 0;
-      for (const e of mePlayer.events) {
-        if (e.time >= meUptimes.castle) break;
-        if (e.type === 'unit' && e.name === 'villager') cVils += (e.amount || 1);
-        else if (e.type === 'unit' && e.name !== 'king') cMil += (e.amount || 1);
-        else if (e.type === 'building' && (e.name === 'farm' || e.name === 'farms')) cFarms += (e.amount || 1);
+      for (const u of (mePlayer.queuedUnits || [])) {
+        if (!u.unit || !u.timestamp) continue;
+        const uSec = parseTimestamp(u.timestamp);
+        if (uSec === null || uSec >= meUptimes.castle) continue;
+        const rawName = u.unit.toLowerCase().replace(/ /g, '_').replace(/-/g, '_');
+        const amount = u.amount || 1;
+        if (rawName === 'villager') cVils += amount;
+        else if (rawName !== 'king') cMil += amount;
       }
+      for (const b of (mePlayer.queuedBuildings || [])) {
+        if (!b.unit && !b.building) continue;
+        if (!b.timestamp) continue;
+        const bSec = parseTimestamp(b.timestamp);
+        if (bSec === null || bSec >= meUptimes.castle) continue;
+        const bName = (b.unit || b.building || '').toLowerCase().replace(/ /g, '_');
+        if (bName.includes('farm')) cFarms += (b.amount || 1);
+      }
+      // Get resources and objects at Castle from timeseries
       let cRes = 0, cObj = 0;
       if (mePlayer.timeseriesCurve) {
         for (const ts of mePlayer.timeseriesCurve) {
