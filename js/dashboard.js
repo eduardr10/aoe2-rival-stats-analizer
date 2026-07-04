@@ -10,6 +10,7 @@ import { resolveCivNumber, sleep, formatHms, techDisplayName, escapeHtml } from 
 import { initWebSocket } from './websocket.js';
 import { initI18n, t, formatOpeningName, getLanguage, setLanguage, unitDisplayName } from './i18n.js';
 import { generateInsights } from './insights.js';
+import { buildCrossAnalysis } from './cross_analysis.js';
 
 const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
@@ -106,7 +107,7 @@ export async function initDashboard() {
     const info = document.getElementById('live-match-info');
     const rivalName = matchData.players?.find(p => p.profileId === rivalProfileId)?.name || 'Rival';
 
-    // Only mark that the player is currently in a match. Do NOT auto-run analysis from websocket in dashboard.
+    // Store rival info
     currentRivalId = rivalProfileId;
     currentRivalName = rivalName;
     liveMatchData = matchData;
@@ -121,10 +122,14 @@ export async function initDashboard() {
       btnProfile.href = url.toString();
     }
 
-    // Keep analyze button available for manual runs; do not trigger automatic analysis here.
+    // Auto-analyze rival
+    if (rivalProfileId && currentPlayerStats) {
+      analyzeAndShowRival(readControls(), rivalProfileId);
+    }
+
     const btnAnalyze = document.getElementById('btn-analyze-rival');
     if (btnAnalyze) {
-      btnAnalyze.textContent = 'Analizar Rival';
+      btnAnalyze.textContent = 'Actualizar';
       btnAnalyze.disabled = false;
     }
   });
@@ -597,6 +602,9 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
 
   // SECTION 2b: Win & Loss Patterns (how the player wins/loses)
   html += renderWinLossPatterns(stats);
+
+  // SECTION 2c: Cross Analysis (cross-referenced intelligence)
+  html += renderCrossAnalysis(stats);
 
   // SECTION 3: Performance Timeline (new time-series visualizations)
   html += renderPerformanceTimelineSection(stats);
@@ -2494,6 +2502,92 @@ function renderWinLossPatterns(stats) {
   }
 
   html += `</div>`;
+  return html;
+}
+
+// ============================================================================
+// CROSS ANALYSIS
+// ============================================================================
+
+function renderCrossAnalysis(stats) {
+  const ca = buildCrossAnalysis(stats);
+  if (!ca) return '';
+
+  let html = '<div class="block">';
+  html += '<div class="section-title">Cross Analysis</div>';
+  html += '<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Cross-referenced data from all analyzed matches. Minimum 3 games per cell.</p>';
+
+  // 1. Opening vs Opponent Opening matrix
+  if (ca.openingVsOpponent && ca.openingVsOpponent.length > 0) {
+    html += '<div class="cross-card">';
+    html += '<div class="cross-card-title">Opening vs Opponent Opening</div>';
+    html += '<div class="cross-matrix">';
+    // Group by my opening, display opponent opening WRs
+    const grouped = {};
+    for (const entry of ca.openingVsOpponent) {
+      if (!grouped[entry.myOpen]) grouped[entry.myOpen] = [];
+      grouped[entry.myOpen].push(entry);
+    }
+    for (const [myOpen, entries] of Object.entries(grouped)) {
+      entries.sort((a, b) => b.wr - a.wr);
+      html += '<div class="cross-matrix-row">';
+      html += `<div class="cross-matrix-label">${formatOpeningName(myOpen)}</div>`;
+      html += '<div class="cross-matrix-cells">';
+      for (const e of entries.slice(0, 3)) {
+        const wrClass = e.wr >= 60 ? 'text-green' : e.wr <= 40 ? 'text-red' : '';
+        html += `<span class="cross-matrix-cell ${wrClass}">vs ${formatOpeningName(e.oppOpen)}: ${e.wr}%<span class="cross-matrix-n"> (${e.total})</span></span>`;
+      }
+      html += '</div></div>';
+    }
+    html += '</div></div>';
+  }
+
+  // 2. Feudal Timing Brackets
+  if (ca.timingBrackets) {
+    html += '<div class="cross-card">';
+    html += '<div class="cross-card-title">Feudal Timing Brackets</div>';
+    html += '<div class="cross-brackets">';
+    for (const b of ca.timingBrackets) {
+      const wrColor = b.wr >= 55 ? 'var(--accent-green)' : b.wr <= 40 ? 'var(--accent-red)' : 'var(--text-primary)';
+      html += `<div class="cross-bracket-item">
+        <span class="cross-bracket-label">${b.label}</span>
+        <div class="cross-bracket-bar"><div class="cross-bracket-fill" style="width:${b.wr}%;background:${wrColor}"></div></div>
+        <span class="cross-bracket-wr" style="color:${wrColor}">${b.wr}%</span>
+        <span class="cross-bracket-n">(${b.total} games · avg ${b.avgTime})</span>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // 3. Age-up Order
+  if (ca.ageOrder) {
+    const ao = ca.ageOrder;
+    html += '<div class="cross-card">';
+    html += '<div class="cross-card-title">Age-up Order (when you reach age first)</div>';
+    html += '<div class="cross-order-grid">';
+    for (const age of ['feudal', 'castle']) {
+      const data = ao[age];
+      if (!data) continue;
+      const ageLabel = age === 'feudal' ? 'Feudal' : 'Castle';
+      html += `<div class="cross-order-col">
+        <div class="cross-order-age">${ageLabel}</div>
+        <div class="cross-order-item"><span class="cross-order-label">First</span><span class="cross-order-val">${data.first.wr}% WR (${data.first.total} games)</span></div>
+        <div class="cross-order-item"><span class="cross-order-label">Second</span><span class="cross-order-val">${data.second.wr}% WR (${data.second.total} games)</span></div>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // 4. Feudal Military Pressure
+  if (ca.feudalAdvantage) {
+    const fa = ca.feudalAdvantage;
+    html += '<div class="cross-card">';
+    html += '<div class="cross-card-title">Feudal Military Pressure</div>';
+    html += `<div class="cross-pressure">${fa.signal} (ratio: ${fa.militaryRatioWins} in wins vs ${fa.militaryRatioLosses} in losses)</div>`;
+    html += '</div>';
+  }
+
+  html += '</div>';
   return html;
 }
 

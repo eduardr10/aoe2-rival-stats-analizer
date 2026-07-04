@@ -3111,6 +3111,155 @@ body::before {
 .conf-low { color: var(--accent-red); font-weight: 700; }
 
 /* ==========================================================================
+   CROSS ANALYSIS
+   ========================================================================== */
+
+.cross-card {
+  margin-bottom: 14px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+.cross-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-cyan);
+  margin-bottom: 10px;
+}
+
+/* Opening Matrix */
+.cross-matrix-row {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.cross-matrix-row:last-child {
+  border-bottom: none;
+}
+
+.cross-matrix-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.cross-matrix-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cross-matrix-cell {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+}
+
+.cross-matrix-n {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Timing Brackets */
+.cross-brackets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cross-bracket-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cross-bracket-label {
+  width: 80px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.cross-bracket-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cross-bracket-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.cross-bracket-wr {
+  width: 38px;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cross-bracket-n {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Age Order */
+.cross-order-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cross-order-col {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.cross-order-age {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.cross-order-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.cross-order-label {
+  color: var(--text-muted);
+}
+
+.cross-order-val {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cross-pressure {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* ==========================================================================
    UTILITY CLASSES
    ========================================================================== */
 

@@ -835,13 +835,46 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   stats.all_match_features = allMatchFeatures;
 
   // Clasificar openings del oponente usando los mismos baselines
+  const allOppOpenings = [];
   for (const opp of allOppFeatures) {
     const oppOpeningObj = classifyOpening(opp.features, baselines);
     const oppOpening = oppOpeningObj.chosen_opening || 'Standard/Unknown';
+    allOppOpenings.push(oppOpening);
     stats.opp_openings[oppOpening] = (stats.opp_openings[oppOpening] || 0) + 1;
     // resultKey = our player's result when rival played this opening
     const resultKey = opp.winner ? 'wins' : 'losses';
     stats.opp_openings_vs_result[resultKey][oppOpening] = (stats.opp_openings_vs_result[resultKey][oppOpening] || 0) + 1;
+  }
+
+  // Opening × Opponent Opening cross-tabulation
+  stats.opening_vs_opponent = {};
+  for (let i = 0; i < allMatchFeatures.length; i++) {
+    const myOpening = allMatchFeatures[i].opening?.chosen_opening || 'Unknown';
+    const oppOpening = allOppOpenings[i] || 'Unknown';
+    const won = matchMeta[i]?.winner;
+    if (!stats.opening_vs_opponent[myOpening]) stats.opening_vs_opponent[myOpening] = {};
+    if (!stats.opening_vs_opponent[myOpening][oppOpening]) stats.opening_vs_opponent[myOpening][oppOpening] = { wins: 0, losses: 0 };
+    if (won) stats.opening_vs_opponent[myOpening][oppOpening].wins++;
+    else stats.opening_vs_opponent[myOpening][oppOpening].losses++;
+  }
+
+  // Per-match linked data for cross-analysis (player + opponent features aligned)
+  stats.match_cross_data = [];
+  for (let i = 0; i < allMatchFeatures.length; i++) {
+    const feat = allMatchFeatures[i];
+    const oppFeat = allOppFeatures[i]?.features || {};
+    const meta = matchMeta[i] || {};
+    stats.match_cross_data.push({
+      won: meta.winner,
+      map: meta.mapName,
+      civ: meta.meCiv,
+      player_opening: feat.opening?.chosen_opening || 'Unknown',
+      opponent_opening: allOppOpenings[i] || 'Unknown',
+      player_feudal: feat.t_feudal || null,
+      opponent_feudal: oppFeat.t_feudal || null,
+      player_castle: feat.t_castle || null,
+      opponent_castle: oppFeat.t_castle || null,
+    });
   }
 
   // Opening x Map / Opening x Civ cross-tabulation
