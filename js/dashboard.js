@@ -1898,6 +1898,11 @@ function renderLiveMatch(playerStats, rivalStats, matchData) {
   html += `</div>`;
 
   html += `<div class="block">`;
+  html += `<div class="section-title">Matchup Intelligence</div>`;
+  html += renderMatchupIntelligence(playerStats, rivalStats);
+  html += `</div>`;
+
+  html += `<div class="block">`;
   html += `<div class="section-title">Style Comparison</div>`;
   html += `<div class="block-grid block-grid-2">`;
   html += renderStyleComparison(playerStats, rivalStats);
@@ -1959,6 +1964,56 @@ function renderLiveAdvantage(playerStats, rivalStats) {
     </div>
     <div class="advantage-text ${advantageColor}">${advantageText}</div>
     <div class="card-subtitle text-center">Based on ELO differential and historical winrates. Live data will refine this.</div>
+  </div>`;
+}
+
+function renderMatchupIntelligence(playerStats, rivalStats) {
+  const pp = playerStats.player_profile || {};
+  const rp = rivalStats.player_profile || {};
+  const myOpening = pp.primary_opening || 'Unknown';
+  const oppOpening = rp.primary_opening || 'Unknown';
+  const myOpenPct = (pp.per_opening_frequency || {})[myOpening] || 0;
+  const oppOpenPct = (rp.per_opening_frequency || {})[oppOpening] || 0;
+
+  // Find historical WR for this specific opening matchup
+  let matchupWr = null;
+  let matchupTotal = 0;
+  const matrix = playerStats.opening_vs_opponent || {};
+  if (matrix[myOpening] && matrix[myOpening][oppOpening]) {
+    const rec = matrix[myOpening][oppOpening];
+    matchupTotal = rec.wins + rec.losses;
+    matchupWr = matchupTotal > 0 ? Math.round((rec.wins / matchupTotal) * 100) : null;
+  }
+
+  // Player's counter recommendations vs opponent style
+  const recs = playerStats.prediction?.counter_recommendations || [];
+  const validRecs = recs.slice(0, 3);
+
+  let recsHtml = '';
+  if (validRecs.length > 0) {
+    recsHtml = '<ul class="matchup-recs">' + validRecs.map(r => `<li>${escapeHtml(r)}</li>`).join('') + '</ul>';
+  }
+
+  const myOpeningLabel = formatOpeningName(myOpening);
+  const oppOpeningLabel = formatOpeningName(oppOpening);
+
+  return `<div class="card matchup-intel-card">
+    <div class="card-label">Opening Matchup</div>
+    <div class="matchup-openings">
+      <div class="matchup-side">
+        <div class="matchup-label">You usually play</div>
+        <div class="matchup-opening">${myOpeningLabel}</div>
+        <div class="matchup-pct">${myOpenPct}%</div>
+      </div>
+      <div class="matchup-vs">VS</div>
+      <div class="matchup-side">
+        <div class="matchup-label">Rival usually plays</div>
+        <div class="matchup-opening">${oppOpeningLabel}</div>
+        <div class="matchup-pct">${oppOpenPct}%</div>
+      </div>
+    </div>
+    ${matchupWr != null ? `<div class="matchup-historical">Historical WR in this matchup: <span class="${matchupWr >= 55 ? 'text-green' : matchupWr <= 40 ? 'text-red' : ''}">${matchupWr}%</span> (${matchupTotal} games)</div>` : ''}
+    ${recsHtml ? `<div class="matchup-recs-wrap"><div class="matchup-recs-title">Recommended counters</div>${recsHtml}</div>` : ''}
   </div>`;
 }
 
