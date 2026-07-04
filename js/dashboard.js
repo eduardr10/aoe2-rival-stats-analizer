@@ -1,4 +1,5 @@
 import { fetchRating, fetchMatches } from './api.js';
+import { fetchFullProfile } from './api.js';
 import { analyzeMatches } from './stats.js';
 import {
   interpretTimings,
@@ -147,6 +148,18 @@ async function analyzeAndShowRival(cfg, rivalId) {
     currentRivalStats = await runSelfAnalysis(rivalId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
     currentRivalStats.rival_name = currentRivalName;
     currentRivalStats.rival_id = rivalId;
+
+    // Fetch rival's full profile for H2H opponents data
+    try {
+      const rivalProfile = await fetchFullProfile(rivalId);
+      if (rivalProfile) {
+        // Store opponents data for H2H lookup
+        currentRivalStats.profile_data = rivalProfile;
+      }
+    } catch (e) {
+      // Non-critical - H2H from profile is optional
+    }
+
     renderLiveMatch(currentPlayerStats, currentRivalStats, liveMatchData);
     if (btnAnalyze) btnAnalyze.textContent = 'Actualizado';
   } catch (err) {
@@ -795,6 +808,21 @@ function renderExecSignature(stats) {
   const resPeak = stats.resource_peak?.wins ?? stats.resource_peak?.losses ?? '—';
   const objPeak = stats.object_peak?.wins ?? stats.object_peak?.losses ?? '—';
 
+  // Rating history sparkline
+  let ratingSpark = '';
+  let ratingRange = '';
+  const rh = stats.rating_history || [];
+  if (rh.length >= 2) {
+    const ratingValues = rh.map(r => r.rating);
+    ratingSpark = renderSparkline(ratingValues, 'var(--accent-gold)');
+    const first = ratingValues[0];
+    const last = ratingValues[ratingValues.length - 1];
+    const diff = last - first;
+    const diffText = diff >= 0 ? `+${diff}` : `${diff}`;
+    const diffClass = diff >= 0 ? 'text-green' : 'text-red';
+    ratingRange = `${first} → ${last} (<span class="${diffClass}">${diffText}</span>)`;
+  }
+
   return `<div class="exec-signature">
     <div class="exec-signature-title">Performance Signature</div>
     <div class="exec-signature-grid">
@@ -813,6 +841,11 @@ function renderExecSignature(stats) {
         <div class="exec-signature-spark">${objSpark}</div>
         <div class="exec-signature-value">Peak ${Math.round(objPeak)}</div>
       </div>
+      ${ratingSpark ? `<div class="exec-signature-item">
+        <div class="exec-signature-label">Rating history</div>
+        <div class="exec-signature-spark">${ratingSpark}</div>
+        <div class="exec-signature-value">${ratingRange}</div>
+      </div>` : ''}
     </div>
   </div>`;
 }
@@ -1985,6 +2018,23 @@ function renderMatchupIntelligence(playerStats, rivalStats) {
     matchupWr = matchupTotal > 0 ? Math.round((rec.wins / matchupTotal) * 100) : null;
   }
 
+  // H2H from rival's profile opponents data (pre-computed by Companion)
+  let h2hWr = null;
+  let h2hTotal = null;
+  const profile = rivalStats.profile_data || {};
+  const statsArr = profile.stats || [];
+  const rmStats = statsArr.find(s => s.leaderboardId === 'rm_1v1' || s.abbreviation === 'RM 1v1');
+  if (rmStats && rmStats.opponents) {
+    const myId = playerStats.player_id ? Number(playerStats.player_id) : null;
+    if (myId) {
+      const h2hEntry = rmStats.opponents.find(o => o.profileId === myId);
+      if (h2hEntry && h2hEntry.games > 0) {
+        h2hTotal = h2hEntry.games;
+        h2hWr = Math.round((h2hEntry.wins / h2hTotal) * 100);
+      }
+    }
+  }
+
   // Player's counter recommendations vs opponent style
   const recs = playerStats.prediction?.counter_recommendations || [];
   const validRecs = recs.slice(0, 3);
@@ -2013,9 +2063,11 @@ function renderMatchupIntelligence(playerStats, rivalStats) {
       </div>
     </div>
     ${matchupWr != null ? `<div class="matchup-historical">Historical WR in this matchup: <span class="${matchupWr >= 55 ? 'text-green' : matchupWr <= 40 ? 'text-red' : ''}">${matchupWr}%</span> (${matchupTotal} games)</div>` : ''}
+    ${h2hWr != null ? `<div class="matchup-historical">H2H record vs this rival: <span class="${h2hWr >= 55 ? 'text-green' : h2hWr <= 40 ? 'text-red' : ''}">${h2hWr}%</span> (${h2hTotal} games)</div>` : ''}
     ${recsHtml ? `<div class="matchup-recs-wrap"><div class="matchup-recs-title">Recommended counters</div>${recsHtml}</div>` : ''}
   </div>`;
 }
+
 
 function renderStyleComparison(playerStats, rivalStats) {
   function featStr(stats, label) {

@@ -48,6 +48,16 @@ export async function fetchRating(playerId) {
   }
 }
 
+export async function fetchFullProfile(playerId) {
+  try {
+    const data = await apiFetch(`${API_BASE}/api/profiles/${playerId}?extend=stats,profiles.avatar_medium_url,profiles.avatar_full_url`);
+    return data;
+  } catch (e) {
+    console.error('fetchFullProfile error:', e);
+    return null;
+  }
+}
+
 export async function fetchMatches(playerId, leaderboard, page, perPage) {
   const cached = await getCachedMatches(playerId, leaderboard, page, perPage);
   if (cached) {

@@ -151,6 +151,10 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
   let totalMilitaryUnitsWins = 0;
   let totalMilitaryUnitsLosses = 0;
 
+  // Rating history (rateSnapshot per match from analysis)
+  const rateSnapshots = [];
+  const ratingDates = [];
+
   // Time-series aggregation
   const MAX_TIMELINE_MIN = 60;
   function makeTimelineBuckets() {
@@ -255,6 +259,11 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     const mePreferRandom = mePlayer.preferRandom || null;
     const mapName = data.map?.name || data.map || match.map_name || null;
     const winner = !!(mePlayer.winner || false);
+
+    // Rating snapshot from analysis data
+    const rateSnapshot = mePlayer.rateSnapshot != null ? mePlayer.rateSnapshot : null;
+    rateSnapshots.push(rateSnapshot);
+    ratingDates.push(match.started || null);
 
     // Track opponent civ win/loss
     const oppCiv = oppPlayer?.civilization || null;
@@ -926,6 +935,14 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       objects: average(castleObjLosses),
     },
   };
+
+  // Rating history per match
+  if (rateSnapshots.length > 0) {
+    const valid = rateSnapshots.map((r, i) => r != null ? { rating: r, date: ratingDates[i] } : null).filter(Boolean);
+    if (valid.length >= 2) {
+      stats.rating_history = valid;
+    }
+  }
 
   stats.avg_eapm = average(stats.eapm);
   stats.avg_eapm_wins = average(stats.eapm_wins);
