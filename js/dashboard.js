@@ -2514,8 +2514,8 @@ function renderCrossAnalysis(stats) {
   if (!ca) return '';
 
   let html = '<div class="block">';
-  html += '<div class="section-title">Cross Analysis</div>';
-  html += '<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Cross-referenced data from all analyzed matches. Minimum 3 games per cell.</p>';
+  html += `<div class="section-title">${t('sections.crossAnalysis') || 'Cross Analysis'}</div>`;
+  html += `<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">${t('cross.subtitle') || 'Cross-referenced data from all analyzed matches. Minimum 3 games per cell.'}</p>`;
 
   // 1. Opening vs Opponent Opening matrix
   if (ca.openingVsOpponent && ca.openingVsOpponent.length > 0) {

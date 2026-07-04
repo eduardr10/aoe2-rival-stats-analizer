@@ -118,6 +118,12 @@ All configuration comes from URL query parameters:
 9. API calls must include the User-Agent header: `eduardr10-stats-script`.
 10. This file is the source of truth. Future AIs should read it first.
 
+## GitHub Pages deployment
+
+- Repository must contain a `.nojekyll` file in the root to disable Jekyll processing.
+- The `.opencode/skills/*.md` files contain YAML front matter (`---`) for skill metadata. Without `.nojekyll`, GitHub Pages/Jekyll will attempt to process them as pages and may fail the build.
+- The site is served as-is from the repository root; there is no build step and no server-side rendering.
+
 ## Browser compatibility
 - Target: modern browsers (Chrome, Firefox, Edge, Safari) — ES2020+
 - `fetch()`, `WebSocket`, ES modules, `URLSearchParams`, `localStorage`, `Set`, `Array.from`, arrow functions, template literals are all supported.

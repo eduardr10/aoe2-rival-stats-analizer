@@ -69,7 +69,8 @@
       "techs": "Technologies",
       "performanceTimeline": "Performance Timeline",
       "buildOrderTimeline": "Build Order Timeline",
-      "winLossPatterns": "Win & Loss Patterns"
+      "winLossPatterns": "Win & Loss Patterns",
+      "crossAnalysis": "Cross Analysis"
     },
     "insights": {
       "confidenceHigh": "High confidence",
@@ -296,7 +297,8 @@
       "techs": "Tecnologías",
       "performanceTimeline": "Línea Temporal de Rendimiento",
       "buildOrderTimeline": "Línea Temporal de Build Order",
-      "winLossPatterns": "Patrones de Victoria y Derrota"
+      "winLossPatterns": "Patrones de Victoria y Derrota",
+      "crossAnalysis": "Análisis Cruzado"
     },
     "insights": {
       "confidenceHigh": "Alta confianza",

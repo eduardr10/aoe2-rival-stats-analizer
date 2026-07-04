@@ -11,7 +11,6 @@ export function buildCrossAnalysis(stats) {
   return {
     openingVsOpponent: buildOpeningMatrix(stats),
     timingBrackets: buildTimingBrackets(stats),
-    castleEco: buildCastleEco(stats),
     ageOrder: buildAgeOrder(stats),
     feudalAdvantage: buildFeudalAdvantage(stats),
   };
@@ -67,68 +66,11 @@ function buildTimingBrackets(stats) {
   return brackets.length >= 2 ? brackets : null;
 }
 
-// ---- Castle Eco Benchmarks (vills at Castle × resources) ----
-function buildCastleEco(stats) {
-  const cc = stats.castle_context || {};
-  const w = cc.wins || {};
-  const l = cc.losses || {};
-  if (w.villagers == null || l.villagers == null) return null;
-
-  // Aggregate: villagers grouped in brackets
-  const data = stats.match_cross_data || [];
-  const brackets = [
-    { min: 0, max: 25, label: '<25 vills' },
-    { min: 25, max: 32, label: '25–32 vills' },
-    { min: 32, max: 40, label: '32–40 vills' },
-    { min: 40, max: 999, label: '40+ vills' },
-  ];
-
-  // Need per-match vils at Castle to classify. We have aggregate (wins/loss arrays).
-  // Use the aggregate averages as the primary insight, brackets as supplementary.
-  const vilsW = Math.round(w.villagers);
-  const vilsL = Math.round(l.villagers);
-  const milW = Math.round(w.military);
-  const milL = Math.round(l.military);
-  const farmsW = Math.round(w.farms);
-  const farmsL = Math.round(l.farms);
-  const resW = Math.round(w.resources);
-  const resL = Math.round(l.resources);
-
-  if (vilsW === 0 && vilsL === 0) return null;
-
-  return {
-    wins: { vills: vilsW, military: milW, farms: farmsW, resources: resW },
-    losses: { vills: vilsL, military: milL, farms: farmsL, resources: resL },
-    vilDiff: vilsW - vilsL,
-    milDiff: milW - milL,
-    resDiff: resW - resL,
-  };
-}
-
 // ---- Age-up Order vs Result ----
 function buildAgeOrder(stats) {
   const data = stats.match_cross_data || [];
   if (data.length < 5) return null;
 
-  let feudalFirst = { wins: 0, total: 0 };
-  let castleFirst = { wins: 0, total: 0 };
-
-  for (const m of data) {
-    if (m.player_feudal != null && m.opponent_feudal != null) {
-      feudalFirst.total++;
-      if (m.player_feudal < m.opponent_feudal && m.won) feudalFirst.wins++;
-      else if (m.player_feudal < m.opponent_feudal && !m.won) { /* loss when first */ }
-      if (m.won) feudalFirst.wins++;
-    }
-    if (m.player_castle != null && m.opponent_castle != null) {
-      castleFirst.total++;
-      if (m.player_castle < m.opponent_castle && m.won) castleFirst.wins++;
-      else if (m.player_castle < m.opponent_castle && !m.won) { /* loss */ }
-      if (m.won) castleFirst.wins++;
-    }
-  }
-
-  // Count matches where player reached age first AND won, vs first AND lost
   let feudalFirstWins = 0, feudalFirstLosses = 0;
   let castleFirstWins = 0, castleFirstLosses = 0;
   let feudalSecondWins = 0, feudalSecondLosses = 0;
@@ -158,16 +100,22 @@ function buildAgeOrder(stats) {
   const castleFirstTotal = castleFirstWins + castleFirstLosses;
   const castleSecondTotal = castleSecondWins + castleSecondLosses;
 
+  if (feudalFirstTotal === 0 && castleFirstTotal === 0) return null;
+
   return {
     feudal: {
-      first: { wins: feudalFirstWins, losses: feudalFirstLosses, total: feudalFirstTotal, wr: feudalFirstTotal > 0 ? Math.round((feudalFirstWins / feudalFirstTotal) * 100) : 0 },
-      second: { wins: feudalSecondWins, losses: feudalSecondLosses, total: feudalSecondTotal, wr: feudalSecondTotal > 0 ? Math.round((feudalSecondWins / feudalSecondTotal) * 100) : 0 },
+      first: { wins: feudalFirstWins, losses: feudalFirstLosses, total: feudalFirstTotal, wr: wr(feudalFirstWins, feudalFirstTotal) },
+      second: { wins: feudalSecondWins, losses: feudalSecondLosses, total: feudalSecondTotal, wr: wr(feudalSecondWins, feudalSecondTotal) },
     },
     castle: {
-      first: { wins: castleFirstWins, losses: castleFirstLosses, total: castleFirstTotal, wr: castleFirstTotal > 0 ? Math.round((castleFirstWins / castleFirstTotal) * 100) : 0 },
-      second: { wins: castleSecondWins, losses: castleSecondLosses, total: castleSecondTotal, wr: castleSecondTotal > 0 ? Math.round((castleSecondWins / castleSecondTotal) * 100) : 0 },
+      first: { wins: castleFirstWins, losses: castleFirstLosses, total: castleFirstTotal, wr: wr(castleFirstWins, castleFirstTotal) },
+      second: { wins: castleSecondWins, losses: castleSecondLosses, total: castleSecondTotal, wr: wr(castleSecondWins, castleSecondTotal) },
     },
   };
+}
+
+function wr(wins, total) {
+  return total > 0 ? Math.round((wins / total) * 100) : 0;
 }
 
 // ---- Feudal Military Advantage vs Result ----
