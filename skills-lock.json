@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "Time Series Analysis": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "skillPath": "skills/time-series-analysis/SKILL.md",
+      "computedHash": "3b54f962680f7143d8424975786cb1e4ae6d68dc93486b7b392941962fef9b1a"
+    },
     "accessibility": {
       "source": "addyosmani/web-quality-skills",
       "sourceType": "autoskills-registry",
@@ -16,6 +22,12 @@
       "source": "anthropics/skills",
       "sourceType": "autoskills-registry",
       "computedHash": "82fb11a63fb1e35ee2469516ed02d54695f783115b1540c0e783197af4240a3a"
+    },
+    "statistical-analysis": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "data/skills/statistical-analysis/SKILL.md",
+      "computedHash": "f3bc611085cf4bdb5e1f82009a5da707d11afc012a28a1df63978e4e66c5fff9"
     }
   }
 }
