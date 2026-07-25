@@ -614,6 +614,9 @@ function renderHistoricalAnalysisHTML(stats, compressed) {
   html += renderExecutiveSummary(stats);
   html += `</div>`;
 
+  // SECTION 1b: Coaching Intelligence (actionable insights for improvement)
+  html += renderCoachingIntelligence(stats);
+
   // Quick one-paragraph summary for copy/paste
   html += `<div class="block">`;
   html += renderPlayerClipboardSummary(stats);
@@ -2703,6 +2706,194 @@ function renderCrossAnalysis(stats) {
     html += `<div class="cross-pressure">${fa.signal} (ratio: ${fa.militaryRatioWins} in wins vs ${fa.militaryRatioLosses} in losses)</div>`;
     html += '</div>';
   }
+
+  html += '</div>';
+  return html;
+}
+
+// ============================================================================
+// COACHING INTELLIGENCE
+// ============================================================================
+
+function renderCoachingIntelligence(stats) {
+  const games = stats.analyzed || 0;
+  if (games < 3) return '';
+
+  let html = '<div class="block coaching-block">';
+  html += `<div class="section-title">Coaching Intelligence</div>`;
+
+  // ---- CARD 1: WIN FORMULA ----
+  let winFormula = '';
+  const cc = stats.castle_context || {};
+  const ccW = cc.wins || {};
+  const ccL = cc.losses || {};
+  const ep = stats.early_pressure || {};
+  const ue = stats.unit_effectiveness || {};
+
+  // Strongest unit
+  const strongUnits = Object.entries(ue).filter(([, d]) => d.label === 'strong' && (d.wins + d.losses) >= 3).sort((a, b) => b[1].wr - a[1].wr);
+  const strong = strongUnits[0];
+
+  // Win factors
+  let factors = [];
+  if (ccW.villagers != null && ccL.villagers != null) {
+    const vDiff = Math.round(ccW.villagers - ccL.villagers);
+    if (vDiff >= 2) factors.push(`reach Castle with <b>${Math.round(ccW.villagers)} villagers</b> (${vDiff} more than in losses)`);
+  }
+  if (strong) {
+    factors.push(`produce <b>${unitDisplayName(strong[0])}</b> — <b>${strong[1].wr}% win rate</b> (${strong[1].wins + strong[1].losses} games)`);
+  }
+  const ep10w = parseFloat(ep.before10?.wins) || 0;
+  const ep10l = parseFloat(ep.before10?.losses) || 0;
+  if (ep10w > 0.05 && ep10l > 0.02 && ep10w > ep10l * 1.2) {
+    const pct = Math.round(((ep10w - ep10l) / ep10l) * 100);
+    factors.push(`apply <b>early military pressure</b> — correlates with <b>${pct}% more wins</b>`);
+  }
+
+  if (factors.length > 0) {
+    const list = factors.map(f => `<li>${f}</li>`).join('');
+    winFormula = `<ul class="coach-list">${list}</ul>`;
+  }
+
+  html += `<div class="coach-card win"><div class="coach-title">Your Win Formula</div>
+    <div class="coach-body">You win when you ${winFormula || '<span class="coach-muted">(not enough data yet — play more games)</span>'}</div></div>`;
+
+  // ---- CARD 2: YOUR LEAK ----
+  let leakFactors = [];
+
+  // Castle context losses
+  if (ccL.military != null && ccW.military != null) {
+    const mDiff = Math.round(ccL.military - ccW.military);
+    if (mDiff >= 2) leakFactors.push(`produce <b>${mDiff} more military</b> before Castle (your eco suffers)`);
+  }
+  if (ccL.villagers != null && ccW.villagers != null) {
+    const vDiff = Math.round(ccW.villagers - ccL.villagers);
+    if (vDiff >= 2) leakFactors.push(`reach Castle with <b>${vDiff} fewer villagers</b>`);
+  }
+
+  // Matchup weaknesses
+  const mw = stats.matchup_weaknesses || [];
+  if (mw.length > 0) {
+    const worst = mw.slice(0, 2);
+    for (const w of worst) {
+      leakFactors.push(`struggle vs <b>${w.civ}</b> (<b>${w.wr}% WR</b>, ${w.games} games)`);
+    }
+  }
+
+  // APM dropoff
+  const drop = stats.apm_dropoff || {};
+  if (drop.losses > 5 && drop.wins > 0 && drop.losses > drop.wins * 1.3) {
+    leakFactors.push(`APM drops <b>${drop.losses}</b> in losses vs <b>${drop.wins}</b> in wins (you fatigue in longer games)`);
+  }
+
+  // EAPM gap
+  const wE = stats.avg_eapm_wins;
+  const lE = stats.avg_eapm_losses;
+  if (wE > 15 && lE > 10 && wE - lE >= 3) {
+    leakFactors.push(`play <b>${(wE - lE).toFixed(1)} lower EAPM</b> in losses (execution drops under pressure)`);
+  }
+
+  // Opening predictability
+  const pp = stats.player_profile || {};
+  const stability = pp.opening_stability || 0;
+  const opening = pp.primary_opening || '';
+  if (stability > 0.65 && opening) {
+    const freq = (pp.per_opening_frequency || {})[opening] || 0;
+    leakFactors.push(`use <b>${formatOpeningName(opening)} ${freq}%</b> of the time — opponents who counter it will beat you`);
+  }
+
+  let leakHtml = '';
+  if (leakFactors.length > 0) {
+    leakHtml = '<ul class="coach-list">' + leakFactors.map(f => `<li>${f}</li>`).join('') + '</ul>';
+  }
+
+  html += `<div class="coach-card leak"><div class="coach-title">Your Leak</div>
+    <div class="coach-body">You lose when you ${leakHtml || '<span class="coach-muted">(not enough data yet — play more games)</span>'}</div></div>`;
+
+  // ---- CARD 3: OPENING & COUNTER ----
+  let openingAdvice = '';
+  const perFreq = pp.per_opening_frequency || {};
+  const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+
+  if (sortedOpenings.length > 0 && opening) {
+    const freq = perFreq[opening] || 0;
+    const ovs = stats.opening_vs_opponent?.[opening] || {};
+    const betterMatchups = Object.entries(ovs)
+      .map(([opp, rec]) => ({ opp, wr: rec.wins + rec.losses > 0 ? Math.round((rec.wins / (rec.wins + rec.losses)) * 100) : 0, total: rec.wins + rec.losses }))
+      .filter(m => m.total >= 3 && m.wr >= 55)
+      .sort((a, b) => b.wr - a.wr).slice(0, 2);
+    const worseMatchups = Object.entries(ovs)
+      .map(([opp, rec]) => ({ opp, wr: rec.wins + rec.losses > 0 ? Math.round((rec.wins / (rec.wins + rec.losses)) * 100) : 0, total: rec.wins + rec.losses }))
+      .filter(m => m.total >= 3 && m.wr <= 40)
+      .sort((a, b) => a.wr - b.wr).slice(0, 2);
+
+    let matchupLines = '';
+    if (betterMatchups.length > 0) {
+      for (const m of betterMatchups) {
+        matchupLines += `<li>vs <b>${formatOpeningName(m.opp)}</b>: <b class="text-green">${m.wr}% WR</b> (${m.total} games) — keep doing this</li>`;
+      }
+    }
+    if (worseMatchups.length > 0) {
+      for (const m of worseMatchups) {
+        matchupLines += `<li>vs <b>${formatOpeningName(m.opp)}</b>: <b class="text-red">${m.wr}% WR</b> (${m.total} games) — practice or avoid</li>`;
+      }
+    }
+
+    const cd = stats.civ_dependency || {};
+    let civLine = '';
+    if (cd.mainGames >= 3 && cd.mainWr != null) {
+      civLine = `<div class="coach-civ">Main civ: <b>${cd.mainCiv}</b> — <b class="${cd.mainWr >= 55 ? 'text-green' : 'text-red'}">${cd.mainWr}% WR</b> (${cd.mainGames} games) · Other civs: ${cd.otherWr}% WR (${cd.otherGames} games)</div>`;
+    }
+
+    const openPct = freq > 0 ? `<div class="coach-civ">You play <b>${formatOpeningName(opening)}</b> in <b>${freq}%</b> of games (${Math.round(stability * 100)}% stability)</div>` : '';
+
+    openingAdvice = `${openPct}${civLine}${matchupLines ? '<ul class="coach-list">' + matchupLines + '</ul>' : ''}`;
+  }
+
+  html += `<div class="coach-card strategy"><div class="coach-title">Opening &amp; Counters</div>
+    <div class="coach-body">${openingAdvice || '<span class="coach-muted">Play more games to unlock opening intelligence</span>'}</div></div>`;
+
+  // ---- CARD 4: PROGRESS ----
+  let progressBar = '';
+  const rh = stats.rating_history || [];
+  if (rh.length >= 2) {
+    const vals = rh.map(r => r.rating);
+    const first = vals[0];
+    const last = vals[vals.length - 1];
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const diff = last - first;
+    const diffClass = diff >= 0 ? 'text-green' : 'text-red';
+    const diffIcon = diff >= 0 ? '\u2191' : '\u2193';
+
+    // Mini sparkline
+    const range = max - min || 1;
+    const w = 160;
+    const h = 32;
+    const step = w / (vals.length - 1);
+    const points = vals.map((v, i) => {
+      const x = i * step;
+      const y = h - ((v - min) / range) * (h - 4) - 2;
+      return ` ${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const sparkPoly = points.join('');
+
+    progressBar = `<div class="coach-progress">
+      <div class="coach-progress-header">
+        <svg viewBox="0 0 ${w} ${h}" class="coach-sparkline">
+          <polyline fill="none" stroke="var(--accent-gold)" stroke-width="2" points="${sparkPoly}"/>
+        </svg>
+        <div class="coach-progress-stats">
+          <span class="coach-progress-val ${diffClass}">${diffIcon} ${Math.abs(diff)}</span>
+          <span class="coach-progress-range">${min} \u2192 ${max}</span>
+        </div>
+      </div>
+      <div class="coach-progress-footer">${first} \u2192 ${last} over ${rh.length} games</div>
+    </div>`;
+  }
+
+  html += `<div class="coach-card progress"><div class="coach-title">Progress</div>
+    <div class="coach-body">${progressBar || '<span class="coach-muted">Play more games to see your rating trend</span>'}</div></div>`;
 
   html += '</div>';
   return html;
