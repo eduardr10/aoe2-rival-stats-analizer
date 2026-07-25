@@ -123,9 +123,15 @@ export async function initDashboard() {
       btnProfile.href = url.toString();
     }
 
-    // Auto-analyze rival
-    if (rivalProfileId && currentPlayerStats) {
-      analyzeAndShowRival(readControls(), rivalProfileId);
+    // Auto-analyze rival (once per session, with 5min cooldown)
+    if (rivalProfileId && currentPlayerStats && !isAnalyzingRival) {
+      const lastRivalKey = `aoe2_rival_analyzed_${rivalProfileId}`;
+      const lastTime = localStorage.getItem(lastRivalKey);
+      const now = Date.now();
+      if (!lastTime || (now - parseInt(lastTime)) > 5 * 60 * 1000) {
+        localStorage.setItem(lastRivalKey, now.toString());
+        analyzeAndShowRival(readControls(), rivalProfileId);
+      }
     }
 
     const btnAnalyze = document.getElementById('btn-analyze-rival');
@@ -138,14 +144,18 @@ export async function initDashboard() {
 
 async function analyzeAndShowRival(cfg, rivalId) {
   const btnAnalyze = document.getElementById('btn-analyze-rival');
+  const liveContent = document.getElementById('live-match-content');
   isAnalyzingRival = true;
   if (btnAnalyze) {
     btnAnalyze.textContent = 'Analizando...';
     btnAnalyze.disabled = true;
   }
+  if (liveContent) {
+    liveContent.innerHTML = `<div class="loading-state" style="padding:40px"><div class="loading-spinner"></div><div>Analizando rival...</div></div>`;
+  }
 
   try {
-    currentRivalStats = await runSelfAnalysis(rivalId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo);
+    currentRivalStats = await runSelfAnalysis(rivalId, cfg.pages, cfg.perPage, cfg.leaderboard || null, cfg.dateFrom, cfg.dateTo, true);
     currentRivalStats.rival_name = currentRivalName;
     currentRivalStats.rival_id = rivalId;
 
@@ -425,7 +435,7 @@ function matchInDateRange(started, dateFrom, dateTo) {
   return true;
 }
 
-async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateFrom, dateTo) {
+async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateFrom, dateTo, skipProgress) {
   const playedCivNum = null;
   const opponentCivNum = null;
   const effPages = pages || PAGES;
@@ -484,7 +494,7 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
 
   const dataMainPlayer = { player_id: playerId, match_id: 'self' };
 
-  let stats = await analyzeMatches(allMatches, parseInt(playerId), playedCivNum, opponentCivNum, dataMainPlayer, (progress) => {
+  let stats = await analyzeMatches(allMatches, parseInt(playerId), playedCivNum, opponentCivNum, dataMainPlayer, skipProgress ? null : (progress) => {
     const container = document.getElementById('dashboard');
     if (container) {
       const pct = Math.round((progress.current / progress.total) * 100);
