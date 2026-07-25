@@ -791,6 +791,7 @@ function renderPlayerClipboardSummary(stats) {
   const topCivPct = topCivEntry[1] != null ? `${topCivEntry[1]}%` : '—';
   const feudal = stats.avg_feudal_hms || '—';
   const castle = stats.avg_castle_hms || '—';
+  const imperial = stats.avg_imperial_hms || '—';
   const tc2pct = stats.tc_timing?.tc2_pct != null ? `${stats.tc_timing.tc2_pct}%` : '—';
   const tc2time = stats.tc_timing?.tc2_avg_hms || '—';
   const tc3pct = stats.tc_timing?.tc3_pct != null ? `${stats.tc_timing.tc3_pct}%` : '—';
@@ -798,7 +799,7 @@ function renderPlayerClipboardSummary(stats) {
   const eapm = stats.avg_eapm != null ? Math.round(stats.avg_eapm) : '—';
   const boom = stats.boom_tendency || '—';
 
-  const paragraph = `${name} (${rating}) — ${wr} over ${games} games. Main civ: ${topCiv} (${topCivPct}). Primary opening: ${primaryOpening}${openingPct != null ? ' (' + openingPct + '%)' : ''}. Avg timings: Feudal ${feudal}, Castle ${castle}. 2nd TC: ${tc2pct} (avg ${tc2time}), 3rd TC: ${tc3pct} (avg ${tc3time}). Avg EAPM: ${eapm}. Boom tendency: ${boom}.`;
+  const paragraph = `${name} (${rating}) — ${wr} over ${games} games. Main civ: ${topCiv} (${topCivPct}). Primary opening: ${primaryOpening}${openingPct != null ? ' (' + openingPct + '%)' : ''}. Avg timings: Feudal ${feudal}, Castle ${castle}, Imperial ${imperial}. 2nd TC: ${tc2pct} (avg ${tc2time}), 3rd TC: ${tc3pct} (avg ${tc3time}). Avg EAPM: ${eapm}. Boom tendency: ${boom}.`;
 
   return `<div class="card">
     <div class="card-label">Resumen rápido (copiar)</div>
@@ -2091,6 +2092,7 @@ function renderStyleComparison(playerStats, rivalStats) {
     const apm = stats.avg_eapm || '—';
     const feudal = stats.avg_feudal_hms || '—';
     const castle = stats.avg_castle_hms || '—';
+    const imperial = stats.avg_imperial_hms || '—';
     return `<div class="tempo-section">
       <div class="tempo-title">${label}</div>
       <div class="tempo-item"><span class="tempo-label">${t('header.winrate')}</span><span class="${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</span></div>
@@ -2098,6 +2100,7 @@ function renderStyleComparison(playerStats, rivalStats) {
       <div class="tempo-item"><span class="tempo-label">${t('sections.openings')}</span><span>${topOpening}</span></div>
       <div class="tempo-item"><span class="tempo-label">Feudal</span><span>${feudal}</span></div>
       <div class="tempo-item"><span class="tempo-label">Castle</span><span>${castle}</span></div>
+      <div class="tempo-item"><span class="tempo-label">Imperial</span><span>${imperial}</span></div>
     </div>`;
   }
 
