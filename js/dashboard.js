@@ -855,7 +855,44 @@ function renderSummarySection(stats) {
 
     <div class="sum-block-title">${t('summary.expect')}</div>
     <ul class="fact-list">${factsHtml || `<li class="fact"><span class="text-muted">${t('app.noData')}</span></li>`}</ul>
+    ${renderCrossAnalysisMini(stats)}
   </section>`;
+}
+
+function renderCrossAnalysisMini(stats) {
+  const ca = stats.cross_analysis || null;
+  if (!ca) return '';
+
+  const det = ca.determinantFeatures || [];
+  let detHtml = '';
+  if (det.length) {
+    detHtml = '<div class="mini-det"><strong>Determinant features:</strong><ul>';
+    for (const f of det.slice(0, 4)) {
+      detHtml += `<li>${formatFeatureName(f.feature)}: ${f.cohen_d > 0 ? '+' : ''}${f.cohen_d} (${f.strength})</li>`;
+    }
+    detHtml += '</ul></div>';
+  }
+
+  // Prediction: top opponent openings for primary opening
+  let predHtml = '';
+  try {
+    const primary = stats.player_profile?.primary_opening || stats.current_opening?.chosen_opening || null;
+    const preds = ca.matchupBehavior ? ca.matchupBehavior.byMyOpening?.[primary] || [] : [];
+    if (preds && preds.length) {
+      predHtml = '<div class="mini-pred"><strong>Predicted opponent openings:</strong><div>';
+      for (const p of preds.slice(0, 3)) {
+        predHtml += `<span class="chip">${formatOpeningName(p.opponent_opening)} · ${p.probability}%</span>`;
+      }
+      predHtml += '</div></div>';
+    }
+  } catch (e) { predHtml = ''; }
+
+  return `<div style="margin-top:12px">${detHtml}${predHtml}</div>`;
+}
+
+function formatFeatureName(name) {
+  if (!name) return '';
+  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
 // ============================================================================
