@@ -284,7 +284,8 @@
       "imperial": "Imperial",
       "eapm": "EAPM",
       "win": "Win",
-      "loss": "Loss"
+      "loss": "Loss",
+      "breakpoints": "Breakpoints"
     }
   },
   "es": {
@@ -568,7 +569,8 @@
       "imperial": "Imperial",
       "eapm": "EAPM",
       "win": "Victoria",
-      "loss": "Derrota"
+      "loss": "Derrota",
+      "breakpoints": "Breakpoints"
     }
   }
 }

@@ -782,6 +782,17 @@ function buildSummaryText(stats) {
     lines.push(`Civs: ${civs.map(([c, p]) => `${c} ${p}% (${stats.civ_win_percent?.[c] ?? '-'}% WR)`).join(', ')}`);
   }
 
+  const breakpoints = stats.cross_analysis?.breakpoints || {};
+  const bpEntries = Object.entries(breakpoints);
+  if (bpEntries.length) {
+    lines.push('');
+    lines.push('Breakpoints:');
+    for (const [age, bp] of bpEntries) {
+      const ageLabel = age.charAt(0).toUpperCase() + age.slice(1);
+      lines.push(`  ${ageLabel}: <${bp.thresholdHms} → ${bp.fastWR}% (${bp.nFast}g) · >${bp.thresholdHms} → ${bp.slowWR}% (${bp.nSlow}g) — gap ${bp.gap}pp`);
+    }
+  }
+
   const facts = buildSummaryFacts(stats);
   if (facts.length) {
     lines.push('');
@@ -825,6 +836,27 @@ function renderSummarySection(stats) {
     factsHtml += `<li class="fact ${cls}"><span class="fact-text">${escapeHtml(f.text)}</span><span class="fact-sample">${f.sample}g</span></li>`;
   }
 
+  const breakpoints = stats.cross_analysis?.breakpoints || {};
+  const bpEntries = Object.entries(breakpoints);
+  let breakpointsHtml = '';
+  if (bpEntries.length > 0) {
+    const ageLabels = { feudal: 'FEUDAL', castle: 'CASTLE', imperial: 'IMPERIAL' };
+    const items = bpEntries.map(([age, bp]) => {
+      const label = ageLabels[age] || age.toUpperCase();
+      return `<div class="bp-row">
+        <span class="bp-label">${label}</span>
+        <span class="bp-thresh">&lt;${bp.thresholdHms} <b class="wr-good">${bp.fastWR}%</b> <em>(${bp.nFast}g)</em></span>
+        <span class="bp-thresh">&gt;${bp.thresholdHms} <b class="wr-bad">${bp.slowWR}%</b> <em>(${bp.nSlow}g)</em></span>
+        <span class="bp-gap">gap ${bp.gap}pp</span>
+      </div>`;
+    }).join('');
+    breakpointsHtml = `
+      <div class="sum-block">
+        <div class="sum-block-title">${t('summary.breakpoints')}</div>
+        <div class="bp-list">${items}</div>
+      </div>`;
+  }
+
   return `
   <section class="sum-section">
     <div class="sum-head">
@@ -852,6 +884,8 @@ function renderSummarySection(stats) {
         <div class="hero-tempo">${tempoHtml}</div>
       </div>
     </div>
+
+    ${breakpointsHtml}
 
     <div class="sum-block-title">${t('summary.expect')}</div>
     <ul class="fact-list">${factsHtml || `<li class="fact"><span class="text-muted">${t('app.noData')}</span></li>`}</ul>

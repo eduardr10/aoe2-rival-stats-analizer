@@ -9,6 +9,7 @@ export function buildCrossAnalysis(stats) {
   if (!stats || stats.analyzed < 5) return null;
 
   return {
+    breakpoints: findBreakpoints(stats),
     openingVsOpponent: buildOpeningMatrix(stats),
     timingBrackets: buildTimingBrackets(stats),
     ageOrder: buildAgeOrder(stats),
@@ -141,6 +142,45 @@ function buildFeudalAdvantage(stats) {
     difference: (wNum - lNum).toFixed(2),
     signal: wNum > lNum * 1.3 ? 'Early military pressure correlates with wins' : wNum * 1.3 < lNum ? 'Boomear correlates with wins' : 'No clear signal',
   };
+}
+
+// ---- Breakpoints (max-gap binary split per age) ----
+function findBreakpoints(stats) {
+  const ages = ['feudal', 'castle', 'imperial'];
+  const result = {};
+  for (const age of ages) {
+    const times = stats.age_times?.[age] || [];
+    const wins = stats.age_times_wins?.[age] || [];
+    if (times.length < 6) continue;
+
+    let best = null;
+    const sorted = [...new Set(times)].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) {
+      const t = sorted[i];
+      const fast = times.filter(x => x <= t);
+      const slow = times.filter(x => x > t);
+      if (fast.length < 3 || slow.length < 3) continue;
+      const fastWin = wins.filter(x => x <= t).length;
+      const slowWin = wins.filter(x => x > t).length;
+      const fastWR = fastWin / fast.length;
+      const slowWR = slowWin / slow.length;
+      const gap = fastWR - slowWR;
+      if (!best || gap > best.gap) {
+        best = {
+          age,
+          threshold: t,
+          thresholdHms: formatHms(Math.round(t)),
+          fastWR: Math.round(fastWR * 100),
+          slowWR: Math.round(slowWR * 100),
+          gap: Math.round(gap * 100),
+          nFast: fast.length,
+          nSlow: slow.length,
+        };
+      }
+    }
+    if (best && best.gap >= 15) result[age] = best;
+  }
+  return result;
 }
 
 // ---- Matchup Behavior Model ----
