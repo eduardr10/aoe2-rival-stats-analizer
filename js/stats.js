@@ -1,5 +1,6 @@
 import { fetchAnalysis } from './api.js';
 import { parseGameJson, extractEarlyFeatures, computePlayerBaselines, classifyOpening } from './analysis.js';
+import { buildCrossAnalysis } from './cross_analysis.js';
 import { parseTimestamp, formatHms, average, CIV_CANONICAL_NAMES, sleep, isKeyTech, getTechCategory } from './utils.js';
 
 const AGES = ['feudal', 'castle', 'imperial'];
@@ -1434,6 +1435,13 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       winUnitsPerMin: Math.round((totalMilitaryUnitsWins / winGames / avgDurationMin) * 100) / 100,
       lossUnitsPerMin: Math.round((totalMilitaryUnitsLosses / lossGames / avgDurationMin) * 100) / 100,
     };
+  }
+
+  // Cross-analysis and predictive models
+  try {
+    stats.cross_analysis = buildCrossAnalysis(stats);
+  } catch (e) {
+    stats.cross_analysis = null;
   }
 
   return stats;
