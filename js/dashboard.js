@@ -6,17 +6,13 @@ import {
   computeStreak,
   computePlayerPrimaryOpenings,
 } from './analysis.js';
-import { loadKnowledgeBase } from './strategic_engine.js';
 import { resolveCivNumber, sleep, formatHms, techDisplayName, escapeHtml } from './utils.js';
 import { initWebSocket } from './websocket.js';
 import { initI18n, t, formatOpeningName, getLanguage, setLanguage, unitDisplayName } from './i18n.js';
-import { generateInsights } from './insights.js';
-import { buildCrossAnalysis } from './cross_analysis.js';
 
 const DEFAULT_PLAYER_ID = '8621659';
 const PER_PAGE = 10;
 const PAGES = 1;
-let cachedKnowledgeBase = null;
 
 // App configuration for creator links
 window.app_config = {
@@ -82,10 +78,6 @@ function syncURLToControls(cfg) {
 
 export async function initDashboard() {
   await initI18n();
-  if (!cachedKnowledgeBase) {
-    cachedKnowledgeBase = await loadKnowledgeBase();
-  }
-
   let cfg = readControls();
   syncURLToControls(cfg);
 
@@ -517,8 +509,6 @@ async function runSelfAnalysis(playerId, pages, perPage, leaderboardParam, dateF
   stats.timing_interpretation = interpretTimings(stats);
   stats.current_streak = computeStreak(allMatches);
 
-  cachedKnowledgeBase = await loadKnowledgeBase();
-
   const featureMap = new Map();
   if (stats.all_match_features) {
     for (const f of stats.all_match_features) {
@@ -563,7 +553,7 @@ function renderDashboard(stats) {
     dashboard.innerHTML = renderHistoricalAnalysisHTML(stats, false);
   }
 
-  setupTabs(dashboard);
+  setupDataTabs(dashboard);
 }
 
 function updateHeader(stats) {
@@ -603,1304 +593,617 @@ function updateHeader(stats) {
 }
 
 // ============================================================================
-// HISTORICAL ANALYSIS (Consolidated)
+// DASHBOARD — SECTION 1: SUMMARY (2-second scouting view)
 // ============================================================================
 
 function renderHistoricalAnalysisHTML(stats, compressed) {
   let html = '';
-
-  // SECTION 1: Executive Summary (consolidated banner)
-  html += `<div class="block">`;
-  html += renderExecutiveSummary(stats);
-  html += `</div>`;
-
-  // SECTION 1b: Coaching Intelligence (actionable insights for improvement)
-  html += renderCoachingIntelligence(stats);
-
-  // Quick one-paragraph summary for copy/paste
-  html += `<div class="block">`;
-  html += renderPlayerClipboardSummary(stats);
-  html += `</div>`;
-
-  // SECTION 2: Findings (unified insights list)
-  const insights = generateInsights(stats, cachedKnowledgeBase || {});
-  html += renderFindingsSection(stats, insights);
-
-  // SECTION 2b: Win & Loss Patterns (how the player wins/loses)
-  html += renderWinLossPatterns(stats);
-
-  // SECTION 2c: Cross Analysis (cross-referenced intelligence)
-  html += renderCrossAnalysis(stats);
-
-  // SECTION 3: Performance Timeline (new time-series visualizations)
-  html += renderPerformanceTimelineSection(stats);
-
-  // SECTION 4: Build Order Timeline
-  html += renderBuildOrderTimelineSection(stats);
-
-  // SECTION 5: Timing Analysis
-  html += `<div class="block">`;
-  html += `<div class="section-title">${t('sections.timingAnalysis')}</div>`;
-  html += renderTimingAnalysisCard(stats);
-  html += `</div>`;
-
-  // SECTION 4: Detailed Analysis (tabs)
-  html += `<div class="block">`;
-  html += `<div class="section-title">${t('sections.detailedAnalysis')}</div>`;
-  html += renderDetailedAnalysisCard(stats);
-  html += `</div>`;
-
-  // SECTION 5: Historical Data
-  html += `<div class="block">`;
-  html += `<div class="section-title">${t('sections.historicalData')}</div>`;
-  html += renderHistoricalDataCard(stats);
-  html += `</div>`;
-
+  html += renderSummarySection(stats);
+  html += renderDataSection(stats);
   return html;
 }
 
-function renderExecutiveSummary(stats) {
-  const wr = stats.win_percent || 0;
-  const games = stats.analyzed || 0;
-  const wins = stats.total_wins || 0;
+function wrClass(wr) {
+  if (wr >= 55) return 'wr-good';
+  if (wr <= 42) return 'wr-bad';
+  return 'wr-mid';
+}
+
+function openingWR(stats, openingName) {
+  const matches = stats.matches || [];
+  let w = 0, l = 0;
+  for (const m of matches) {
+    if (m.opening === openingName) {
+      if (m.won) w++; else l++;
+    }
+  }
+  const total = w + l;
+  return { wr: total > 0 ? Math.round(w * 100 / total) : null, games: total };
+}
+
+function getArmyComposition(stats) {
+  const unitCats = stats.unit_categories || {};
+  const entries = Object.entries(unitCats)
+    .map(([cat, d]) => [cat, d.count || 0])
+    .filter(([, c]) => c > 0);
+  const total = entries.reduce((s, [, c]) => s + c, 0);
+  if (total === 0) return null;
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, c]) => ({ cat, pct: Math.round(c * 100 / total) }));
+}
+
+function buildSummaryFacts(stats) {
+  const facts = [];
   const pp = stats.player_profile || {};
   const perFreq = pp.per_opening_frequency || {};
+  const games = stats.analyzed || 0;
 
   const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
-  const top2 = sortedOpenings.slice(0, 2);
-  let openingsLine = '';
-  if (top2.length > 0) {
-    openingsLine = top2.map(([name, pct]) => `${formatOpeningName(name)} ${pct}%`).join(' · ');
-  } else {
-    openingsLine = t('app.noData');
+  if (sortedOpenings.length > 0) {
+    const [name, pct] = sortedOpenings[0];
+    const owr = openingWR(stats, name);
+    facts.push({
+      icon: 'opening',
+      text: `${formatOpeningName(name)}: ${pct}% ${t('summary.ofGames')}${owr.wr != null ? ` · ${owr.wr}% WR` : ''}`,
+      sample: owr.games || games,
+    });
   }
 
-  const civs = stats.civ_played_percent || {};
-  const sortedCivs = Object.entries(civs).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  const civsLine = sortedCivs.length
-    ? sortedCivs.map(([civ, pct]) => {
-      const civWR = stats.civ_win_percent?.[civ] ?? 0;
-      return `${civ} ${pct}% (<span class="${civWR >= 55 ? 'text-green' : civWR <= 40 ? 'text-red' : ''}">${civWR}% WR</span>)`;
-    }).join(' · ')
-    : '';
-
-  const unitCats = stats.unit_categories || {};
-  const totalCount = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
-  const cavPct = totalCount > 0 ? Math.round(((unitCats.cavalry?.count || 0) / totalCount) * 100) : 0;
-  const archPct = totalCount > 0 ? Math.round(((unitCats.archers?.count || 0) / totalCount) * 100) : 0;
-  const infPct = totalCount > 0 ? Math.round(((unitCats.infantry?.count || 0) / totalCount) * 100) : 0;
-  const siegePct = totalCount > 0 ? Math.round(((unitCats.siege?.count || 0) / totalCount) * 100) : 0;
-  let armyLine = '';
-  if (totalCount > 0) {
-    const parts = [];
-    if (cavPct > 0) parts.push(`<span class="text-orange">${cavPct}% Cav</span>`);
-    if (archPct > 0) parts.push(`<span class="text-yellow">${archPct}% Arch</span>`);
-    if (infPct > 0) parts.push(`<span class="text-red">${infPct}% Inf</span>`);
-    if (siegePct > 0) parts.push(`<span class="text-purple">${siegePct}% Siege</span>`);
-    armyLine = parts.join(' · ');
+  const eff = Object.entries(stats.unit_effectiveness || {})
+    .filter(([n, d]) => n !== 'villager' && d.matches >= 3 && d.share >= 5)
+    .sort((a, b) => b[1].wr - a[1].wr);
+  if (eff.length > 0) {
+    const [bestName, best] = eff[0];
+    facts.push({
+      icon: 'unit',
+      text: `${unitDisplayName(bestName)}: ${best.wr}% WR ${t('summary.whenWins')}`,
+      sample: best.matches,
+      good: true,
+    });
+    const weak = eff.filter(([, d]) => d.wr <= 42).sort((a, b) => a[1].wr - b[1].wr)[0];
+    if (weak) {
+      facts.push({
+        icon: 'weak',
+        text: `${unitDisplayName(weak[0])}: ${weak[1].wr}% WR`,
+        sample: weak[1].matches,
+        bad: true,
+      });
+    }
   }
 
-  let mapLine = '';
+  const mw = stats.matchup_weaknesses || [];
+  if (mw.length > 0) {
+    const worst = [...mw].sort((a, b) => a.wr - b.wr)[0];
+    if (worst.games >= 2) {
+      facts.push({
+        icon: 'weak',
+        text: `${t('summary.weakVs')} ${worst.civ}: ${worst.wr}% WR`,
+        sample: worst.games,
+        bad: true,
+      });
+    }
+  }
+
   const mapPlayed = stats.map_played || {};
   const mapWR = stats.map_win_percent || {};
-  const sortedMaps = Object.entries(mapPlayed).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  if (sortedMaps.length > 0) {
-    mapLine = sortedMaps.map(([map, count]) => {
-      const mwr = mapWR[map] || 0;
-      return `${map} ${count}g (<span class="${mwr >= 55 ? 'text-green' : mwr <= 40 ? 'text-red' : ''}">${mwr}%</span>)`;
-    }).join(' · ');
+  const mapEntries = Object.entries(mapPlayed).filter(([, c]) => c >= 2);
+  if (mapEntries.length > 0) {
+    const best = mapEntries.sort((a, b) => (mapWR[b[0]] || 0) - (mapWR[a[0]] || 0))[0];
+    facts.push({
+      icon: 'map',
+      text: `${best[0]}: ${mapWR[best[0]] || 0}% WR`,
+      sample: best[1],
+      good: (mapWR[best[0]] || 0) >= 55,
+    });
   }
 
-  const feudalAvg = stats.avg_feudal_hms || '—';
-  const castleAvg = stats.avg_castle_hms || '—';
-  const impAvg = stats.avg_imperial_hms || '—';
-
-  const feudalGap = stats.age_time_loss_avg?.feudal && stats.age_time_win_avg?.feudal
-    ? stats.age_time_loss_avg.feudal - stats.age_time_win_avg.feudal : 0;
-  const castleGap = stats.age_time_loss_avg?.castle && stats.age_time_win_avg?.castle
-    ? stats.age_time_loss_avg.castle - stats.age_time_win_avg.castle : 0;
-  const impGap = stats.age_time_loss_avg?.imperial && stats.age_time_win_avg?.imperial
-    ? stats.age_time_loss_avg.imperial - stats.age_time_win_avg.imperial : 0;
-
-  function gapHtml(gap) {
-    if (gap > 30) return ` <span class="text-red text-xs">+${Math.round(gap)}s in losses</span>`;
-    if (gap < -30) return ` <span class="text-green text-xs">${Math.round(gap)}s faster in wins</span>`;
-    return '';
+  const gaps = stats.economic_gaps || [];
+  if (gaps.length > 0) {
+    const g = gaps[0];
+    facts.push({
+      icon: 'eco',
+      text: `${g.tech}: +${formatHms(g.gap)} ${t('summary.gap')} (${g.winAvg} → ${g.lossAvg})`,
+      sample: games,
+      bad: true,
+    });
   }
 
-  const streak = stats.current_streak || { type: 'none', count: 0 };
-  const streakText = streak.type === 'win' ? `+${streak.count} wins` : streak.type === 'loss' ? `-${streak.count} losses` : 'No streak';
-
-  return `<div class="card executive-summary">
-    <div class="exec-summary-header">
-      <span class="player-name-large">${escapeHtml(stats.player_name || 'Player')}</span>
-      <span class="exec-summary-stats">
-        <span class="exec-stat">${stats.rating || '—'} <span class="exec-stat-label">Rating</span></span>
-        <span class="exec-stat ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}% <span class="exec-stat-label">WR</span></span>
-        <span class="exec-stat">${wins}/${games - wins} <span class="exec-stat-label">W/L</span></span>
-        <span class="exec-stat">${streakText} <span class="exec-stat-label">Streak</span></span>
-      </span>
-    </div>
-    <div class="exec-summary-grid">
-      <div class="exec-summary-col">
-        <div class="exec-summary-item">
-          <div class="exec-item-label">${t('sections.openings')}</div>
-          <div class="exec-item-value">${openingsLine}</div>
-        </div>
-        <div class="exec-summary-item">
-          <div class="exec-item-label">${t('sections.civs')}</div>
-          <div class="exec-item-value">${civsLine || t('app.noData')}</div>
-        </div>
-      </div>
-      <div class="exec-summary-col">
-        <div class="exec-summary-item">
-          <div class="exec-item-label">${t('tabs.armyComposition')}</div>
-          <div class="exec-item-value">${armyLine || t('app.noData')}</div>
-        </div>
-        <div class="exec-summary-item">
-          <div class="exec-item-label">${t('sections.maps')}</div>
-          <div class="exec-item-value">${mapLine || t('app.noData')}</div>
-        </div>
-      </div>
-      <div class="exec-summary-col">
-        <div class="exec-summary-item">
-          <div class="exec-item-label">${t('tabs.avgEapm')}</div>
-          <div class="exec-item-value">${stats.avg_eapm || '—'} (${Math.round(stats.avg_eapm_wins || 0)} wins / ${Math.round(stats.avg_eapm_losses || 0)} losses)</div>
-        </div>
-        <div class="exec-summary-item">
-          <div class="exec-item-label">Average Age Times</div>
-          <div class="exec-item-value">Feudal ${feudalAvg}${gapHtml(feudalGap)} · Castle ${castleAvg}${gapHtml(castleGap)} · Imperial ${impAvg}${gapHtml(impGap)}</div>
-        </div>
-      </div>
-    </div>
-    ${renderExecSignature(stats)}
-  </div>`;
+  return facts.slice(0, 6);
 }
 
-function renderPlayerClipboardSummary(stats) {
-  const name = stats.player_name || 'Player';
-  const rating = stats.rating || '—';
-  const wr = stats.win_percent != null ? `${stats.win_percent}%` : '—';
+function buildSummaryText(stats) {
+  const lines = [];
+  const wr = stats.win_percent || 0;
+  const wins = stats.total_wins || 0;
   const games = stats.analyzed || 0;
+  const losses = games - wins;
+
+  lines.push(`${stats.player_name || 'Player'} (${t('header.rating')} ${stats.rating || '-'}) — ${games} ${t('summary.games')}`);
+  lines.push(`WR ${wr}% (${wins}W-${losses}L)`);
+
   const pp = stats.player_profile || {};
-  const primaryOpening = pp.primary_opening || (stats.current_opening?.chosen_opening) || 'Unknown';
-  const openingPct = pp.per_opening_frequency ? Math.round((pp.per_opening_frequency[primaryOpening] || 0) * 100) / 100 : null;
-  const civs = stats.civ_played_percent || {};
-  const topCivEntry = Object.entries(civs).sort((a, b) => b[1] - a[1])[0] || [];
-  const topCiv = topCivEntry[0] || 'Unknown';
-  const topCivPct = topCivEntry[1] != null ? `${topCivEntry[1]}%` : '—';
-  const feudal = stats.avg_feudal_hms || '—';
-  const castle = stats.avg_castle_hms || '—';
-  const imperial = stats.avg_imperial_hms || '—';
-  const tc2pct = stats.tc_timing?.tc2_pct != null ? `${stats.tc_timing.tc2_pct}%` : '—';
-  const tc2time = stats.tc_timing?.tc2_avg_hms || '—';
-  const tc3pct = stats.tc_timing?.tc3_pct != null ? `${stats.tc_timing.tc3_pct}%` : '—';
-  const tc3time = stats.tc_timing?.tc3_avg_hms || '—';
-  const eapm = stats.avg_eapm != null ? Math.round(stats.avg_eapm) : '—';
-  const boom = stats.boom_tendency || '—';
-
-  const paragraph = `${name} (${rating}) — ${wr} over ${games} games. Main civ: ${topCiv} (${topCivPct}). Primary opening: ${primaryOpening}${openingPct != null ? ' (' + openingPct + '%)' : ''}. Avg timings: Feudal ${feudal}, Castle ${castle}, Imperial ${imperial}. 2nd TC: ${tc2pct} (avg ${tc2time}), 3rd TC: ${tc3pct} (avg ${tc3time}). Avg EAPM: ${eapm}. Boom tendency: ${boom}.`;
-
-  return `<div class="card">
-    <div class="card-label">Resumen rápido (copiar)</div>
-    <div class="card-subtitle">Párrafo listo para pegar en chat</div>
-    <div class="mt-2"><textarea readonly class="clipboard-text" style="width:100%;height:72px">${escapeHtml(paragraph)}</textarea></div>
-  </div>`;
-}
-
-function renderExecSignature(stats) {
-  const hasData = (stats.apm_curve_wins || []).some(v => v != null)
-    || (stats.resources_curve_wins || []).some(v => v != null)
-    || (stats.objects_curve_wins || []).some(v => v != null);
-  if (!hasData) return '';
-
-  const apmSpark = renderSparkline(stats.apm_curve_wins || [], 'var(--accent-blue)');
-  const resSpark = renderSparkline(stats.resources_curve_wins || [], 'var(--accent-green)');
-  const objSpark = renderSparkline(stats.objects_curve_wins || [], 'var(--accent-purple)');
-
-  const apmPeak = stats.apm_peak?.wins ?? stats.apm_peak?.losses ?? '—';
-  const resPeak = stats.resource_peak?.wins ?? stats.resource_peak?.losses ?? '—';
-  const objPeak = stats.object_peak?.wins ?? stats.object_peak?.losses ?? '—';
-
-  // Rating history sparkline
-  let ratingSpark = '';
-  let ratingRange = '';
-  const rh = stats.rating_history || [];
-  if (rh.length >= 2) {
-    const ratingValues = rh.map(r => r.rating);
-    ratingSpark = renderSparkline(ratingValues, 'var(--accent-gold)');
-    const first = ratingValues[0];
-    const last = ratingValues[ratingValues.length - 1];
-    const diff = last - first;
-    const diffText = diff >= 0 ? `+${diff}` : `${diff}`;
-    const diffClass = diff >= 0 ? 'text-green' : 'text-red';
-    ratingRange = `${first} → ${last} (<span class="${diffClass}">${diffText}</span>)`;
+  const perFreq = pp.per_opening_frequency || {};
+  const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+  if (sortedOpenings.length > 0) {
+    const openingParts = sortedOpenings.slice(0, 2).map(([n, p]) => `${formatOpeningName(n)} ${p}%`);
+    lines.push(`${t('summary.mainOpening')}: ${openingParts.join(' / ')}`);
   }
 
-  return `<div class="exec-signature">
-    <div class="exec-signature-title">Performance Signature</div>
-    <div class="exec-signature-grid">
-      <div class="exec-signature-item">
-        <div class="exec-signature-label">APM trajectory</div>
-        <div class="exec-signature-spark">${apmSpark}</div>
-        <div class="exec-signature-value">Peak ${apmPeak}</div>
-      </div>
-      <div class="exec-signature-item">
-        <div class="exec-signature-label">Economy trajectory</div>
-        <div class="exec-signature-spark">${resSpark}</div>
-        <div class="exec-signature-value">Peak ${Math.round(resPeak)}</div>
-      </div>
-      <div class="exec-signature-item">
-        <div class="exec-signature-label">Objects trajectory</div>
-        <div class="exec-signature-spark">${objSpark}</div>
-        <div class="exec-signature-value">Peak ${Math.round(objPeak)}</div>
-      </div>
-      ${ratingSpark ? `<div class="exec-signature-item">
-        <div class="exec-signature-label">Rating history</div>
-        <div class="exec-signature-spark">${ratingSpark}</div>
-        <div class="exec-signature-value">${ratingRange}</div>
-      </div>` : ''}
-    </div>
-  </div>`;
-}
-
-function renderSparkline(values, color) {
-  if (!Array.isArray(values) || values.length === 0) return '<span class="sparkline-empty">—</span>';
-  const valid = values.map(v => v == null ? null : Number(v)).filter(v => v != null);
-  if (valid.length < 2) return '<span class="sparkline-empty">—</span>';
-  const min = Math.min(...valid);
-  const max = Math.max(...valid);
-  const range = max - min || 1;
-  const width = 120;
-  const height = 30;
-  const step = width / (values.length - 1);
-  const points = values.map((v, i) => {
-    if (v == null) return null;
-    const x = i * step;
-    const y = height - ((v - min) / range) * height;
-    return `${x},${y}`;
-  }).filter(Boolean).join(' ');
-  return `<svg viewBox="0 0 ${width} ${height}" class="sparkline" preserveAspectRatio="none">
-    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
-}
-
-function renderFindingsSection(stats, insights) {
-  if (!insights || insights.length === 0) return '';
-
-  // Separate insights by category, excluding repetitive age-consistency cards
-  const strengthInsights = insights.filter(i => i.type === 'strength');
-  const weaknessInsights = insights.filter(i => i.type === 'weakness');
-  const patternInsights = insights.filter(i => i.type === 'pattern');
-
-  const heroStrength = strengthInsights[0] || null;
-  const heroWeakness = weaknessInsights[0] || null;
-
-  return `<div class="block">
-    <div class="section-title">${t('sections.insights')}</div>
-    ${renderFindingsHero(heroStrength, heroWeakness, stats)}
-    ${renderFindingsCharts(stats)}
-    ${renderFindingsSupporting(patternInsights, weaknessInsights.slice(1), strengthInsights.slice(1))}
-    ${renderAgeStability(stats)}
-  </div>`;
-}
-
-function renderFindingsHero(strength, weakness, stats) {
-  const strengthCard = renderHeroCard(strength, 'strength', stats);
-  const weaknessCard = renderHeroCard(weakness, 'weakness', stats);
-  if (!strengthCard && !weaknessCard) return '';
-  const cards = [strengthCard, weaknessCard].filter(Boolean);
-  return `<div class="findings-hero" style="grid-template-columns: repeat(${cards.length}, 1fr);">
-    ${cards.join('')}
-  </div>`;
-}
-
-function renderHeroCard(insight, fallbackType, stats) {
-  if (!insight) return '';
-
-  const typeClass = insight.type || fallbackType;
-  const title = t(insight.titleKey, insight.params);
-  const body = t(insight.bodyKey, insight.params);
-
-  let metricNumber = '';
-  let metricUnit = '';
-  let barWidth = 0;
-  let barColor = '';
-
-  if (typeClass === 'strength') {
-    if (insight.id === 'castle_resources') {
-      metricNumber = `+${insight.params.diff}`;
-      metricUnit = 'resources at Castle';
-      barWidth = Math.min(insight.params.diff / 3, 100);
-      barColor = 'var(--accent-green)';
-    } else {
-      metricNumber = `${insight.params.wr}%`;
-      metricUnit = unitDisplayName(insight.params.unit);
-      barWidth = insight.params.wr;
-      barColor = insight.params.wr >= 65 ? 'var(--accent-green)' : 'var(--accent-blue)';
-    }
-  } else if (typeClass === 'weakness') {
-    if (insight.id === 'civ_dependency') {
-      metricNumber = `${insight.params.mainWr}%`;
-      metricUnit = insight.params.civ;
-      barWidth = insight.params.mainWr;
-      barColor = 'var(--accent-red)';
-    } else if (insight.id === 'castle_resources') {
-      metricNumber = `-${insight.params.diff}`;
-      metricUnit = 'resources at Castle';
-      barWidth = Math.min(insight.params.diff / 3, 100);
-      barColor = 'var(--accent-red)';
-    } else if (insight.id.startsWith('timing_')) {
-      const gapVal = parseFloat(String(insight.params.gap).replace(/[^0-9.]/g, '')) || 0;
-      metricNumber = insight.params.gap;
-      metricUnit = insight.params.tech;
-      barWidth = Math.min(gapVal / 5, 100);
-      barColor = 'var(--accent-red)';
-    } else if (insight.id === 'matchup_weakness') {
-      metricNumber = `${insight.params.wr}%`;
-      metricUnit = `${insight.params.civ}`;
-      barWidth = insight.params.wr;
-      barColor = 'var(--accent-red)';
-    } else {
-      metricNumber = `${insight.params.wr}%`;
-      metricUnit = unitDisplayName(insight.params.unit) || insight.params.civ || '';
-      barWidth = insight.params.wr;
-      barColor = 'var(--accent-red)';
-    }
+  const army = getArmyComposition(stats);
+  if (army) {
+    const catLabels = { cavalry: 'Cav', archers: 'Arch', infantry: 'Inf', siege: 'Siege' };
+    lines.push(`${t('summary.army')}: ${army.map(a => `${a.pct}% ${catLabels[a.cat] || a.cat}`).join(' / ')}`);
   }
 
-  const colorClass = typeClass === 'strength' ? (insight.params.wr >= 65 ? 'green' : 'blue') : 'red';
-  const label = typeClass === 'strength' ? t('insights.strength') : t('insights.weakness');
+  const ageParts = [];
+  if (stats.avg_feudal != null) ageParts.push(`${t('summary.feudal')} ${formatHms(stats.avg_feudal)}`);
+  if (stats.avg_castle != null) ageParts.push(`${t('summary.castle')} ${formatHms(stats.avg_castle)}`);
+  if (stats.avg_imperial != null) ageParts.push(`${t('summary.imperial')} ${formatHms(stats.avg_imperial)}`);
+  if (ageParts.length) lines.push(ageParts.join(' | '));
 
-  return `<div class="findings-hero-card ${typeClass}">
-    <div class="findings-hero-label">${escapeHtml(label)}</div>
-    <div class="findings-hero-title">${escapeHtml(title)}</div>
-    <div class="findings-hero-metric">
-      <span class="findings-hero-number ${colorClass}">${escapeHtml(metricNumber)}</span>
-      <span class="findings-hero-unit">${escapeHtml(metricUnit)}</span>
-    </div>
-    <div class="findings-hero-body">${escapeHtml(body)}</div>
-    <div class="findings-hero-bar">
-      <div class="findings-hero-bar-fill" style="width:${barWidth}%;background:${barColor}"></div>
-    </div>
-  </div>`;
-}
-
-function renderFindingsCharts(stats) {
-  const unitChart = renderUnitEffectivenessChart(stats);
-  const civChart = renderCivDependencyChart(stats);
-  if (!unitChart && !civChart) return '';
-  return `<div class="findings-panels">
-    ${unitChart || ''}
-    ${civChart || ''}
-  </div>`;
-}
-
-function renderUnitEffectivenessChart(stats) {
-  const unitEff = stats.unit_effectiveness || {};
-  const entries = Object.entries(unitEff)
-    .filter(([, d]) => d.matches >= 3 && (d.share || 0) >= 5)
-    .sort((a, b) => b[1].wr - a[1].wr);
-
-  if (entries.length === 0) return '';
-
-  const rows = entries.map(([name, d]) => {
-    const wr = d.wr;
-    const color = d.label === 'strong' ? 'var(--accent-green)' : d.label === 'weak' ? 'var(--accent-red)' : 'var(--accent-blue)';
-    const meta = `${d.matches} games · ${d.avg}/game · ${d.share}% army`;
-    return `<div class="findings-chart-row">
-      <div class="findings-chart-label">${escapeHtml(unitDisplayName(name))}</div>
-      <div class="findings-chart-track">
-        <div class="findings-chart-fill" style="width:${wr}%;background:${color}"></div>
-      </div>
-      <div class="findings-chart-value" style="color:${color}">${wr}%</div>
-      <div class="findings-chart-meta">${escapeHtml(meta)}</div>
-    </div>`;
-  }).join('');
-
-  return `<div class="findings-panel">
-    <div class="findings-panel-header">
-      <div class="findings-panel-title">${t('tabs.armyComposition')}</div>
-      <div class="findings-panel-subtitle">WR by unit type</div>
-    </div>
-    ${rows}
-  </div>`;
-}
-
-function renderCivDependencyChart(stats) {
-  const dep = stats.civ_dependency;
-  if (!dep || dep.mainGames < 3) return '';
-
-  const rows = [];
-  const mainColor = dep.mainWr >= 50 ? 'var(--accent-green)' : dep.mainWr >= 40 ? 'var(--accent-blue)' : 'var(--accent-red)';
-  rows.push(`<div class="findings-chart-row">
-    <div class="findings-chart-label">${escapeHtml(dep.mainCiv)}</div>
-    <div class="findings-chart-track">
-      <div class="findings-chart-fill" style="width:${dep.mainWr}%;background:${mainColor}"></div>
-    </div>
-    <div class="findings-chart-value" style="color:${mainColor}">${dep.mainWr}%</div>
-    <div class="findings-chart-meta">${dep.mainGames} games · main civ</div>
-  </div>`);
-
-  if (dep.otherGames >= 3) {
-    const otherColor = dep.otherWr >= 50 ? 'var(--accent-green)' : dep.otherWr >= 40 ? 'var(--accent-blue)' : 'var(--accent-red)';
-    rows.push(`<div class="findings-chart-row">
-      <div class="findings-chart-label">${t('insights.others') || 'Others'}</div>
-      <div class="findings-chart-track">
-        <div class="findings-chart-fill" style="width:${dep.otherWr}%;background:${otherColor}"></div>
-      </div>
-      <div class="findings-chart-value" style="color:${otherColor}">${dep.otherWr}%</div>
-      <div class="findings-chart-meta">${dep.otherGames} games · all other civs</div>
-    </div>`);
+  const civs = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  if (civs.length) {
+    lines.push(`Civs: ${civs.map(([c, p]) => `${c} ${p}% (${stats.civ_win_percent?.[c] ?? '-'}% WR)`).join(', ')}`);
   }
 
-  return `<div class="findings-panel">
-    <div class="findings-panel-header">
-      <div class="findings-panel-title">${t('sections.civs')}</div>
-      <div class="findings-panel-subtitle">WR by civilization</div>
-    </div>
-    ${rows.join('')}
-  </div>`;
-}
-
-function renderFindingsSupporting(patterns, extraWeaknesses, extraStrengths) {
-  const all = [...patterns, ...extraWeaknesses, ...extraStrengths];
-  if (all.length === 0) return '';
-
-  const cards = all.slice(0, 6).map(insight => {
-    const title = t(insight.titleKey, insight.params);
-    const body = t(insight.bodyKey, insight.params);
-    const confidenceLabel = t(`insights.confidence${insight.confidence === 'high' ? 'High' : insight.confidence === 'medium' ? 'Medium' : 'Low'
-      }`);
-    const typeLabel = t(`insights.${insight.type}`);
-    return `<div class="findings-mini">
-      <div class="findings-mini-header">
-        <span class="findings-mini-type">${escapeHtml(typeLabel)}</span>
-        <span class="findings-mini-confidence">${escapeHtml(confidenceLabel)}</span>
-      </div>
-      <div class="findings-mini-title">${escapeHtml(title)}</div>
-      <div class="findings-mini-body">${escapeHtml(body)}</div>
-    </div>`;
-  }).join('');
-
-  return `<div class="findings-supporting">${cards}</div>`;
-}
-
-function renderAgeStability(stats) {
-  const ages = ['feudal', 'castle', 'imperial'];
-  const baselines = stats.baselines || {};
-  const blKeys = { feudal: 't_feudal', castle: 't_castle', imperial: null };
-  const items = [];
-  for (const age of ages) {
-    const data = stats.age_slow_impact?.[age];
-    const avg = stats['avg_' + age + '_hms'] || '—';
-    const bl = blKeys[age] ? baselines[blKeys[age]] : null;
-
-    if (!data || data.slowCount < 2) {
-      items.push(`<div class="age-stability-item">
-        <div class="age-stability-label">${t(age)}</div>
-        <div class="age-stability-value">${avg}</div>
-        <div class="age-stability-gap">—</div>
-      </div>`);
-      continue;
-    }
-
-    // Use IQR from baselines when available (more robust than stddev for skewed data)
-    const iqr = bl ? Math.round(bl.iqr) : Math.round(data.std);
-    const gapClass = iqr > 45 ? 'text-red' : iqr > 25 ? 'text-yellow' : 'text-green';
-
-    // Build percentile context line from baselines
-    let pctLine = '';
-    if (bl) {
-      const p25 = bl.p25 != null ? formatHms(bl.p25) : '';
-      const p75 = bl.p75 != null ? formatHms(bl.p75) : '';
-      if (p25 && p75) pctLine = `p25 ${p25} · p75 ${p75}`;
-    }
-
-    items.push(`<div class="age-stability-item">
-      <div class="age-stability-label">${t(age)}</div>
-      <div class="age-stability-value">${avg}</div>
-      <div class="age-stability-gap ${gapClass}">IQR ±${iqr}s · ${data.slowWr}% WR slow</div>
-      ${pctLine ? `<div class="age-stability-pct">${pctLine}</div>` : ''}
-    </div>`);
+  const facts = buildSummaryFacts(stats);
+  if (facts.length) {
+    lines.push('');
+    for (const f of facts) lines.push(`- ${f.text} (${f.sample} ${t('summary.games')})`);
   }
 
-  return `<div class="age-stability">
-    <div class="age-stability-title">${t('ageTimeline') || 'Age Stability'}</div>
-    <div class="age-stability-grid">${items.join('')}</div>
-  </div>`;
+  return lines.join('\n');
+}
+
+function renderSummarySection(stats) {
+  const wr = stats.win_percent || 0;
+  const wins = stats.total_wins || 0;
+  const games = stats.analyzed || 0;
+  const losses = games - wins;
+  const pp = stats.player_profile || {};
+  const perFreq = pp.per_opening_frequency || {};
+  const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+  const mainOpening = sortedOpenings[0];
+  const stability = Math.round((pp.opening_stability || 0) * 100);
+  const army = getArmyComposition(stats);
+  const catLabels = { cavalry: 'Cav', archers: 'Arch', infantry: 'Inf', siege: 'Siege' };
+  const catColors = { cavalry: 'var(--c-cav)', archers: 'var(--c-arch)', infantry: 'var(--c-inf)', siege: 'var(--c-siege)' };
+
+  let armyHtml = `<span class="text-muted">${t('app.noData')}</span>`;
+  if (army) {
+    armyHtml = army.map(a =>
+      `<span class="army-chip" style="--chip:${catColors[a.cat] || 'var(--text-muted)'}"><i></i>${a.pct}% ${catLabels[a.cat] || a.cat}</span>`
+    ).join('');
+  }
+
+  const tempoParts = [];
+  if (stats.avg_feudal != null) tempoParts.push(`<span><b>${formatHms(stats.avg_feudal)}</b> ${t('summary.feudal')}</span>`);
+  if (stats.avg_castle != null) tempoParts.push(`<span><b>${formatHms(stats.avg_castle)}</b> ${t('summary.castle')}</span>`);
+  const tempoHtml = tempoParts.length ? tempoParts.join('') : `<span class="text-muted">${t('app.noData')}</span>`;
+
+  const facts = buildSummaryFacts(stats);
+  let factsHtml = '';
+  for (const f of facts) {
+    const cls = f.bad ? 'fact-bad' : f.good ? 'fact-good' : '';
+    factsHtml += `<li class="fact ${cls}"><span class="fact-text">${escapeHtml(f.text)}</span><span class="fact-sample">${f.sample} ${t('summary.games')}</span></li>`;
+  }
+
+  let openingBarsHtml = '';
+  const maxPct = sortedOpenings[0]?.[1] || 1;
+  for (const [name, pct] of sortedOpenings.slice(0, 4)) {
+    const owr = openingWR(stats, name);
+    openingBarsHtml += `
+      <div class="obar-row">
+        <span class="obar-label">${formatOpeningName(name)}</span>
+        <div class="obar-track"><div class="obar-fill" style="width:${(pct / maxPct) * 100}%"></div></div>
+        <span class="obar-pct">${pct}%</span>
+        <span class="obar-wr ${owr.wr != null ? wrClass(owr.wr) : ''}">${owr.wr != null ? owr.wr + '%' : '—'}</span>
+      </div>`;
+  }
+
+  return `
+  <section class="sum-section">
+    <div class="sum-head">
+      <h2 class="sum-title">${t('summary.title')}</h2>
+      <button class="btn-copy" id="btn-copy-summary">${t('summary.copy')}</button>
+    </div>
+
+    <div class="hero-grid">
+      <div class="hero-card">
+        <div class="hero-label">${t('summary.winrate')}</div>
+        <div class="hero-value ${wrClass(wr)}">${wr}%</div>
+        <div class="hero-sub">${wins}W – ${losses}L · ${games} ${t('summary.games')}</div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-label">${t('summary.mainOpening')}</div>
+        <div class="hero-value hero-value-sm">${mainOpening ? formatOpeningName(mainOpening[0]) : '—'}</div>
+        <div class="hero-sub">${mainOpening ? `${mainOpening[1]}% · ${t('summary.stability')} ${stability}%` : t('app.noData')}</div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-label">${t('summary.army')}</div>
+        <div class="hero-army">${armyHtml}</div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-label">${t('summary.tempo')}</div>
+        <div class="hero-tempo">${tempoHtml}</div>
+      </div>
+    </div>
+
+    <div class="sum-columns">
+      <div class="sum-block">
+        <div class="sum-block-title">${t('summary.expect')}</div>
+        <ul class="fact-list">${factsHtml || `<li class="fact"><span class="text-muted">${t('app.noData')}</span></li>`}</ul>
+      </div>
+      <div class="sum-block">
+        <div class="sum-block-title">${t('summary.mainOpening')} · ${t('summary.frequency')} / WR</div>
+        ${openingBarsHtml || `<div class="text-muted">${t('app.noData')}</div>`}
+      </div>
+    </div>
+  </section>`;
 }
 
 // ============================================================================
-// PERFORMANCE TIMELINE (time-series from Companion data)
+// DASHBOARD — SECTION 2: SUPPORTING DATA (tabs)
 // ============================================================================
 
-function renderPerformanceTimelineSection(stats) {
-  const hasApm = (stats.apm_curve_wins || []).some(v => v != null) || (stats.apm_curve_losses || []).some(v => v != null);
-  const hasResources = (stats.resources_curve_wins || []).some(v => v != null);
-  const hasObjects = (stats.objects_curve_wins || []).some(v => v != null);
-
-  if (!hasApm && !hasResources && !hasObjects) return '';
-
-  const minutes = stats.timeline_minutes || [];
-  const maxMin = minutes.length - 1;
-
-  const apmSeries = [];
-  if (hasApm) {
-    apmSeries.push({
-      label: t('timeline.wins') || 'Wins',
-      color: 'var(--accent-green)',
-      values: stats.apm_curve_wins || [],
-      dashed: false,
-      role: 'wins',
-    });
-    apmSeries.push({
-      label: t('timeline.losses') || 'Losses',
-      color: 'var(--accent-red)',
-      values: stats.apm_curve_losses || [],
-      dashed: false,
-      role: 'losses',
-    });
-    if ((stats.opp_apm_curve || []).some(v => v != null)) {
-      apmSeries.push({
-        label: t('timeline.rivals') || 'Rivals',
-        color: 'var(--accent-blue)',
-        values: stats.opp_apm_curve || [],
-        dashed: true,
-      });
-    }
-  }
-
-  const resourcesSeries = [];
-  if (hasResources) {
-    resourcesSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.resources_curve_wins || [], role: 'wins' });
-    resourcesSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.resources_curve_losses || [], role: 'losses' });
-    if ((stats.opp_resources_curve || []).some(v => v != null)) {
-      resourcesSeries.push({ label: t('timeline.rivals') || 'Rivals', color: 'var(--accent-blue)', values: stats.opp_resources_curve || [], dashed: true });
-    }
-  }
-
-  const objectsSeries = [];
-  if (hasObjects) {
-    objectsSeries.push({ label: t('timeline.wins') || 'Wins', color: 'var(--accent-green)', values: stats.objects_curve_wins || [], role: 'wins' });
-    objectsSeries.push({ label: t('timeline.losses') || 'Losses', color: 'var(--accent-red)', values: stats.objects_curve_losses || [], role: 'losses' });
-    if ((stats.opp_objects_curve || []).some(v => v != null)) {
-      objectsSeries.push({ label: t('timeline.rivals') || 'Rivals', color: 'var(--accent-blue)', values: stats.opp_objects_curve || [], dashed: true });
-    }
-  }
-
-  return `<div class="block performance-timeline">
-    <div class="section-title">${t('sections.performanceTimeline') || 'Performance Timeline'}</div>
-    <div class="timeline-intro">Average curves across analyzed matches. Solid lines = your wins/losses. Dashed = opponent average.</div>
-    <div class="timeline-grid">
-      ${hasApm ? renderTimelineCard('APM / min', 'Actions per minute', apmSeries, maxMin, { suffix: '' }) : ''}
-      ${hasResources ? renderTimelineCard('Resources', 'Total stockpiled resources', resourcesSeries, maxMin, { suffix: '' }) : ''}
-      ${hasObjects ? renderTimelineCard('Objects', 'Total objects (vils + army + buildings, not pop cap)', objectsSeries, maxMin, { suffix: '' }) : ''}
-    </div>
-    ${renderTimelineMetrics(stats)}
-  </div>`;
-}
-
-function renderTimelineCard(title, subtitle, series, maxMin, options = {}) {
-  const chart = renderSvgLineChart(series, maxMin, options);
-  return `<div class="timeline-card">
-    <div class="timeline-card-header">
-      <div class="timeline-card-title">${escapeHtml(title)}</div>
-      <div class="timeline-card-subtitle">${escapeHtml(subtitle)}</div>
-    </div>
-    ${chart}
-  </div>`;
-}
-
-function renderSvgLineChart(series, maxMin, options = {}) {
-  const gradId = 'gapGrad_' + (renderSvgLineChart._uid = (renderSvgLineChart._uid || 0) + 1);
-  const width = 520;
-  const height = 180;
-  const padding = { top: 12, right: 14, bottom: 32, left: 48 };
-  const chartW = width - padding.left - padding.right;
-  const chartH = height - padding.top - padding.bottom;
-
-  // ---- Moving average smoothing (3-min window) ----
-  function smooth(values) {
-    const result = [];
-    for (let i = 0; i < values.length; i++) {
-      let sum = 0;
-      let count = 0;
-      for (let j = Math.max(0, i - 1); j <= Math.min(values.length - 1, i + 1); j++) {
-        if (values[j] != null) { sum += values[j]; count++; }
-      }
-      result.push(count > 0 ? sum / count : null);
-    }
-    return result;
-  }
-
-  const smoothed = series.map(s => ({ ...s, values: smooth(s.values) }));
-
-  // Flatten all values to find global min/max
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const s of smoothed) {
-    for (const v of s.values) {
-      if (v != null) {
-        minY = Math.min(minY, v);
-        maxY = Math.max(maxY, v);
-      }
-    }
-  }
-  if (!isFinite(minY) || !isFinite(maxY)) return '<div class="timeline-no-data">No data</div>';
-  if (minY === maxY) { minY = 0; maxY = maxY * 1.2 || 1; }
-
-  const yRange = maxY - minY;
-  const xStep = maxMin > 0 ? chartW / maxMin : chartW;
-
-  function xFor(i) { return padding.left + i * xStep; }
-  function yFor(v) { return padding.top + chartH - ((v - minY) / yRange) * chartH; }
-
-  // ---- Horizontal grid lines + axis labels ----
-  let hGrid = '';
-  for (let i = 0; i <= 5; i++) {
-    const y = padding.top + (chartH * i) / 5;
-    const val = maxY - (yRange * i) / 5;
-    hGrid += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="timeline-grid-line"/>`;
-    hGrid += `<text x="${padding.left - 8}" y="${y + 3}" class="timeline-axis-text" text-anchor="end">${formatAxisNumber(val)}</text>`;
-  }
-
-  // ---- Vertical grid lines every 5 min + labels ----
-  let vGrid = '';
-  let xLabels = '';
-  vGrid += `<line x1="${padding.left}" y1="${padding.top + chartH}" x2="${width - padding.right}" y2="${padding.top + chartH}" class="timeline-axis-line"/>`;
-  for (let i = 0; i <= maxMin; i += 5) {
-    const x = xFor(i);
-    vGrid += `<line x1="${x}" y1="${padding.top}" x2="${x}" y2="${padding.top + chartH}" class="timeline-grid-line"/>`;
-    vGrid += `<line x1="${x}" y1="${padding.top + chartH}" x2="${x}" y2="${padding.top + chartH + 5}" class="timeline-axis-line"/>`;
-    xLabels += `<text x="${x}" y="${height - 6}" class="timeline-axis-text" text-anchor="middle" style="font-weight:700;">${i}m</text>`;
-  }
-
-  // ---- Win/Loss gap fill area ----
-  let gapFill = '';
-  const winSeries = smoothed.find(s => s.role === 'wins');
-  const lossSeries = smoothed.find(s => s.role === 'losses');
-  if (winSeries && lossSeries && winSeries.values.length > 0 && lossSeries.values.length > 0) {
-    let topPath = '';   // whichever is higher (wins or losses)
-    let botPath = '';
-    let first = true;
-    for (let i = 0; i <= maxMin; i++) {
-      const wv = winSeries.values[i];
-      const lv = lossSeries.values[i];
-      if (wv == null || lv == null) continue;
-      const wy = yFor(wv);
-      const ly = yFor(lv);
-      const topY = Math.min(wy, ly);
-      const botY = Math.max(wy, ly);
-      if (first) {
-        topPath += `M ${xFor(i)} ${topY}`;
-        botPath = `L ${xFor(i)} ${botY} ` + botPath; // reverse order later
-        first = false;
-      } else {
-        topPath += ` L ${xFor(i)} ${topY}`;
-        botPath = `L ${xFor(i)} ${botY} ` + botPath;
-      }
-    }
-    if (!first) {
-      botPath = botPath.trim();
-      gapFill = `<path d="${topPath} ${botPath} Z" fill="url(#${gradId})" class="timeline-gap-fill" opacity="0.38"/>`;
-    }
-  }
-
-  // ---- Paths and points ----
-  let paths = '';
-  let points = '';
-  for (const s of series) {
-    let pathD = '';
-    let first = true;
-    // Points use original (unsmoothed) values for accuracy
-    for (let i = 0; i < s.values.length; i++) {
-      const v = s.values[i];
-      if (v == null) continue;
-      const x = xFor(i);
-      const y = yFor(v);
-      if (first) { pathD += `M ${x} ${y}`; first = false; }
-      else { pathD += ` L ${x} ${y}`; }
-      points += `<circle cx="${x}" cy="${y}" r="1.5" fill="${s.color}" class="timeline-point"/>`;
-    }
-    // Path uses smoothed values
-    const smoothedVals = smoothed.find(ss => ss === s)?.values || s.values;
-    let smoothD = '';
-    let sf = true;
-    for (let i = 0; i < smoothedVals.length; i++) {
-      const v = smoothedVals[i];
-      if (v == null) continue;
-      const x = xFor(i);
-      const y = yFor(v);
-      if (sf) { smoothD += `M ${x} ${y}`; sf = false; }
-      else { smoothD += ` L ${x} ${y}`; }
-    }
-    if (smoothD) {
-      paths += `<path d="${smoothD}" fill="none" stroke="${s.color}" stroke-width="2.5" ${s.dashed ? 'stroke-dasharray="5,4"' : ''} class="timeline-path"/>`;
-    }
-  }
-
-  // ---- Legend ----
-  let legend = '';
-  for (const s of series) {
-    legend += `<div class="timeline-legend-item">
-      <span class="timeline-legend-line" style="background:${s.color}; ${s.dashed ? 'background: repeating-linear-gradient(90deg, ' + s.color + ', ' + s.color + ' 4px, transparent 4px, transparent 8px);' : ''}"></span>
-      <span class="timeline-legend-label">${escapeHtml(s.label)}</span>
-    </div>`;
-  }
-
-  return `<div class="timeline-chart-wrap">
-    <svg viewBox="0 0 ${width} ${height}" class="timeline-svg" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent-green)" stop-opacity="0.15"/>
-          <stop offset="100%" stop-color="var(--accent-red)" stop-opacity="0.15"/>
-        </linearGradient>
-      </defs>
-      ${hGrid}
-      ${vGrid}
-      ${gapFill}
-      ${paths}
-      ${points}
-      ${xLabels}
-    </svg>
-    <div class="timeline-legend">${legend}</div>
-  </div>`;
-}
-
-function formatAxisNumber(n) {
-  if (n >= 1000) return Math.round(n / 100) / 10 + 'k';
-  return Math.round(n).toString();
-}
-
-function renderTimelineMetrics(stats) {
-  const cards = [];
-
-  const apmPeak = stats.apm_peak || {};
-  if (apmPeak.wins != null || apmPeak.losses != null) {
-    const diff = apmPeak.losses != null && apmPeak.wins != null ? apmPeak.wins - apmPeak.losses : null;
-    const diffText = diff != null ? ` (${diff > 0 ? '+' : ''}${Math.round(diff)} in wins)` : '';
-    cards.push(renderMetricCard('Peak APM', `${apmPeak.wins ?? apmPeak.losses ?? '—'}${diffText}`, 'var(--accent-blue)', `Min ${apmPeak.win_minute ?? apmPeak.loss_minute ?? '—'}`));
-  }
-
-  const dropoff = stats.apm_dropoff || {};
-  if (dropoff.wins != null || dropoff.losses != null) {
-    const val = dropoff.wins ?? dropoff.losses;
-    cards.push(renderMetricCard('APM Drop-off', `-${val}`, 'var(--accent-orange)', 'Peak vs late game'));
-  }
-
-  const resPeak = stats.resource_peak || {};
-  if (resPeak.wins != null || resPeak.losses != null) {
-    const diff = resPeak.wins != null && resPeak.losses != null ? resPeak.wins - resPeak.losses : null;
-    const diffText = diff != null ? ` (${diff > 0 ? '+' : ''}${Math.round(diff)})` : '';
-    cards.push(renderMetricCard('Peak Resources', `${Math.round(resPeak.wins ?? resPeak.losses ?? 0)}${diffText}`, 'var(--accent-green)', `Min ${resPeak.win_minute ?? resPeak.loss_minute ?? '—'}`));
-  }
-
-  const objPeak = stats.object_peak || {};
-  if (objPeak.wins != null || objPeak.losses != null) {
-    cards.push(renderMetricCard('Peak Objects', Math.round(objPeak.wins ?? objPeak.losses ?? 0), 'var(--accent-purple)', `Min ${objPeak.win_minute ?? objPeak.loss_minute ?? '—'}`));
-  }
-
-  const ageSnap = stats.age_snapshots || {};
-  const castleSnap = ageSnap.castle;
-  if (castleSnap && (castleSnap.wins?.resources != null || castleSnap.losses?.resources != null)) {
-    const val = castleSnap.wins?.resources ?? castleSnap.losses?.resources;
-    const diff = castleSnap.wins?.resources != null && castleSnap.losses?.resources != null ? Math.round(castleSnap.wins.resources - castleSnap.losses.resources) : null;
-    const diffText = diff != null ? ` (${diff > 0 ? '+' : ''}${diff} in wins)` : '';
-    cards.push(renderMetricCard('Res. at Castle', `${Math.round(val)}${diffText}`, 'var(--accent-cyan)', 'Avg stockpile'));
-  }
-
-  if (cards.length === 0) return '';
-  return `<div class="timeline-metrics">${cards.join('')}</div>`;
-}
-
-function renderMetricCard(label, value, color, sub) {
-  return `<div class="timeline-metric-card">
-    <div class="timeline-metric-label">${escapeHtml(label)}</div>
-    <div class="timeline-metric-value" style="color:${color}">${value}</div>
-    <div class="timeline-metric-sub">${escapeHtml(sub)}</div>
-  </div>`;
-}
-
-// ============================================================================
-// BUILD ORDER TIMELINE (swimlane design)
-// ============================================================================
-
-const BO_LANES = [
-  { key: 'age', label: 'Ages', color: 'var(--accent-green)', top: true },
-  { key: 'building', label: 'Buildings', color: 'var(--accent-orange)', top: true },
-  { key: 'tech', label: 'Techs', color: 'var(--accent-cyan)', top: false },
-];
-
-function renderBuildOrderTimelineSection(stats) {
-  const bo = stats.build_order;
-  if (!bo) return '';
-
-  const hasBuildings = Object.keys(bo.wins?.buildings || {}).length > 0
-    || Object.keys(bo.losses?.buildings || {}).length > 0;
-  const hasTechs = Object.keys(bo.wins?.techs || {}).length > 0
-    || Object.keys(bo.losses?.techs || {}).length > 0;
-
-  if (!hasBuildings && !hasTechs) return '';
-
-  const maxMin = 40;
-  const lanes = { age: [], building: [], tech: [] };
-
-  // Age up markers from averages
-  for (const age of ['feudal', 'castle', 'imperial']) {
-    const avg = stats['avg_' + age];
-    if (avg != null) {
-      lanes.age.push({
-        time: avg,
-        minute: avg / 60,
-        label: t(age),
-        color: age === 'feudal' ? 'var(--accent-green)' : age === 'castle' ? 'var(--accent-blue)' : 'var(--accent-purple)',
-      });
-    }
-  }
-
-  // Building markers
-  const buildingNames = new Set([
-    ...Object.keys(bo.wins?.buildings || {}),
-    ...Object.keys(bo.losses?.buildings || {}),
-  ]);
-  for (const name of buildingNames) {
-    const win = bo.wins?.buildings?.[name];
-    const loss = bo.losses?.buildings?.[name];
-    const val = win?.avg ?? loss?.avg;
-    if (val != null && val / 60 <= maxMin) {
-      lanes.building.push({
-        time: val,
-        minute: val / 60,
-        label: formatBuildingName(name),
-        color: 'var(--accent-orange)',
-        winTime: win?.avg_hms,
-        lossTime: loss?.avg_hms,
-      });
-    }
-  }
-
-  // Tech markers
-  const techNames = new Set([
-    ...Object.keys(bo.wins?.techs || {}),
-    ...Object.keys(bo.losses?.techs || {}),
-  ]);
-  for (const name of techNames) {
-    const win = bo.wins?.techs?.[name];
-    const loss = bo.losses?.techs?.[name];
-    const val = win?.avg ?? loss?.avg;
-    if (val != null && val / 60 <= maxMin) {
-      lanes.tech.push({
-        time: val,
-        minute: val / 60,
-        label: formatTechName(name),
-        color: 'var(--accent-cyan)',
-        winTime: win?.avg_hms,
-        lossTime: loss?.avg_hms,
-      });
-    }
-  }
-
-  if (lanes.age.length + lanes.building.length + lanes.tech.length === 0) return '';
-
-  return `<div class="block build-order-timeline">
-    <div class="section-title">${t('sections.buildOrderTimeline') || 'Build Order Timeline'}</div>
-    <div class="bo-intro">Average first-occurrence timings across analyzed matches. Each category lives on its own lane to avoid overlap.</div>
-    <div class="bo-track">
-      ${renderBoSwimlane(lanes, maxMin)}
-    </div>
-    <div class="bo-legend">
-      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-green)"></span> Feudal</span>
-      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-blue)"></span> Castle</span>
-      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-purple)"></span> Imperial</span>
-      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-orange)"></span> Building</span>
-      <span class="bo-legend-item"><span class="bo-dot" style="background:var(--accent-cyan)"></span> Tech</span>
-    </div>
-  </div>`;
-}
-
-function renderBoSwimlane(lanes, maxMin) {
-  const width = 1000;
-  const laneHeight = 75;
-  const paddingX = 50;
-  const topPadding = 22;
-  const bottomPadding = 28;
-  const height = topPadding + BO_LANES.length * laneHeight + bottomPadding;
-
-  let svg = `<svg viewBox="0 0 ${width} ${height}" class="bo-svg" preserveAspectRatio="none">`;
-
-  // Lane labels and horizontal tracks
-  for (let i = 0; i < BO_LANES.length; i++) {
-    const laneDef = BO_LANES[i];
-    const y = topPadding + i * laneHeight + laneHeight / 2;
-    svg += `<text x="8" y="${y + 4}" class="bo-lane-label" text-anchor="start">${escapeHtml(laneDef.label)}</text>`;
-    svg += `<line x1="${paddingX}" y1="${y}" x2="${width - paddingX}" y2="${y}" class="bo-track-line"/>`;
-  }
-
-  // X axis ticks and labels
-  for (let m = 0; m <= maxMin; m += 5) {
-    const x = paddingX + (m / maxMin) * (width - 2 * paddingX);
-    svg += `<line x1="${x}" y1="${topPadding}" x2="${x}" y2="${height - bottomPadding}" class="bo-grid-line"/>`;
-    svg += `<text x="${x}" y="${height - 8}" class="bo-axis-text" text-anchor="middle">${m}m</text>`;
-  }
-
-  // Markers per lane
-  for (let i = 0; i < BO_LANES.length; i++) {
-    const laneDef = BO_LANES[i];
-    const laneItems = lanes[laneDef.key] || [];
-    if (laneItems.length === 0) continue;
-
-    const trackY = topPadding + i * laneHeight + laneHeight / 2;
-    const placed = placeBoLabels(laneItems, width, paddingX, maxMin);
-
-    for (const m of placed) {
-      const x = m.x;
-      const labelY = laneDef.top ? trackY - 14 : trackY + 26;
-      const lineEndY = laneDef.top ? trackY - 8 : trackY + 8;
-
-      svg += `<line x1="${x}" y1="${trackY}" x2="${x}" y2="${lineEndY}" stroke="${m.color}" stroke-width="2"/>`;
-      svg += `<circle cx="${x}" cy="${trackY}" r="5" fill="${m.color}"/>`;
-      svg += `<text x="${x}" y="${labelY}" class="bo-marker-text" text-anchor="middle" fill="${m.color}">${escapeHtml(m.label)}</text>`;
-      if (m.winTime || m.lossTime) {
-        const subY = laneDef.top ? trackY - 24 : trackY + 38;
-        const subText = m.winTime && m.lossTime ? `W ${m.winTime} · L ${m.lossTime}` : (m.winTime || m.lossTime);
-        svg += `<text x="${x}" y="${subY}" class="bo-marker-sub" text-anchor="middle">${escapeHtml(subText)}</text>`;
-      }
-    }
-  }
-
-  svg += `</svg>`;
-  return svg;
-}
-
-function placeBoLabels(items, width, paddingX, maxMin) {
-  // Assign x positions and sort by x
-  const placed = items.map(m => ({
-    ...m,
-    x: paddingX + (m.minute / maxMin) * (width - 2 * paddingX),
-  })).sort((a, b) => a.x - b.x);
-
-  // Simple collision avoidance: if two labels would overlap, hide the less important one
-  const minGap = 55;
-  const visible = [];
-  for (const m of placed) {
-    const tooClose = visible.some(v => Math.abs(v.x - m.x) < minGap);
-    if (!tooClose) visible.push(m);
-  }
-  return visible;
-}
-
-function formatBuildingName(name) {
-  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
-
-function formatTechName(name) {
-  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
-
-function renderTimingAnalysisCard(stats) {
-  const interpretations = stats.timing_interpretation || [];
-  const feudal = stats.avg_feudal || 0;
-  const castle = stats.avg_castle || 0;
-  const imperial = stats.avg_imperial || 0;
-  const duration = stats.avg_duration_hms || 'N/A';
-
-  let leftHtml = '';
-  const ages = [
-    { key: 'feudal', label: t('feudal'), color: 'var(--accent-green)' },
-    { key: 'castle', label: t('castle'), color: 'var(--accent-blue)' },
-    { key: 'imperial', label: t('imperial'), color: 'var(--accent-purple)' },
+function renderDataSection(stats) {
+  const tabs = [
+    { id: 'openings', label: t('summary.tabOpenings'), render: () => renderTabOpenings(stats) },
+    { id: 'units', label: t('summary.tabUnits'), render: () => renderTabUnits(stats) },
+    { id: 'economy', label: t('summary.tabEconomy'), render: () => renderTabEconomy(stats) },
+    { id: 'techs', label: t('summary.tabTechs'), render: () => renderTabTechs(stats) },
+    { id: 'mapscivs', label: t('summary.tabMapsCivs'), render: () => renderTabMapsCivs(stats) },
+    { id: 'history', label: t('summary.tabHistory'), render: () => renderTabHistory(stats) },
   ];
-  for (const age of ages) {
-    const avg = stats['avg_' + age.key + '_hms'] || 'N/A';
-    const winAvg = stats.age_time_win_avg?.[age.key];
-    const lossAvg = stats.age_time_loss_avg?.[age.key];
-    let diffHtml = '';
-    if (winAvg != null && lossAvg != null) {
-      const gap = lossAvg - winAvg;
-      if (gap > 30) {
-        diffHtml = `<div class="timing-diff">+${formatHms(gap)} in losses</div>`;
-      }
-    }
-    leftHtml += `<div class="timing-age-row">
-      <div class="timing-age-header">
-        <span class="timing-age-label" style="color:${age.color};">${age.label}</span>
-        <span class="timing-age-value">${avg}</span>
-      </div>
-      ${diffHtml}
-    </div>`;
-  }
 
-  let rightHtml = '';
-  for (const interp of interpretations.slice(0, 5)) {
-    const iconColor = interp.type === 'positive' ? 'var(--accent-green)' : interp.type === 'warning' ? 'var(--accent-yellow)' : 'var(--accent-blue)';
-    rightHtml += `<div class="interpretation-row">
-      <span class="interpretation-icon" style="color:${iconColor};">${interp.icon}</span>
-      <span class="interpretation-text"><strong>${interp.timing}${interp.value ? ` (${interp.value})` : ''}</strong> — ${interp.conclusion}</span>
-    </div>`;
-  }
+  const nav = tabs.map((tab, i) =>
+    `<button class="dtab-btn${i === 0 ? ' active' : ''}" data-dtab="${tab.id}">${tab.label}</button>`
+  ).join('');
 
-  return `<div class="card timing-analysis-card">
-    <div class="timing-analysis-header">
-      <div class="card-label">${t('ageTimeline')}</div>
-      <div class="timing-duration">${duration}</div>
-    </div>
-    <div class="analysis-two-col">
-      <div>
-        <div class="section-label">Average Times</div>
-        ${leftHtml}
-      </div>
-      <div>
-        <div class="section-label">${t('interpretation')}</div>
-        ${rightHtml || '<div class="card-subtitle">No interpretations available.</div>'}
-      </div>
-    </div>
-  </div>`;
+  const panels = tabs.map((tab, i) =>
+    `<div class="dtab-panel${i === 0 ? ' active' : ''}" data-dtab-panel="${tab.id}">${tab.render()}</div>`
+  ).join('');
+
+  return `
+  <section class="data-section">
+    <h2 class="sum-title">${t('summary.dataTitle')}</h2>
+    <div class="dtab-nav">${nav}</div>
+    ${panels}
+  </section>`;
 }
 
-function renderDetailedAnalysisCard(stats) {
-  const tabIds = ['overview', 'military', 'economy', 'openings', 'maps', 'civs', 'techs'];
-  const tabLabels = [t('sections.overview'), t('sections.military'), t('sections.economy'), t('sections.openings'), t('sections.maps'), t('sections.civs'), t('sections.techs')];
+function setupDataTabs(container) {
+  container.querySelectorAll('.dtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.dtab;
+      container.querySelectorAll('.dtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      container.querySelectorAll('.dtab-panel').forEach(p => p.classList.toggle('active', p.dataset.dtabPanel === id));
+    });
+  });
 
-  let html = `<div class="card detailed-analysis-card">`;
-  html += `<div class="tabs-nav">`;
-  for (let i = 0; i < tabIds.length; i++) {
-    html += `<button class="tab-btn ${i === 0 ? 'active' : ''}" data-tab="${tabIds[i]}">${tabLabels[i]}</button>`;
+  const copyBtn = container.querySelector('#btn-copy-summary');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const text = buildSummaryText(currentPlayerStats);
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      const original = copyBtn.textContent;
+      copyBtn.textContent = t('summary.copied');
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = original;
+        copyBtn.classList.remove('copied');
+      }, 1500);
+    });
   }
-  html += `</div>`;
+}
 
-  html += buildOverviewPanel(stats, tabIds[0]);
-  html += buildMilitaryPanel(stats, tabIds[1]);
-  html += buildEconomyPanel(stats, tabIds[2]);
-  html += buildOpeningsPanel(stats, tabIds[3]);
-  html += buildMapsPanel(stats, tabIds[4]);
-  html += buildCivsPanel(stats, tabIds[5]);
-  html += buildTechTimingsPanel(stats, tabIds[6]);
+function kvRow(label, value, cls = '') {
+  return `<div class="kv-row"><span class="kv-label">${label}</span><span class="kv-value ${cls}">${value}</span></div>`;
+}
 
-  html += `</div>`;
+function hbarRow(label, pct, maxPct, right, color) {
+  return `
+    <div class="hbar-row">
+      <span class="hbar-label">${label}</span>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${maxPct > 0 ? (pct / maxPct) * 100 : 0}%;${color ? `background:${color}` : ''}"></div></div>
+      <span class="hbar-right">${right}</span>
+    </div>`;
+}
+
+// --- Tab: Openings ---
+function renderTabOpenings(stats) {
+  const pp = stats.player_profile || {};
+  const perFreq = pp.per_opening_frequency || {};
+  const entries = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) return `<div class="empty-tab">${t('app.noData')}</div>`;
+
+  const games = stats.analyzed || 1;
+  const maxPct = entries[0][1] || 1;
+  let rows = '';
+  for (const [name, pct] of entries) {
+    const owr = openingWR(stats, name);
+    const count = Math.round(pct * games / 100);
+    rows += `
+      <div class="trow">
+        <span class="trow-name">${formatOpeningName(name)}</span>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${(pct / maxPct) * 100}%"></div></div>
+        <span class="trow-num">${pct}% <em>(${count}g)</em></span>
+        <span class="trow-wr ${owr.wr != null ? wrClass(owr.wr) : ''}">${owr.wr != null ? `${owr.wr}% WR` : '—'}</span>
+      </div>`;
+  }
+
+  const stability = Math.round((pp.opening_stability || 0) * 100);
+  return `
+    <div class="tab-note">${t('summary.stability')}: <b>${stability}%</b> — ${entries[0] ? formatOpeningName(entries[0][0]) : '—'}</div>
+    <div class="trow trow-head">
+      <span class="trow-name">${t('summary.opening')}</span>
+      <span class="trow-track-spacer"></span>
+      <span class="trow-num">${t('summary.frequency')}</span>
+      <span class="trow-wr">WR</span>
+    </div>
+    ${rows}`;
+}
+
+// --- Tab: Units ---
+function renderTabUnits(stats) {
+  const unitStats = stats.unit_stats || {};
+  const entries = Object.entries(unitStats)
+    .filter(([n]) => n !== 'villager')
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 12);
+
+  let html = '';
+
+  if (entries.length > 0) {
+    const maxTotal = entries[0][1].total || 1;
+    let rows = '';
+    for (const [name, d] of entries) {
+      rows += `
+        <div class="trow">
+          <span class="trow-name">${unitDisplayName(name)}</span>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${(d.total / maxTotal) * 100}%"></div></div>
+          <span class="trow-num">${d.avg} ${t('summary.avgPerGame')} <em>(${d.total})</em></span>
+          <span class="trow-wr ${wrClass(d.wr)}">${d.wr}% <em>(${d.matches}g)</em></span>
+        </div>`;
+    }
+    html += `
+      <div class="trow trow-head">
+        <span class="trow-name">${t('summary.tabUnits')}</span>
+        <span class="trow-track-spacer"></span>
+        <span class="trow-num">${t('summary.total')}</span>
+        <span class="trow-wr">WR</span>
+      </div>
+      ${rows}`;
+  }
+
+  const upgrades = Object.entries(stats.unit_upgrades || {}).slice(0, 12);
+  if (upgrades.length > 0) {
+    const chips = upgrades.map(([name, d]) =>
+      `<span class="chip" title="${d.count} ${t('summary.times')} · ${d.wr}% WR">${techDisplayName(name)} <b>${d.count}×</b></span>`
+    ).join('');
+    html += `<div class="tab-subtitle">${t('summary.upgrades')}</div><div class="chip-row">${chips}</div>`;
+  }
+
+  return html || `<div class="empty-tab">${t('app.noData')}</div>`;
+}
+
+// --- Tab: Economy ---
+function renderTabEconomy(stats) {
+  let html = '<div class="eco-grid">';
+
+  const wb = stats.wheel_barrow_avg;
+  const hc = stats.hand_cart_avg;
+  html += `<div class="eco-card">
+    <div class="eco-card-title">Wheelbarrow</div>
+    <div class="eco-card-value">${wb != null ? formatHms(wb) : '—'}</div>
+    <div class="eco-card-sub">${stats.wheel_barrow_win_avg != null ? `${t('summary.winAvg')}: ${formatHms(stats.wheel_barrow_win_avg)}` : ''}
+      ${stats.wheel_barrow_loss_avg != null ? ` · ${t('summary.lossAvg')}: ${formatHms(stats.wheel_barrow_loss_avg)}` : ''}</div>
+  </div>`;
+  html += `<div class="eco-card">
+    <div class="eco-card-title">Hand Cart</div>
+    <div class="eco-card-value">${hc != null ? formatHms(hc) : '—'}</div>
+    <div class="eco-card-sub">${stats.hand_cart_win_avg != null ? `${t('summary.winAvg')}: ${formatHms(stats.hand_cart_win_avg)}` : ''}
+      ${stats.hand_cart_loss_avg != null ? ` · ${t('summary.lossAvg')}: ${formatHms(stats.hand_cart_loss_avg)}` : ''}</div>
+  </div>`;
+
+  if (stats.tc2_time_avg != null) {
+    html += `<div class="eco-card">
+      <div class="eco-card-title">${t('summary.secondTc')}</div>
+      <div class="eco-card-value">${formatHms(stats.tc2_time_avg)}</div>
+      <div class="eco-card-sub">${stats.tc2_pct}% ${t('summary.ofGames')}</div>
+    </div>`;
+  }
+  if (stats.tc3_time_avg != null) {
+    html += `<div class="eco-card">
+      <div class="eco-card-title">${t('summary.thirdTc')}</div>
+      <div class="eco-card-value">${formatHms(stats.tc3_time_avg)}</div>
+      <div class="eco-card-sub">${stats.tc3_pct}% ${t('summary.ofGames')}</div>
+    </div>`;
+  }
+
+  if (stats.avg_eapm != null) {
+    html += `<div class="eco-card">
+      <div class="eco-card-title">${t('summary.eapm')}</div>
+      <div class="eco-card-value">${Math.round(stats.avg_eapm)}</div>
+      <div class="eco-card-sub">${stats.avg_eapm_wins != null ? `${t('summary.wins')}: ${Math.round(stats.avg_eapm_wins)}` : ''}
+        ${stats.avg_eapm_losses != null ? ` · ${t('summary.losses')}: ${Math.round(stats.avg_eapm_losses)}` : ''}</div>
+    </div>`;
+  }
+
+  html += '</div>';
+
+  const gaps = stats.economic_gaps || [];
+  if (gaps.length > 0) {
+    let gapRows = '';
+    for (const g of gaps) {
+      gapRows += kvRow(g.tech, `${g.winAvg} → ${g.lossAvg} <span class="wr-bad">(+${formatHms(g.gap)})</span>`);
+    }
+    html += `<div class="tab-subtitle">${t('summary.winAvg')} vs ${t('summary.lossAvg')}</div>${gapRows}`;
+  }
+
+  const marketAvg = stats.market_avg_by_age || {};
+  const ages = ['feudal', 'castle', 'imperial'].filter(a => marketAvg[a] && (Object.keys(marketAvg[a].buy || {}).length > 0 || Object.keys(marketAvg[a].sell || {}).length > 0));
+  if (ages.length > 0) {
+    let marketHtml = '';
+    for (const age of ages) {
+      const { buy = {}, sell = {} } = marketAvg[age];
+      const resources = [...new Set([...Object.keys(buy), ...Object.keys(sell)])].slice(0, 4);
+      const items = resources.map(res => {
+        const parts = [];
+        if (buy[res]) parts.push(`${t('summary.buy')} ${Math.round(buy[res] * 100) / 100}`);
+        if (sell[res]) parts.push(`${t('summary.sell')} ${Math.round(sell[res] * 100) / 100}`);
+        return `<span class="chip">${res}: ${parts.join(' / ')}</span>`;
+      }).join('');
+      marketHtml += `<div class="market-age"><span class="market-age-label">${t('summary.' + age)}</span><div class="chip-row">${items}</div></div>`;
+    }
+    html += `<div class="tab-subtitle">${t('summary.market')}</div>${marketHtml}`;
+  }
+
   return html;
 }
 
-function buildOverviewPanel(stats, id) {
-  const wr = stats.win_percent || 0;
-  const games = stats.analyzed || 0;
-  const wins = stats.total_wins || 0;
-  const streak = stats.current_streak || { type: 'none', count: 0 };
-  const streakText = streak.type === 'win' ? `+${streak.count}` :
-    streak.type === 'loss' ? `-${streak.count}` : '—';
+// --- Tab: Techs ---
+function renderTabTechs(stats) {
+  let html = '';
 
-  return `<div class="tab-panel active" data-panel="${id}">
-    <div class="tab-stat-grid">
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.games')}</div><div class="tab-stat-value">${games}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.winrate')}</div><div class="tab-stat-value ${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.wl')}</div><div class="tab-stat-value">${wins} / ${games - wins}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.streak')}</div><div class="tab-stat-value">${streakText}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('header.rating')}</div><div class="tab-stat-value">${stats.rating || '—'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.avgEapm')}</div><div class="tab-stat-value">${stats.avg_eapm || '—'}</div></div>
-    </div>
-  </div>`;
-}
-
-function buildMilitaryPanel(stats, id) {
-  const unitCats = stats.unit_categories || {};
-  const games = stats.analyzed || 1;
-
-  const totalCount = Object.values(unitCats).reduce((sum, cat) => sum + (cat.count || 0), 0);
-  const totalAvg = Math.round((totalCount / games) * 100) / 100;
-
-  const cats = [
-    { key: 'cavalry', label: 'Cavalry', color: 'var(--accent-orange)' },
-    { key: 'archers', label: 'Archers', color: 'var(--accent-yellow)' },
-    { key: 'infantry', label: 'Infantry', color: 'var(--accent-red)' },
-    { key: 'siege', label: 'Siege', color: 'var(--accent-purple)' },
-  ];
-
-  let compositionHtml = '';
-  for (const cat of cats) {
-    const data = unitCats[cat.key];
-    if (!data || !data.count) continue;
-    const pct = Math.round((data.count / totalCount) * 100);
-    compositionHtml += `<div class="composition-bar-row">
-      <div class="composition-bar-label">${cat.label}</div>
-      <div class="composition-bar-track"><div class="composition-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>
-      <div class="composition-bar-pct">${pct}%</div>
-    </div>`;
+  const top5 = stats.techs_top5_after_age || {};
+  const avgTimes = stats.techs_top5_avg_time || {};
+  const ages = ['feudal', 'castle', 'imperial'];
+  let ageCols = '';
+  for (const age of ages) {
+    const techs = top5[age] || [];
+    if (techs.length === 0) continue;
+    const items = techs.map(tech => {
+      const time = avgTimes[age]?.[tech];
+      return `<div class="kv-row"><span class="kv-label">${techDisplayName(tech)}</span><span class="kv-value">${time != null ? formatHms(time) : '—'}</span></div>`;
+    }).join('');
+    ageCols += `<div class="tech-age-col"><div class="tech-age-title">${t('summary.' + age)}</div>${items}</div>`;
+  }
+  if (ageCols) {
+    html += `<div class="tab-subtitle">${t('summary.topTechsByAge')}</div><div class="tech-age-grid">${ageCols}</div>`;
   }
 
-  return `<div class="tab-panel" data-panel="${id}">
-    <div class="tab-stat-grid mb-3">
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.avgUnitsPerGame')}</div><div class="tab-stat-value">${totalAvg}</div></div>
-    </div>
-    ${compositionHtml ? `<div><div class="section-label">${t('tabs.armyComposition')}</div>${compositionHtml}</div>` : `<div class="card-subtitle">${t('app.noData')}</div>`}
-  </div>`;
-}
-
-function buildEconomyPanel(stats, id) {
-  const tcTiming = stats.tc_timing || {};
-  return `<div class="tab-panel" data-panel="${id}">
-    <div class="tab-stat-grid">
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.2ndTc')}</div><div class="tab-stat-value">${tcTiming.tc2_avg_hms || 'N/A'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.3rdTc')}</div><div class="tab-stat-value">${tcTiming.tc3_avg_hms || 'N/A'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.wheelbarrow')}</div><div class="tab-stat-value">${stats.wheel_barrow_avg != null ? formatHms(stats.wheel_barrow_avg) : 'N/A'}</div></div>
-      <div class="tab-stat-item"><div class="tab-stat-label">${t('tabs.handCart')}</div><div class="tab-stat-value">${stats.hand_cart_avg != null ? formatHms(stats.hand_cart_avg) : 'N/A'}</div></div>
-    </div>
-    ${stats.boom_tendency ? `<div class="card-subtitle mt-2">${t('tabs.boomTendency')}: <strong>${stats.boom_tendency}</strong></div>` : ''}
-  </div>`;
-}
-
-function buildOpeningsPanel(stats, id) {
-  const pp = stats.player_profile || {};
-  const freq = pp.per_opening_frequency || {};
-  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-  const maxPct = sorted.length > 0 ? sorted[0][1] : 100;
-
-  let barsHtml = '';
-  const colors = ['var(--accent-blue)', 'var(--accent-purple)', 'var(--accent-orange)', 'var(--accent-green)', 'var(--accent-red)', 'var(--accent-cyan)'];
-  for (let i = 0; i < sorted.length; i++) {
-    const [name, pct] = sorted[i];
-    const width = maxPct > 0 ? (pct / maxPct) * 100 : 0;
-    barsHtml += `<div class="opening-bar-row">
-      <div class="opening-bar-label">${formatOpeningName(name)}</div>
-      <div class="opening-bar-track"><div class="opening-bar-fill" style="width:${width}%;background:${colors[i % colors.length]}"></div></div>
-      <div class="opening-bar-pct">${pct}%</div>
-    </div>`;
-  }
-
-  return `<div class="tab-panel" data-panel="${id}">
-    <div class="mb-2"><div class="section-label">${t('tabs.openingDistribution')}</div>
-    ${barsHtml || `<div class="card-subtitle">${t('app.noData')}</div>`}</div>
-    ${pp.primary_opening ? `<div class="card-subtitle">${t('sections.openings')}: <strong>${formatOpeningName(pp.primary_opening)}</strong> (${Math.round((pp.opening_stability || 0) * 100)}%)</div>` : ''}
-  </div>`;
-}
-
-function buildMapsPanel(stats, id) {
-  const maps = stats.map_played_percent || {};
-  const sorted = Object.entries(maps).sort((a, b) => b[1] - a[1]);
-
-  let topMaps = '';
-  const top3 = sorted.slice(0, 3);
-  for (const [map, pct] of top3) {
-    const wr = stats.map_win_percent?.[map] ?? 0;
-    const wrClass = wr >= 55 ? 'text-green' : wr <= 40 ? 'text-red' : '';
-    topMaps += `<div class="timing-row">
-      <span class="timing-label">${escapeHtml(map)}</span>
-      <span class="timing-value ${wrClass}">${pct}% · ${wr}% WR</span>
-    </div>`;
-  }
-
-  const worst3 = sorted
-    .filter(([m]) => (stats.map_win_percent?.[m] ?? 50) < 45)
-    .sort((a, b) => (stats.map_win_percent?.[a[0]] ?? 50) - (stats.map_win_percent?.[b[0]] ?? 50))
-    .slice(0, 3);
-
-  let worstMaps = '';
-  for (const [map, pct] of worst3) {
-    const wr = stats.map_win_percent?.[map] ?? 0;
-    worstMaps += `<div class="timing-row">
-      <span class="timing-label">${escapeHtml(map)}</span>
-      <span class="timing-value text-red">${wr}% WR</span>
-    </div>`;
-  }
-
-  return `<div class="tab-panel" data-panel="${id}">
-    <div class="mb-3">
-      <div class="section-label">${t('tabs.topMaps')}</div>
-      ${topMaps || `<div class="card-subtitle">${t('app.noData')}</div>`}
-    </div>
-    ${worstMaps ? `<div><div class="section-label">${t('tabs.worstMaps')}</div>${worstMaps}</div>` : ''}
-  </div>`;
-}
-
-function buildCivsPanel(stats, id) {
-  const civs = stats.civ_played_percent || {};
-  const sorted = Object.entries(civs).sort((a, b) => b[1] - a[1]);
-
-  let civsHtml = '';
-  for (const [civ, pct] of sorted) {
-    const wr = stats.civ_win_percent?.[civ] ?? 0;
-    const wrClass = wr >= 55 ? 'text-green' : wr <= 40 ? 'text-red' : '';
-    civsHtml += `<div class="timing-row">
-      <span class="timing-label">${escapeHtml(civ)}</span>
-      <span class="timing-value ${wrClass}">${pct}% · ${wr}% WR</span>
-    </div>`;
-  }
-
-  return `<div class="tab-panel" data-panel="${id}">
-    <div class="section-label">${t('tabs.civilizations')}</div>
-    ${civsHtml || `<div class="card-subtitle">${t('app.noData')}</div>`}
-  </div>`;
-}
-
-function buildTechTimingsPanel(stats, id) {
-  const coreTechs = stats.core_tech_timings || {};
-  const categoryLabels = {
-    wood: 'Wood', farm: 'Farm', blacksmith: 'Blacksmith',
-    archery_range: 'Archery', barracks: 'Barracks', stable: 'Stable',
-    university: 'University', other: 'Other',
-  };
-
-  let html = '<div class="data-grid">';
-  for (const [cat, techs] of Object.entries(coreTechs)) {
-    const entries = Object.entries(techs);
-    if (entries.length === 0) continue;
-
-    html += `<div class="data-grid-col">
-      <div class="data-grid-col-title">${categoryLabels[cat] || cat}</div>`;
-    for (const [techName, data] of entries) {
-      const timeStr = data.avg_time != null ? formatHms(data.avg_time) : '—';
-      const winAvg = stats.key_tech_win_avg?.[techName];
-      const lossAvg = stats.key_tech_loss_avg?.[techName];
-      let extra = '';
-      if (winAvg != null && lossAvg != null) {
-        const gap = lossAvg - winAvg;
-        if (gap > 45) extra = `<span class="text-red text-xs ml-1">+${formatHms(gap)} in losses</span>`;
-      }
-      html += `<div class="data-grid-row">
-        <span>${techDisplayName(techName)}</span>
-        <span class="data-grid-value">${timeStr} · ${Math.round(data.frequency)}%${extra}</span>
-      </div>`;
+  const keyTechs = Object.entries(stats.key_techs || {}).sort((a, b) => b[1].frequency - a[1].frequency);
+  if (keyTechs.length > 0) {
+    let rows = '';
+    for (const [name, d] of keyTechs) {
+      rows += `
+        <div class="trow">
+          <span class="trow-name">${techDisplayName(name)}</span>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${d.frequency}%"></div></div>
+          <span class="trow-num">${d.frequency}%</span>
+          <span class="trow-wr">${d.avg_time != null ? formatHms(d.avg_time) : '—'}</span>
+        </div>`;
     }
-    html += `</div>`;
+    html += `
+      <div class="tab-subtitle">${t('summary.keyTechTimings')}</div>
+      <div class="trow trow-head">
+        <span class="trow-name">Tech</span>
+        <span class="trow-track-spacer"></span>
+        <span class="trow-num">${t('summary.frequency')}</span>
+        <span class="trow-wr">avg</span>
+      </div>
+      ${rows}`;
   }
-  html += '</div>';
 
-  return `<div class="tab-panel" data-panel="${id}">
-    ${html || '<div class="card-subtitle">No tech timing data.</div>'}
-  </div>`;
+  return html || `<div class="empty-tab">${t('app.noData')}</div>`;
 }
 
-function renderHistoricalDataCard(stats) {
-  const matches = stats.matches || [];
-  const recent = matches.slice(0, 10);
+// --- Tab: Maps & Civs ---
+function renderTabMapsCivs(stats) {
+  let html = '<div class="mc-grid">';
 
-  if (recent.length === 0) {
-    return `<div class="card"><div class="card-subtitle">No match history available.</div></div>`;
+  const mapPlayed = stats.map_played || {};
+  const mapWR = stats.map_win_percent || {};
+  const mapEntries = Object.entries(mapPlayed).sort((a, b) => b[1] - a[1]);
+  if (mapEntries.length > 0) {
+    const maxCount = mapEntries[0][1] || 1;
+    let rows = '';
+    for (const [map, count] of mapEntries) {
+      const mwr = mapWR[map] || 0;
+      rows += `
+        <div class="trow">
+          <span class="trow-name">${escapeHtml(map)}</span>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${(count / maxCount) * 100}%"></div></div>
+          <span class="trow-num">${count}g</span>
+          <span class="trow-wr ${wrClass(mwr)}">${mwr}%</span>
+        </div>`;
+    }
+    html += `<div class="mc-col">
+      <div class="tab-subtitle">${t('summary.map')}</div>
+      <div class="trow trow-head"><span class="trow-name">${t('summary.map')}</span><span class="trow-track-spacer"></span><span class="trow-num">${t('summary.games')}</span><span class="trow-wr">WR</span></div>
+      ${rows}
+    </div>`;
   }
+
+  const civPlayed = stats.civ_played_percent || {};
+  const civWR = stats.civ_win_percent || {};
+  const civEntries = Object.entries(civPlayed).sort((a, b) => b[1] - a[1]);
+  if (civEntries.length > 0) {
+    const maxPct = civEntries[0][1] || 1;
+    let rows = '';
+    for (const [civ, pct] of civEntries) {
+      const cwr = civWR[civ] || 0;
+      rows += `
+        <div class="trow">
+          <span class="trow-name">${escapeHtml(civ)}</span>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${(pct / maxPct) * 100}%"></div></div>
+          <span class="trow-num">${pct}%</span>
+          <span class="trow-wr ${wrClass(cwr)}">${cwr}%</span>
+        </div>`;
+    }
+    html += `<div class="mc-col">
+      <div class="tab-subtitle">${t('summary.civ')}</div>
+      <div class="trow trow-head"><span class="trow-name">${t('summary.civ')}</span><span class="trow-track-spacer"></span><span class="trow-num">%</span><span class="trow-wr">WR</span></div>
+      ${rows}
+    </div>`;
+  }
+
+  html += '</div>';
+  return mapEntries.length || civEntries.length ? html : `<div class="empty-tab">${t('app.noData')}</div>`;
+}
+
+// --- Tab: History ---
+function renderTabHistory(stats) {
+  const matches = stats.matches || [];
+  if (matches.length === 0) return `<div class="empty-tab">${t('summary.noGames')}</div>`;
 
   let rows = '';
-  for (const m of recent) {
-    const date = m.started ? new Date(m.started).toLocaleDateString('es', { month: 'short', day: 'numeric' }) : '—';
-    const result = m.won ? '<span class="win">W</span>' : '<span class="loss">L</span>';
-    const opening = m.opening ? formatOpeningName(m.opening) : '—';
-
-    rows += `<tr>
-      <td>${date}</td>
-      <td>${escapeHtml(m.map_name || '—')}</td>
-      <td>${escapeHtml(m.player_civ || '?')} vs ${escapeHtml(m.opponent_civ || '?')}</td>
-      <td>${result}</td>
-      <td>${opening}</td>
-      <td>${m.duration_hms || '—'}</td>
-    </tr>`;
+  for (const m of matches) {
+    const date = m.started ? new Date(m.started).toLocaleDateString(getLanguage() === 'es' ? 'es-ES' : 'en-US', { day: '2-digit', month: '2-digit' }) : '—';
+    rows += `
+      <tr>
+        <td>${date}</td>
+        <td class="${m.won ? 'wr-good' : 'wr-bad'}">${m.won ? t('summary.win') : t('summary.loss')}</td>
+        <td>${escapeHtml(m.player_civ || '—')}</td>
+        <td>vs ${escapeHtml(m.opponent_civ || '—')}</td>
+        <td>${escapeHtml(m.map_name || '—')}</td>
+        <td>${m.opening ? formatOpeningName(m.opening) : '—'}</td>
+        <td>${m.duration_hms || '—'}</td>
+      </tr>`;
   }
 
-  return `<div class="card historical-data-card">
-    <table class="history-table">
-      <thead><tr><th>${t('tabs.date')}</th><th>${t('sections.maps')}</th><th>${t('sections.civs')}</th><th>${t('tabs.result')}</th><th>${t('sections.openings')}</th><th>${t('tabs.duration')}</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
+  return `
+    <div class="hist-wrap">
+      <table class="hist-table">
+        <thead><tr>
+          <th>${t('summary.date')}</th><th>${t('summary.result')}</th><th>${t('summary.civ')}</th>
+          <th>vs</th><th>${t('summary.map')}</th><th>${t('summary.opening')}</th><th>${t('summary.duration')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
-
 // ============================================================================
 // LIVE MATCH INTELLIGENCE
 // ============================================================================
@@ -2311,599 +1614,6 @@ function renderLiveDetailedMetrics(playerStats, rivalStats) {
 
 // ============================================================================
 // WIN & LOSS PATTERNS — What wins/loses this player games
-// ============================================================================
-
-function computeWinLossPatterns(stats) {
-  const winPatterns = [];
-  const lossPatterns = [];
-  const traits = [];
-  const games = stats.analyzed || 0;
-  const wins = stats.total_wins || 0;
-  const losses = games - wins;
-  if (games < 5) return { winPatterns, lossPatterns, traits, confidence: 'Low' };
-
-  const confidence = games >= 20 ? 'High' : games >= 10 ? 'Medium' : 'Low';
-
-  // ---- WIN PATTERNS ----
-
-  // 1. Early military pressure
-  const ep = stats.early_pressure || {};
-  const ep10w = parseFloat(ep.before10?.wins) || 0;
-  const ep10l = parseFloat(ep.before10?.losses) || 0;
-  if (ep10w > 0.05 && ep10l > 0.02 && ep10w > ep10l * 1.25) {
-    const pct = Math.round(((ep10w - ep10l) / ep10l) * 100);
-    winPatterns.push({
-      icon: '\u{1F525}',
-      text: `Early military pressure before 10 min correlates with ${pct}% more wins`,
-      metric: null,
-      type: 'win'
-    });
-  }
-
-  // 2. Unit composition advantage in wins
-  const catWinAvg = stats.unit_cat_win_avg || {};
-  const catLossAvg = stats.unit_cat_loss_avg || {};
-  const catNames = { cavalry: 'Cavalry', archers: 'Archers', infantry: 'Infantry', siege: 'Siege' };
-  const catIcons = { cavalry: '\u{1F434}', archers: '\u{1F3F9}', infantry: '\u2694\uFE0F', siege: '\u{1F4A3}' };
-  for (const cat of ['cavalry', 'archers', 'infantry', 'siege']) {
-    const wAvg = parseFloat(catWinAvg[cat]) || 0;
-    const lAvg = parseFloat(catLossAvg[cat]) || 0;
-    if (wAvg > 2 && wAvg > lAvg * 1.25) {
-      winPatterns.push({
-        icon: catIcons[cat],
-        text: `Produces ${(wAvg - lAvg).toFixed(1)} more ${catNames[cat]} per game in wins`,
-        metric: `${wAvg.toFixed(1)} vs ${lAvg.toFixed(1)} avg`,
-        type: 'win'
-      });
-      break; // only the top one
-    }
-  }
-
-  // 3. Age timing advantage
-  const ages = [
-    { key: 'feudal', label: 'Feudal Age', icon: '\u23F1\uFE0F' },
-    { key: 'castle', label: 'Castle Age', icon: '\u{1F3F0}' },
-    { key: 'imperial', label: 'Imperial Age', icon: '\u{1F451}' },
-  ];
-  const winAvgAges = stats.age_time_win_avg || {};
-  const lossAvgAges = stats.age_time_loss_avg || {};
-  for (const age of ages) {
-    const wTime = winAvgAges[age.key];
-    const lTime = lossAvgAges[age.key];
-    if (wTime != null && lTime != null && lTime - wTime > 20) {
-      const diff = Math.round(lTime - wTime);
-      const wHms = formatHms(wTime);
-      const lHms = formatHms(lTime);
-      winPatterns.push({
-        icon: age.icon,
-        text: `Reaches ${age.label} ${diff}s faster in wins`,
-        metric: `${wHms} vs ${lHms}`,
-        type: 'win'
-      });
-      break;
-    }
-  }
-
-  // 4. EAPM advantage
-  const wEapm = stats.avg_eapm_wins || 0;
-  const lEapm = stats.avg_eapm_losses || 0;
-  if (wEapm > 15 && lEapm > 10 && wEapm - lEapm >= 3) {
-    winPatterns.push({
-      icon: '\u26A1',
-      text: `Plays ${(wEapm - lEapm).toFixed(1)} higher EAPM in wins`,
-      metric: `${wEapm.toFixed(0)} vs ${lEapm.toFixed(0)}`,
-      type: 'win'
-    });
-  }
-
-  // 5. Key tech timing advantage
-  const techWinAvg = stats.key_tech_win_avg || {};
-  const techLossAvg = stats.key_tech_loss_avg || {};
-  const keyTechs = [
-    { key: 'wheelbarrow', label: 'Wheelbarrow', icon: '\u{1F33E}' },
-    { key: 'fletching', label: 'Fletching', icon: '\u{1F3F9}' },
-    { key: 'bloodlines', label: 'Bloodlines', icon: '\u{1F434}' },
-    { key: 'ballistics', label: 'Ballistics', icon: '\u{1F3AF}' },
-  ];
-  for (const tech of keyTechs) {
-    const wTime = techWinAvg[tech.key];
-    const lTime = techLossAvg[tech.key];
-    if (wTime != null && lTime != null && lTime - wTime > 30) {
-      const diff = Math.round(lTime - wTime);
-      const wHms = formatHms(wTime);
-      const lHms = formatHms(lTime);
-      winPatterns.push({
-        icon: tech.icon,
-        text: `Researches ${tech.label} ${diff}s earlier in wins`,
-        metric: `${wHms} vs ${lHms}`,
-        type: 'win'
-      });
-      break;
-    }
-  }
-
-  // ---- LOSS PATTERNS ----
-
-  // 1. Opponent unit threat in losses
-  const oppCatWinAvg = stats.opp_unit_cat_win_avg || {};
-  const oppCatLossAvg = stats.opp_unit_cat_loss_avg || {};
-  for (const cat of ['cavalry', 'archers', 'infantry', 'siege']) {
-    const wAvg = parseFloat(oppCatWinAvg[cat]) || 0;
-    const lAvg = parseFloat(oppCatLossAvg[cat]) || 0;
-    if (lAvg > 2.5 && lAvg > wAvg * 1.3) {
-      lossPatterns.push({
-        icon: catIcons[cat],
-        text: `Opponent fields ${(lAvg - wAvg).toFixed(1)} more ${catNames[cat]} per game when you lose`,
-        metric: `${lAvg.toFixed(1)} in losses vs ${wAvg.toFixed(1)} in wins`,
-        type: 'loss'
-      });
-      break;
-    }
-  }
-
-  // 2. Opponent age timing in losses
-  const oppWinAvgAges = stats.opp_age_time_win_avg || {};
-  const oppLossAvgAges = stats.opp_age_time_loss_avg || {};
-  for (const age of ages) {
-    const wTime = oppWinAvgAges[age.key];
-    const lTime = oppLossAvgAges[age.key];
-    if (wTime != null && lTime != null && lTime - wTime < -20) {
-      const diff = Math.round(wTime - lTime);
-      const lHms = formatHms(lTime);
-      lossPatterns.push({
-        icon: '\u26A0\uFE0F',
-        text: `Opponent reaches ${age.label} ${diff}s faster in your losses`,
-        metric: `${lHms} vs ${formatHms(wTime)}`,
-        type: 'loss'
-      });
-      break;
-    }
-  }
-
-  // 3. Civ matchup weaknesses
-  const weaknesses = stats.matchup_weaknesses || [];
-  if (weaknesses.length > 0) {
-    const top = weaknesses[0];
-    lossPatterns.push({
-      icon: '\u{1F3DB}\uFE0F',
-      text: `Struggles vs ${top.civ}: ${top.wr}% WR over ${top.games} games`,
-      metric: top.topLossUnits?.map(u => `${u.name} (${u.avg.toFixed(1)})`).join(', ') || '',
-      type: 'loss'
-    });
-  }
-
-  // 4. APM drop-off in losses
-  const dropoff = stats.apm_dropoff || {};
-  const dWin = dropoff.wins || 0;
-  const dLoss = dropoff.losses || 0;
-  if (dLoss != null && dWin != null && dLoss > 5 && dLoss > dWin * 1.3) {
-    lossPatterns.push({
-      icon: '\u{1F4C9}',
-      text: `APM drops ${dLoss.toFixed(0)} in losses vs ${dWin.toFixed(0)} in wins`,
-      metric: `${dLoss.toFixed(0)} vs ${dWin.toFixed(0)} late-game`,
-      type: 'loss'
-    });
-  }
-
-  // 5. Castle-age resource gap explained
-  const cc = stats.castle_context || {};
-  const ccWins = cc.wins || {};
-  const ccLosses = cc.losses || {};
-  if (ccWins.resources != null && ccLosses.resources != null) {
-    const resDiff = Math.abs(Math.round(ccWins.resources - ccLosses.resources));
-    const vilDiff = Math.abs(Math.round((ccWins.villagers || 0) - (ccLosses.villagers || 0)));
-    const milDiff = Math.abs(Math.round((ccWins.military || 0) - (ccLosses.military || 0)));
-    if (resDiff >= 100 && (vilDiff >= 2 || milDiff >= 2)) {
-      const moreVils = (ccWins.villagers || 0) > (ccLosses.villagers || 0);
-      const moreMil = (ccWins.military || 0) > (ccLosses.military || 0);
-      let explanation = '';
-      if (moreVils && vilDiff >= 2) explanation += `${vilDiff} more villagers`;
-      if (moreMil && milDiff >= 2) {
-        if (explanation) explanation += ' and ';
-        explanation += `${milDiff} more military`;
-      }
-      const resDiffSign = ccWins.resources > ccLosses.resources ? '+' : '-';
-      lossPatterns.push({
-        icon: '\u{1F3F0}',
-        text: `At Castle: ${Math.round(ccWins.resources)} resources in wins vs ${Math.round(ccLosses.resources)} in losses`,
-        metric: `Because: ${explanation} in losses — ${Math.round(ccWins.villagers || 0)}v/${Math.round(ccWins.military || 0)}m vs ${Math.round(ccLosses.villagers || 0)}v/${Math.round(ccLosses.military || 0)}m`,
-        type: 'loss'
-      });
-    }
-  }
-
-  // ---- DISTINCTIVE TRAITS ----
-
-  // Unit signature: top 3 most produced units
-  const ue = stats.unit_effectiveness || {};
-  const unitEntries = Object.entries(ue).filter(([, d]) => d.total > 0 && d.matches >= 2).sort((a, b) => b[1].total - a[1].total).slice(0, 4);
-  if (unitEntries.length > 0) {
-    traits.push(...unitEntries.map(([name, data]) => ({
-      icon: data.label === 'strong' ? '\u26A1' : data.label === 'weak' ? '\u26A0\uFE0F' : '\u{1F396}\uFE0F',
-      text: `${unitDisplayName(name)}: ${data.total} total (${data.avg.toFixed(1)}/game)`,
-      metric: data.wr != null ? `${data.wr}% WR` : null,
-      type: data.label === 'strong' ? 'strong' : data.label === 'weak' ? 'weak' : 'neutral',
-      share: data.share != null ? `${data.share}% army` : null
-    })));
-  }
-
-  // Opening stability trait
-  const pp = stats.player_profile || {};
-  if (pp.opening_stability != null && pp.opening_stability > 0.5 && pp.primary_opening) {
-    traits.push({
-      icon: '\u{1F3AF}',
-      text: `${Math.round(pp.opening_stability * 100)}% opening stability: ${formatOpeningName(pp.primary_opening)}`,
-      metric: null,
-      type: 'trait'
-    });
-  }
-
-  // Civ dependency trait
-  const cd = stats.civ_dependency || {};
-  if (cd.mainGames >= 3 && cd.otherGames >= 3 && cd.mainWr != null && cd.otherWr != null && Math.abs(cd.mainWr - cd.otherWr) >= 10) {
-    const diff = Math.abs(cd.mainWr - cd.otherWr);
-    traits.push({
-      icon: '\u{1F3DB}\uFE0F',
-      text: `${cd.mainCiv}: ${cd.mainWr}% WR vs ${cd.otherWr}% with other civs`,
-      metric: `${diff}% gap — civ ${cd.mainWr > cd.otherWr ? 'specialist' : 'flexible'}`,
-      type: 'trait'
-    });
-  }
-
-  // Boom tendency trait
-  if (stats.boom_tendency && stats.boom_tendency !== 'Medium') {
-    traits.push({
-      icon: stats.boom_tendency.includes('High') ? '\u{1F33E}' : '\u{1F525}',
-      text: `Boom tendency: ${stats.boom_tendency}`,
-      metric: stats.tc_timing ? `2nd TC ${stats.tc_timing.tc2_avg_hms || '—'} · 3rd ${stats.tc_timing.tc3_avg_hms || '—'}` : null,
-      type: 'trait'
-    });
-  }
-
-  return { winPatterns, lossPatterns, traits, confidence };
-}
-
-function renderWinLossPatterns(stats) {
-  const { winPatterns, lossPatterns, traits, confidence } = computeWinLossPatterns(stats);
-  const totalPatterns = winPatterns.length + lossPatterns.length + traits.length;
-  if (totalPatterns === 0) return '';
-
-  let html = `<div class="block">`;
-  html += `<div class="section-title">${t('sections.winLossPatterns') || 'Win & Loss Patterns'}</div>`;
-  html += `<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Data-driven analysis of what wins and loses games. Confidence: <span class="conf-${confidence.toLowerCase()}">${confidence}</span> (${stats.analyzed || 0} games)</p>`;
-
-  html += '<div class="wlp-grid">';
-
-  // Win patterns column
-  html += '<div class="wlp-col wlp-win">';
-  html += '<div class="wlp-col-title win">How you win</div>';
-  if (winPatterns.length > 0) {
-    for (const p of winPatterns) {
-      html += `<div class="wlp-card win">
-        <span class="wlp-icon">${p.icon}</span>
-        <span class="wlp-text">${escapeHtml(p.text)}</span>
-        ${p.metric ? `<span class="wlp-metric">${escapeHtml(p.metric)}</span>` : ''}
-      </div>`;
-    }
-  } else {
-    html += '<div class="wlp-empty">Not enough data to identify clear win patterns yet.</div>';
-  }
-  html += '</div>';
-
-  // Loss patterns column
-  html += '<div class="wlp-col wlp-loss">';
-  html += '<div class="wlp-col-title loss">How you lose</div>';
-  if (lossPatterns.length > 0) {
-    for (const p of lossPatterns) {
-      html += `<div class="wlp-card loss">
-        <span class="wlp-icon">${p.icon}</span>
-        <span class="wlp-text">${escapeHtml(p.text)}</span>
-        ${p.metric ? `<span class="wlp-metric">${escapeHtml(p.metric)}</span>` : ''}
-      </div>`;
-    }
-  } else {
-    html += '<div class="wlp-empty">Not enough data to identify clear loss patterns yet.</div>';
-  }
-  html += '</div>';
-
-  html += '</div>';
-
-  // Distinctive traits row
-  if (traits.length > 0) {
-    html += '<div class="wlp-traits">';
-    html += '<div class="wlp-traits-title">Distinctive Traits</div>';
-    html += '<div class="wlp-traits-grid">';
-    for (const t of traits) {
-      html += `<div class="wlp-trait ${t.type}">
-        <span class="wlp-icon">${t.icon}</span>
-        <span class="wlp-text">${escapeHtml(t.text)}</span>
-        ${t.metric ? `<span class="wlp-metric">${escapeHtml(t.metric)}</span>` : ''}
-        ${t.share ? `<span class="wlp-metric">${escapeHtml(t.share)}</span>` : ''}
-      </div>`;
-    }
-    html += '</div></div>';
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-// ============================================================================
-// CROSS ANALYSIS
-// ============================================================================
-
-function renderCrossAnalysis(stats) {
-  const ca = buildCrossAnalysis(stats);
-  if (!ca) return '';
-
-  let html = '<div class="block">';
-  html += `<div class="section-title">${t('sections.crossAnalysis') || 'Cross Analysis'}</div>`;
-  html += `<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">${t('cross.subtitle') || 'Cross-referenced data from all analyzed matches. Minimum 3 games per cell.'}</p>`;
-
-  // 1. Opening vs Opponent Opening matrix
-  if (ca.openingVsOpponent && ca.openingVsOpponent.length > 0) {
-    html += '<div class="cross-card">';
-    html += '<div class="cross-card-title">Opening vs Opponent Opening</div>';
-    html += '<div class="cross-matrix">';
-    // Group by my opening, display opponent opening WRs
-    const grouped = {};
-    for (const entry of ca.openingVsOpponent) {
-      if (!grouped[entry.myOpen]) grouped[entry.myOpen] = [];
-      grouped[entry.myOpen].push(entry);
-    }
-    for (const [myOpen, entries] of Object.entries(grouped)) {
-      entries.sort((a, b) => b.wr - a.wr);
-      html += '<div class="cross-matrix-row">';
-      html += `<div class="cross-matrix-label">${formatOpeningName(myOpen)}</div>`;
-      html += '<div class="cross-matrix-cells">';
-      for (const e of entries.slice(0, 3)) {
-        const wrClass = e.wr >= 60 ? 'text-green' : e.wr <= 40 ? 'text-red' : '';
-        html += `<span class="cross-matrix-cell ${wrClass}">vs ${formatOpeningName(e.oppOpen)}: ${e.wr}%<span class="cross-matrix-n"> (${e.total})</span></span>`;
-      }
-      html += '</div></div>';
-    }
-    html += '</div></div>';
-  }
-
-  // 2. Feudal Timing Brackets
-  if (ca.timingBrackets) {
-    html += '<div class="cross-card">';
-    html += '<div class="cross-card-title">Feudal Timing Brackets</div>';
-    html += '<div class="cross-brackets">';
-    for (const b of ca.timingBrackets) {
-      const wrColor = b.wr >= 55 ? 'var(--accent-green)' : b.wr <= 40 ? 'var(--accent-red)' : 'var(--text-primary)';
-      html += `<div class="cross-bracket-item">
-        <span class="cross-bracket-label">${b.label}</span>
-        <div class="cross-bracket-bar"><div class="cross-bracket-fill" style="width:${b.wr}%;background:${wrColor}"></div></div>
-        <span class="cross-bracket-wr" style="color:${wrColor}">${b.wr}%</span>
-        <span class="cross-bracket-n">(${b.total} games · avg ${b.avgTime})</span>
-      </div>`;
-    }
-    html += '</div></div>';
-  }
-
-  // 3. Age-up Order
-  if (ca.ageOrder) {
-    const ao = ca.ageOrder;
-    html += '<div class="cross-card">';
-    html += '<div class="cross-card-title">Age-up Order (when you reach age first)</div>';
-    html += '<div class="cross-order-grid">';
-    for (const age of ['feudal', 'castle']) {
-      const data = ao[age];
-      if (!data) continue;
-      const ageLabel = age === 'feudal' ? 'Feudal' : 'Castle';
-      html += `<div class="cross-order-col">
-        <div class="cross-order-age">${ageLabel}</div>
-        <div class="cross-order-item"><span class="cross-order-label">First</span><span class="cross-order-val">${data.first.wr}% WR (${data.first.total} games)</span></div>
-        <div class="cross-order-item"><span class="cross-order-label">Second</span><span class="cross-order-val">${data.second.wr}% WR (${data.second.total} games)</span></div>
-      </div>`;
-    }
-    html += '</div></div>';
-  }
-
-  // 4. Feudal Military Pressure
-  if (ca.feudalAdvantage) {
-    const fa = ca.feudalAdvantage;
-    html += '<div class="cross-card">';
-    html += '<div class="cross-card-title">Feudal Military Pressure</div>';
-    html += `<div class="cross-pressure">${fa.signal} (ratio: ${fa.militaryRatioWins} in wins vs ${fa.militaryRatioLosses} in losses)</div>`;
-    html += '</div>';
-  }
-
-  html += '</div>';
-  return html;
-}
-
-// ============================================================================
-// COACHING INTELLIGENCE
-// ============================================================================
-
-function renderCoachingIntelligence(stats) {
-  const games = stats.analyzed || 0;
-  if (games < 3) return '';
-
-  let html = '<div class="block coaching-block">';
-  html += `<div class="section-title">Coaching Intelligence</div>`;
-
-  // ---- CARD 1: WIN FORMULA ----
-  let winFormula = '';
-  const cc = stats.castle_context || {};
-  const ccW = cc.wins || {};
-  const ccL = cc.losses || {};
-  const ep = stats.early_pressure || {};
-  const ue = stats.unit_effectiveness || {};
-
-  // Strongest unit
-  const strongUnits = Object.entries(ue).filter(([, d]) => d.label === 'strong' && (d.wins + d.losses) >= 3).sort((a, b) => b[1].wr - a[1].wr);
-  const strong = strongUnits[0];
-
-  // Win factors
-  let factors = [];
-  if (ccW.villagers != null && ccL.villagers != null) {
-    const vDiff = Math.round(ccW.villagers - ccL.villagers);
-    if (vDiff >= 2) factors.push(`reach Castle with <b>${Math.round(ccW.villagers)} villagers</b> (${vDiff} more than in losses)`);
-  }
-  if (strong) {
-    factors.push(`produce <b>${unitDisplayName(strong[0])}</b> — <b>${strong[1].wr}% win rate</b> (${strong[1].wins + strong[1].losses} games)`);
-  }
-  const ep10w = parseFloat(ep.before10?.wins) || 0;
-  const ep10l = parseFloat(ep.before10?.losses) || 0;
-  if (ep10w > 0.05 && ep10l > 0.02 && ep10w > ep10l * 1.2) {
-    const pct = Math.round(((ep10w - ep10l) / ep10l) * 100);
-    factors.push(`apply <b>early military pressure</b> — correlates with <b>${pct}% more wins</b>`);
-  }
-
-  if (factors.length > 0) {
-    const list = factors.map(f => `<li>${f}</li>`).join('');
-    winFormula = `<ul class="coach-list">${list}</ul>`;
-  }
-
-  html += `<div class="coach-card win"><div class="coach-title">Your Win Formula</div>
-    <div class="coach-body">You win when you ${winFormula || '<span class="coach-muted">(not enough data yet — play more games)</span>'}</div></div>`;
-
-  // ---- CARD 2: YOUR LEAK ----
-  let leakFactors = [];
-
-  // Castle context losses
-  if (ccL.military != null && ccW.military != null) {
-    const mDiff = Math.round(ccL.military - ccW.military);
-    if (mDiff >= 2) leakFactors.push(`produce <b>${mDiff} more military</b> before Castle (your eco suffers)`);
-  }
-  if (ccL.villagers != null && ccW.villagers != null) {
-    const vDiff = Math.round(ccW.villagers - ccL.villagers);
-    if (vDiff >= 2) leakFactors.push(`reach Castle with <b>${vDiff} fewer villagers</b>`);
-  }
-
-  // Matchup weaknesses
-  const mw = stats.matchup_weaknesses || [];
-  if (mw.length > 0) {
-    const worst = mw.slice(0, 2);
-    for (const w of worst) {
-      leakFactors.push(`struggle vs <b>${w.civ}</b> (<b>${w.wr}% WR</b>, ${w.games} games)`);
-    }
-  }
-
-  // APM dropoff
-  const drop = stats.apm_dropoff || {};
-  if (drop.losses > 5 && drop.wins > 0 && drop.losses > drop.wins * 1.3) {
-    leakFactors.push(`APM drops <b>${drop.losses}</b> in losses vs <b>${drop.wins}</b> in wins (you fatigue in longer games)`);
-  }
-
-  // EAPM gap
-  const wE = stats.avg_eapm_wins;
-  const lE = stats.avg_eapm_losses;
-  if (wE > 15 && lE > 10 && wE - lE >= 3) {
-    leakFactors.push(`play <b>${(wE - lE).toFixed(1)} lower EAPM</b> in losses (execution drops under pressure)`);
-  }
-
-  // Opening predictability
-  const pp = stats.player_profile || {};
-  const stability = pp.opening_stability || 0;
-  const opening = pp.primary_opening || '';
-  if (stability > 0.65 && opening) {
-    const freq = (pp.per_opening_frequency || {})[opening] || 0;
-    leakFactors.push(`use <b>${formatOpeningName(opening)} ${freq}%</b> of the time — opponents who counter it will beat you`);
-  }
-
-  let leakHtml = '';
-  if (leakFactors.length > 0) {
-    leakHtml = '<ul class="coach-list">' + leakFactors.map(f => `<li>${f}</li>`).join('') + '</ul>';
-  }
-
-  html += `<div class="coach-card leak"><div class="coach-title">Your Leak</div>
-    <div class="coach-body">You lose when you ${leakHtml || '<span class="coach-muted">(not enough data yet — play more games)</span>'}</div></div>`;
-
-  // ---- CARD 3: OPENING & COUNTER ----
-  let openingAdvice = '';
-  const perFreq = pp.per_opening_frequency || {};
-  const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
-
-  if (sortedOpenings.length > 0 && opening) {
-    const freq = perFreq[opening] || 0;
-    const ovs = stats.opening_vs_opponent?.[opening] || {};
-    const betterMatchups = Object.entries(ovs)
-      .map(([opp, rec]) => ({ opp, wr: rec.wins + rec.losses > 0 ? Math.round((rec.wins / (rec.wins + rec.losses)) * 100) : 0, total: rec.wins + rec.losses }))
-      .filter(m => m.total >= 3 && m.wr >= 55)
-      .sort((a, b) => b.wr - a.wr).slice(0, 2);
-    const worseMatchups = Object.entries(ovs)
-      .map(([opp, rec]) => ({ opp, wr: rec.wins + rec.losses > 0 ? Math.round((rec.wins / (rec.wins + rec.losses)) * 100) : 0, total: rec.wins + rec.losses }))
-      .filter(m => m.total >= 3 && m.wr <= 40)
-      .sort((a, b) => a.wr - b.wr).slice(0, 2);
-
-    let matchupLines = '';
-    if (betterMatchups.length > 0) {
-      for (const m of betterMatchups) {
-        matchupLines += `<li>vs <b>${formatOpeningName(m.opp)}</b>: <b class="text-green">${m.wr}% WR</b> (${m.total} games) — keep doing this</li>`;
-      }
-    }
-    if (worseMatchups.length > 0) {
-      for (const m of worseMatchups) {
-        matchupLines += `<li>vs <b>${formatOpeningName(m.opp)}</b>: <b class="text-red">${m.wr}% WR</b> (${m.total} games) — practice or avoid</li>`;
-      }
-    }
-
-    const cd = stats.civ_dependency || {};
-    let civLine = '';
-    if (cd.mainGames >= 3 && cd.mainWr != null) {
-      civLine = `<div class="coach-civ">Main civ: <b>${cd.mainCiv}</b> — <b class="${cd.mainWr >= 55 ? 'text-green' : 'text-red'}">${cd.mainWr}% WR</b> (${cd.mainGames} games) · Other civs: ${cd.otherWr}% WR (${cd.otherGames} games)</div>`;
-    }
-
-    const openPct = freq > 0 ? `<div class="coach-civ">You play <b>${formatOpeningName(opening)}</b> in <b>${freq}%</b> of games (${Math.round(stability * 100)}% stability)</div>` : '';
-
-    openingAdvice = `${openPct}${civLine}${matchupLines ? '<ul class="coach-list">' + matchupLines + '</ul>' : ''}`;
-  }
-
-  html += `<div class="coach-card strategy"><div class="coach-title">Opening &amp; Counters</div>
-    <div class="coach-body">${openingAdvice || '<span class="coach-muted">Play more games to unlock opening intelligence</span>'}</div></div>`;
-
-  // ---- CARD 4: PROGRESS ----
-  let progressBar = '';
-  const rh = stats.rating_history || [];
-  if (rh.length >= 2) {
-    const vals = rh.map(r => r.rating);
-    const first = vals[0];
-    const last = vals[vals.length - 1];
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const diff = last - first;
-    const diffClass = diff >= 0 ? 'text-green' : 'text-red';
-    const diffIcon = diff >= 0 ? '\u2191' : '\u2193';
-
-    // Mini sparkline
-    const range = max - min || 1;
-    const w = 160;
-    const h = 32;
-    const step = w / (vals.length - 1);
-    const points = vals.map((v, i) => {
-      const x = i * step;
-      const y = h - ((v - min) / range) * (h - 4) - 2;
-      return ` ${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-    const sparkPoly = points.join('');
-
-    progressBar = `<div class="coach-progress">
-      <div class="coach-progress-header">
-        <svg viewBox="0 0 ${w} ${h}" class="coach-sparkline">
-          <polyline fill="none" stroke="var(--accent-gold)" stroke-width="2" points="${sparkPoly}"/>
-        </svg>
-        <div class="coach-progress-stats">
-          <span class="coach-progress-val ${diffClass}">${diffIcon} ${Math.abs(diff)}</span>
-          <span class="coach-progress-range">${min} \u2192 ${max}</span>
-        </div>
-      </div>
-      <div class="coach-progress-footer">${first} \u2192 ${last} over ${rh.length} games</div>
-    </div>`;
-  }
-
-  html += `<div class="coach-card progress"><div class="coach-title">Progress</div>
-    <div class="coach-body">${progressBar || '<span class="coach-muted">Play more games to see your rating trend</span>'}</div></div>`;
-
-  html += '</div>';
-  return html;
-}
-
-// ============================================================================
-// TABS SETUP
 // ============================================================================
 
 function setupTabs(container) {
