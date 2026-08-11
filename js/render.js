@@ -612,6 +612,10 @@ function buildRivalIntelligence(stats) {
   // Card 2: Preferred Playstyle
   html += buildPlaystyleCard(stats);
 
+  // Card 3b: Cross-analysis (determinant features + matchup model)
+  html += buildCrossAnalysisCard(stats);
+
+
   // Card 3: Civilization Tendencies
   html += buildCivTendenciesCard(stats);
 
@@ -768,6 +772,66 @@ function buildTimingTendenciesCard(stats) {
   </div>`;
 }
 
+function buildCrossAnalysisCard(stats) {
+  const ca = stats.cross_analysis || null;
+  if (!ca) return `<div class="card"><div class="card-label">Cross Analysis</div><div class="card-subtitle">Insufficient data for cross analysis</div></div>`;
+
+  // Determinant features
+  const det = ca.determinantFeatures || [];
+  let detHtml = '';
+  if (det.length === 0) {
+    detHtml = '<div style="font-size:12px;color:var(--text-muted)">No strong determinant features detected</div>';
+  } else {
+    detHtml = '<ul class="det-features">';
+    for (const f of det.slice(0, 5)) {
+      detHtml += `<li><strong>${formatFeatureName(f.feature)}</strong>: ${f.cohen_d > 0 ? '+' : ''}${f.cohen_d} (${f.strength}, n=${f.samples.wins + f.samples.losses})</li>`;
+    }
+    detHtml += '</ul>';
+  }
+
+  // Suggested counters
+  const counters = (ca.matchupBehavior && ca.matchupBehavior.suggestedCounters) || [];
+  let countersHtml = '';
+  if (counters.length) {
+    countersHtml = '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
+    for (const c of counters.slice(0, 4)) countersHtml += `<span class="pill">${formatUnitName(c.unit)} · ${c.wr}% WR</span>`;
+    countersHtml += '</div>';
+  }
+
+  return `<div class="card">
+    <div class="card-label">Cross Analysis</div>
+    <div class="card-subtitle">Determinant features and suggested counters</div>
+    <div style="margin-top:8px">${detHtml}</div>
+    ${countersHtml}
+  </div>`;
+}
+
+function buildPredictionCard(stats) {
+  const ca = stats.cross_analysis || null;
+  if (!ca || !ca.matchupBehavior) return '';
+  const mb = ca.matchupBehavior;
+  // Default predict based on current opening
+  const currentOpening = stats.current_opening?.chosen_opening || stats.player_profile?.primary_opening || null;
+  const pred = mb.predict({ myOpening: currentOpening, topN: 3 });
+  const preds = pred.predictions || [];
+  if (!preds.length) return '';
+
+  let html = `<div class="card">
+    <div class="card-label">Predicted Opponent Responses</div>
+    <div class="card-subtitle">Given your opening${currentOpening ? ` (${formatOpeningName(currentOpening)})` : ''}</div>
+    <div style="margin-top:8px">`;
+  for (const p of preds) {
+    html += `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border-subtle)"><div>${formatOpeningName(p.opponent_opening)}</div><div style="color:var(--accent-blue)">${p.probability_pct}%</div></div>`;
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function formatFeatureName(name) {
+  if (!name) return '';
+  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 // ============================================================================
 // BLOCK 3: STRATEGIC RECOMMENDATIONS
 // ============================================================================
@@ -788,6 +852,9 @@ function buildStrategicRecommendations(stats) {
     ${pred.strategy_probability > 0 ? `<div class="card-subtitle">${pred.strategy_probability}% probability</div>` : ''}
     ${pred.secondary_strategy ? `<div class="card-subtitle">Backup: ${formatOpeningName(pred.secondary_strategy)}</div>` : ''}
   </div>`;
+
+  // Prediction based on cross-analysis (opponent openings)
+  html += buildPredictionCard(stats);
 
   // Main recommendation card
   html += `<div class="card">
