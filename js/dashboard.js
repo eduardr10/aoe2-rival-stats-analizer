@@ -593,7 +593,7 @@ function updateHeader(stats) {
 }
 
 // ============================================================================
-// DASHBOARD — SECTION 1: SUMMARY (2-second scouting view)
+// DASHBOARD — SECTION 1: SUMMARY (quick scouting view)
 // ============================================================================
 
 function renderHistoricalAnalysisHTML(stats, compressed) {
@@ -635,78 +635,113 @@ function getArmyComposition(stats) {
 
 function buildSummaryFacts(stats) {
   const facts = [];
+  const games = stats.analyzed || 0;
   const pp = stats.player_profile || {};
   const perFreq = pp.per_opening_frequency || {};
-  const games = stats.analyzed || 0;
 
+  // 1. Opening style + WR (signature opening)
   const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
   if (sortedOpenings.length > 0) {
     const [name, pct] = sortedOpenings[0];
     const owr = openingWR(stats, name);
     facts.push({
-      icon: 'opening',
-      text: `${formatOpeningName(name)}: ${pct}% ${t('summary.ofGames')}${owr.wr != null ? ` · ${owr.wr}% WR` : ''}`,
+      text: `${formatOpeningName(name)}: ${pct}% uso${owr.wr != null ? ` · ${owr.wr}% WR` : ''}`,
       sample: owr.games || games,
     });
   }
 
-  const eff = Object.entries(stats.unit_effectiveness || {})
-    .filter(([n, d]) => n !== 'villager' && d.matches >= 3 && d.share >= 5)
-    .sort((a, b) => b[1].wr - a[1].wr);
-  if (eff.length > 0) {
-    const [bestName, best] = eff[0];
+  // 2. Timing window: fast castle vs slow castle WR
+  const feudalTimes = stats.age_times?.feudal || [];
+  const feudalWins = stats.age_times_wins?.feudal || [];
+  const castleTimes = stats.age_times?.castle || [];
+  const castleWins = stats.age_times_wins?.castle || [];
+  const bestAge = castleTimes.length >= 5 ? 'castle' : feudalTimes.length >= 5 ? 'feudal' : null;
+  if (bestAge) {
+    const ageTimes = bestAge === 'castle' ? castleTimes : feudalTimes;
+    const ageWins = bestAge === 'castle' ? castleWins : feudalWins;
+    const avgTime = ageTimes.reduce((a, b) => a + b, 0) / ageTimes.length;
+    const fastTimes = ageTimes.filter(t => t <= avgTime);
+    const fastWins = ageWins.filter(t => t <= avgTime);
+    const fastWr = fastTimes.length >= 2 ? Math.round(fastWins.length * 100 / fastTimes.length) : null;
+    const slowTimes = ageTimes.filter(t => t > avgTime);
+    const slowWins = ageWins.filter(t => t > avgTime);
+    const slowWr = slowTimes.length >= 2 ? Math.round(slowWins.length * 100 / slowTimes.length) : null;
+    if (fastWr != null && slowWr != null && Math.abs(fastWr - slowWr) >= 10) {
+      const ageLabel = bestAge === 'castle' ? 'Castle' : 'Feudal';
+      const threshold = formatHms(Math.round(avgTime));
+      facts.push({
+        text: `Ritmo ${ageLabel}: <${threshold} → ${fastWr}% WR · >${threshold} → ${slowWr}% WR`,
+        sample: ageTimes.length,
+        good: true,
+      });
+    }
+  }
+
+  // 3. Best civ matchup
+  const oppCivWR = stats.opp_civ_win_percent || {};
+  const bestOppCiv = Object.entries(oppCivWR).sort((a, b) => b[1] - a[1])[0];
+  if (bestOppCiv && bestOppCiv[1] >= 55 && games >= (stats.opp_civ_stats?.[bestOppCiv[0]] ? 3 : 5)) {
+    const totalGames = (stats.opp_civ_stats?.[bestOppCiv[0]]?.wins || 0) + (stats.opp_civ_stats?.[bestOppCiv[0]]?.losses || 0);
     facts.push({
-      icon: 'unit',
-      text: `${unitDisplayName(bestName)}: ${best.wr}% WR ${t('summary.whenWins')}`,
-      sample: best.matches,
+      text: `vs ${bestOppCiv[0]}: ${bestOppCiv[1]}% WR`,
+      sample: totalGames,
       good: true,
     });
-    const weak = eff.filter(([, d]) => d.wr <= 42).sort((a, b) => a[1].wr - b[1].wr)[0];
-    if (weak) {
-      facts.push({
-        icon: 'weak',
-        text: `${unitDisplayName(weak[0])}: ${weak[1].wr}% WR`,
-        sample: weak[1].matches,
-        bad: true,
-      });
-    }
   }
 
-  const mw = stats.matchup_weaknesses || [];
-  if (mw.length > 0) {
-    const worst = [...mw].sort((a, b) => a.wr - b.wr)[0];
-    if (worst.games >= 2) {
-      facts.push({
-        icon: 'weak',
-        text: `${t('summary.weakVs')} ${worst.civ}: ${worst.wr}% WR`,
-        sample: worst.games,
-        bad: true,
-      });
-    }
-  }
-
-  const mapPlayed = stats.map_played || {};
-  const mapWR = stats.map_win_percent || {};
-  const mapEntries = Object.entries(mapPlayed).filter(([, c]) => c >= 2);
-  if (mapEntries.length > 0) {
-    const best = mapEntries.sort((a, b) => (mapWR[b[0]] || 0) - (mapWR[a[0]] || 0))[0];
+  // 4. Worst civ matchup
+  const worstOppCiv = Object.entries(oppCivWR).sort((a, b) => a[1] - b[1])[0];
+  if (worstOppCiv && worstOppCiv[1] <= 42 && worstOppCiv !== bestOppCiv) {
+    const totalGames = (stats.opp_civ_stats?.[worstOppCiv[0]]?.wins || 0) + (stats.opp_civ_stats?.[worstOppCiv[0]]?.losses || 0);
     facts.push({
-      icon: 'map',
-      text: `${best[0]}: ${mapWR[best[0]] || 0}% WR`,
-      sample: best[1],
-      good: (mapWR[best[0]] || 0) >= 55,
-    });
-  }
-
-  const gaps = stats.economic_gaps || [];
-  if (gaps.length > 0) {
-    const g = gaps[0];
-    facts.push({
-      icon: 'eco',
-      text: `${g.tech}: +${formatHms(g.gap)} ${t('summary.gap')} (${g.winAvg} → ${g.lossAvg})`,
-      sample: games,
+      text: `vs ${worstOppCiv[0]}: ${worstOppCiv[1]}% WR`,
+      sample: totalGames,
       bad: true,
     });
+  }
+
+  // 5. Win condition: what's different in castle age between wins and losses
+  const cc = stats.castle_context || {};
+  if (cc.wins && cc.losses) {
+    const items = [];
+    if (cc.wins.military != null && cc.losses.military != null) {
+      const diff = Math.round((cc.wins.military - cc.losses.military) * 100) / 100;
+      if (Math.abs(diff) >= 2) {
+        const dir = diff > 0 ? '+' : '';
+        items.push(`${dir}${diff} mil al llegar a Castle`);
+      }
+    }
+    if (cc.wins.villagers != null && cc.losses.villagers != null) {
+      const diff = Math.round((cc.wins.villagers - cc.losses.villagers) * 100) / 100;
+      if (Math.abs(diff) >= 3) {
+        const dir = diff > 0 ? '+' : '';
+        items.push(`${dir}${diff} vills al llegar a Castle`);
+      }
+    }
+    if (items.length > 0) {
+      facts.push({
+        text: `En victorias: ${items.join(' · ')}`,
+        sample: games,
+        good: true,
+      });
+    }
+  }
+
+  // 6. Main civ with WR (if different from opening's civ)
+  const civPlayed = stats.civ_played_percent || {};
+  const civWR = stats.civ_win_percent || {};
+  const sortedCivs = Object.entries(civPlayed).sort((a, b) => b[1] - a[1]);
+  if (sortedCivs.length > 0) {
+    const [bestCiv, bestPct] = sortedCivs[0];
+    const cwr = civWR[bestCiv] || 0;
+    const totalGames = (stats.civ_played || {})[bestCiv] || 0;
+    if (totalGames >= 2) {
+      facts.push({
+        text: `${bestCiv}: ${bestPct}% uso${cwr ? ` · ${cwr}% WR` : ''}`,
+        sample: totalGames,
+        good: cwr >= 55,
+      });
+    }
   }
 
   return facts.slice(0, 6);
@@ -719,7 +754,7 @@ function buildSummaryText(stats) {
   const games = stats.analyzed || 0;
   const losses = games - wins;
 
-  lines.push(`${stats.player_name || 'Player'} (${t('header.rating')} ${stats.rating || '-'}) — ${games} ${t('summary.games')}`);
+  lines.push(`${stats.player_name || 'Player'} (Rating ${stats.rating || '-'}) — ${games} partidas`);
   lines.push(`WR ${wr}% (${wins}W-${losses}L)`);
 
   const pp = stats.player_profile || {};
@@ -727,19 +762,19 @@ function buildSummaryText(stats) {
   const sortedOpenings = Object.entries(perFreq).sort((a, b) => b[1] - a[1]);
   if (sortedOpenings.length > 0) {
     const openingParts = sortedOpenings.slice(0, 2).map(([n, p]) => `${formatOpeningName(n)} ${p}%`);
-    lines.push(`${t('summary.mainOpening')}: ${openingParts.join(' / ')}`);
+    lines.push(`Apertura: ${openingParts.join(' / ')}`);
   }
 
   const army = getArmyComposition(stats);
   if (army) {
     const catLabels = { cavalry: 'Cav', archers: 'Arch', infantry: 'Inf', siege: 'Siege' };
-    lines.push(`${t('summary.army')}: ${army.map(a => `${a.pct}% ${catLabels[a.cat] || a.cat}`).join(' / ')}`);
+    lines.push(`Ejército: ${army.map(a => `${a.pct}% ${catLabels[a.cat] || a.cat}`).join(' / ')}`);
   }
 
   const ageParts = [];
-  if (stats.avg_feudal != null) ageParts.push(`${t('summary.feudal')} ${formatHms(stats.avg_feudal)}`);
-  if (stats.avg_castle != null) ageParts.push(`${t('summary.castle')} ${formatHms(stats.avg_castle)}`);
-  if (stats.avg_imperial != null) ageParts.push(`${t('summary.imperial')} ${formatHms(stats.avg_imperial)}`);
+  if (stats.avg_feudal != null) ageParts.push(`Feudal ${formatHms(stats.avg_feudal)}`);
+  if (stats.avg_castle != null) ageParts.push(`Castle ${formatHms(stats.avg_castle)}`);
+  if (stats.avg_imperial != null) ageParts.push(`Imperial ${formatHms(stats.avg_imperial)}`);
   if (ageParts.length) lines.push(ageParts.join(' | '));
 
   const civs = Object.entries(stats.civ_played_percent || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -750,7 +785,7 @@ function buildSummaryText(stats) {
   const facts = buildSummaryFacts(stats);
   if (facts.length) {
     lines.push('');
-    for (const f of facts) lines.push(`- ${f.text} (${f.sample} ${t('summary.games')})`);
+    for (const f of facts) lines.push(`- ${f.text} (${f.sample}g)`);
   }
 
   return lines.join('\n');
@@ -770,7 +805,7 @@ function renderSummarySection(stats) {
   const catLabels = { cavalry: 'Cav', archers: 'Arch', infantry: 'Inf', siege: 'Siege' };
   const catColors = { cavalry: 'var(--c-cav)', archers: 'var(--c-arch)', infantry: 'var(--c-inf)', siege: 'var(--c-siege)' };
 
-  let armyHtml = `<span class="text-muted">${t('app.noData')}</span>`;
+  let armyHtml = `<span class="text-muted">—</span>`;
   if (army) {
     armyHtml = army.map(a =>
       `<span class="army-chip" style="--chip:${catColors[a.cat] || 'var(--text-muted)'}"><i></i>${a.pct}% ${catLabels[a.cat] || a.cat}</span>`
@@ -778,28 +813,16 @@ function renderSummarySection(stats) {
   }
 
   const tempoParts = [];
-  if (stats.avg_feudal != null) tempoParts.push(`<span><b>${formatHms(stats.avg_feudal)}</b> ${t('summary.feudal')}</span>`);
-  if (stats.avg_castle != null) tempoParts.push(`<span><b>${formatHms(stats.avg_castle)}</b> ${t('summary.castle')}</span>`);
-  const tempoHtml = tempoParts.length ? tempoParts.join('') : `<span class="text-muted">${t('app.noData')}</span>`;
+  if (stats.avg_feudal != null) tempoParts.push(`<span>Feu <b>${formatHms(stats.avg_feudal)}</b></span>`);
+  if (stats.avg_castle != null) tempoParts.push(`<span>Cas <b>${formatHms(stats.avg_castle)}</b></span>`);
+  if (stats.avg_imperial != null) tempoParts.push(`<span>Imp <b>${formatHms(stats.avg_imperial)}</b></span>`);
+  const tempoHtml = tempoParts.length ? tempoParts.join('') : `<span class="text-muted">—</span>`;
 
   const facts = buildSummaryFacts(stats);
   let factsHtml = '';
   for (const f of facts) {
     const cls = f.bad ? 'fact-bad' : f.good ? 'fact-good' : '';
-    factsHtml += `<li class="fact ${cls}"><span class="fact-text">${escapeHtml(f.text)}</span><span class="fact-sample">${f.sample} ${t('summary.games')}</span></li>`;
-  }
-
-  let openingBarsHtml = '';
-  const maxPct = sortedOpenings[0]?.[1] || 1;
-  for (const [name, pct] of sortedOpenings.slice(0, 4)) {
-    const owr = openingWR(stats, name);
-    openingBarsHtml += `
-      <div class="obar-row">
-        <span class="obar-label">${formatOpeningName(name)}</span>
-        <div class="obar-track"><div class="obar-fill" style="width:${(pct / maxPct) * 100}%"></div></div>
-        <span class="obar-pct">${pct}%</span>
-        <span class="obar-wr ${owr.wr != null ? wrClass(owr.wr) : ''}">${owr.wr != null ? owr.wr + '%' : '—'}</span>
-      </div>`;
+    factsHtml += `<li class="fact ${cls}"><span class="fact-text">${escapeHtml(f.text)}</span><span class="fact-sample">${f.sample}g</span></li>`;
   }
 
   return `
@@ -813,12 +836,12 @@ function renderSummarySection(stats) {
       <div class="hero-card">
         <div class="hero-label">${t('summary.winrate')}</div>
         <div class="hero-value ${wrClass(wr)}">${wr}%</div>
-        <div class="hero-sub">${wins}W – ${losses}L · ${games} ${t('summary.games')}</div>
+        <div class="hero-sub">${wins}W – ${losses}L · ${games}g</div>
       </div>
       <div class="hero-card">
         <div class="hero-label">${t('summary.mainOpening')}</div>
         <div class="hero-value hero-value-sm">${mainOpening ? formatOpeningName(mainOpening[0]) : '—'}</div>
-        <div class="hero-sub">${mainOpening ? `${mainOpening[1]}% · ${t('summary.stability')} ${stability}%` : t('app.noData')}</div>
+        <div class="hero-sub">${mainOpening ? `${mainOpening[1]}% · est ${stability}%` : `—`}</div>
       </div>
       <div class="hero-card">
         <div class="hero-label">${t('summary.army')}</div>
@@ -830,16 +853,8 @@ function renderSummarySection(stats) {
       </div>
     </div>
 
-    <div class="sum-columns">
-      <div class="sum-block">
-        <div class="sum-block-title">${t('summary.expect')}</div>
-        <ul class="fact-list">${factsHtml || `<li class="fact"><span class="text-muted">${t('app.noData')}</span></li>`}</ul>
-      </div>
-      <div class="sum-block">
-        <div class="sum-block-title">${t('summary.mainOpening')} · ${t('summary.frequency')} / WR</div>
-        ${openingBarsHtml || `<div class="text-muted">${t('app.noData')}</div>`}
-      </div>
-    </div>
+    <div class="sum-block-title">${t('summary.expect')}</div>
+    <ul class="fact-list">${factsHtml || `<li class="fact"><span class="text-muted">${t('app.noData')}</span></li>`}</ul>
   </section>`;
 }
 
@@ -853,7 +868,7 @@ function renderDataSection(stats) {
     { id: 'units', label: t('summary.tabUnits'), render: () => renderTabUnits(stats) },
     { id: 'economy', label: t('summary.tabEconomy'), render: () => renderTabEconomy(stats) },
     { id: 'techs', label: t('summary.tabTechs'), render: () => renderTabTechs(stats) },
-    { id: 'mapscivs', label: t('summary.tabMapsCivs'), render: () => renderTabMapsCivs(stats) },
+    { id: 'matchups', label: 'Matchups', render: () => renderTabMatchups(stats) },
     { id: 'history', label: t('summary.tabHistory'), render: () => renderTabHistory(stats) },
   ];
 
@@ -907,19 +922,6 @@ function setupDataTabs(container) {
   }
 }
 
-function kvRow(label, value, cls = '') {
-  return `<div class="kv-row"><span class="kv-label">${label}</span><span class="kv-value ${cls}">${value}</span></div>`;
-}
-
-function hbarRow(label, pct, maxPct, right, color) {
-  return `
-    <div class="hbar-row">
-      <span class="hbar-label">${label}</span>
-      <div class="hbar-track"><div class="hbar-fill" style="width:${maxPct > 0 ? (pct / maxPct) * 100 : 0}%;${color ? `background:${color}` : ''}"></div></div>
-      <span class="hbar-right">${right}</span>
-    </div>`;
-}
-
 // --- Tab: Openings ---
 function renderTabOpenings(stats) {
   const pp = stats.player_profile || {};
@@ -943,15 +945,37 @@ function renderTabOpenings(stats) {
   }
 
   const stability = Math.round((pp.opening_stability || 0) * 100);
+
+  // Opening × Map performance
+  const omw = stats.opening_map_wr || {};
+  let mapChips = '';
+  for (const [opening, maps] of Object.entries(omw)) {
+    const bestMaps = Object.entries(maps)
+      .filter(([, d]) => d.wins + d.losses >= 2)
+      .map(([map, d]) => ({
+        map,
+        wr: Math.round(d.wins * 100 / (d.wins + d.losses)),
+        games: d.wins + d.losses,
+      }))
+      .sort((a, b) => b.wr - a.wr)
+      .slice(0, 3);
+    if (bestMaps.length > 0) {
+      mapChips += bestMaps.map(m =>
+        `<span class="chip">${formatOpeningName(opening)} × ${escapeHtml(m.map)}: <b>${m.wr}%</b> <em>(${m.games}g)</em></span>`
+      ).join('');
+    }
+  }
+
   return `
-    <div class="tab-note">${t('summary.stability')}: <b>${stability}%</b> — ${entries[0] ? formatOpeningName(entries[0][0]) : '—'}</div>
+    <div class="tab-note">${t('summary.stability')}: <b>${stability}%</b></div>
     <div class="trow trow-head">
       <span class="trow-name">${t('summary.opening')}</span>
       <span class="trow-track-spacer"></span>
       <span class="trow-num">${t('summary.frequency')}</span>
       <span class="trow-wr">WR</span>
     </div>
-    ${rows}`;
+    ${rows}
+    ${mapChips ? `<div class="tab-subtitle">Por mapa</div><div class="chip-row">${mapChips}</div>` : ''}`;
 }
 
 // --- Tab: Units ---
@@ -972,13 +996,13 @@ function renderTabUnits(stats) {
         <div class="trow">
           <span class="trow-name">${unitDisplayName(name)}</span>
           <div class="hbar-track"><div class="hbar-fill" style="width:${(d.total / maxTotal) * 100}%"></div></div>
-          <span class="trow-num">${d.avg} ${t('summary.avgPerGame')} <em>(${d.total})</em></span>
+          <span class="trow-num">${d.avg} avg <em>(${d.total})</em></span>
           <span class="trow-wr ${wrClass(d.wr)}">${d.wr}% <em>(${d.matches}g)</em></span>
         </div>`;
     }
     html += `
       <div class="trow trow-head">
-        <span class="trow-name">${t('summary.tabUnits')}</span>
+        <span class="trow-name">Unidad</span>
         <span class="trow-track-spacer"></span>
         <span class="trow-num">${t('summary.total')}</span>
         <span class="trow-wr">WR</span>
@@ -1046,7 +1070,7 @@ function renderTabEconomy(stats) {
   if (gaps.length > 0) {
     let gapRows = '';
     for (const g of gaps) {
-      gapRows += kvRow(g.tech, `${g.winAvg} → ${g.lossAvg} <span class="wr-bad">(+${formatHms(g.gap)})</span>`);
+      gapRows += `<div class="kv-row"><span class="kv-label">${g.tech}</span><span class="kv-value">${g.winAvg} → ${g.lossAvg} <span class="wr-bad">(+${formatHms(g.gap)})</span></span></div>`;
     }
     html += `<div class="tab-subtitle">${t('summary.winAvg')} vs ${t('summary.lossAvg')}</div>${gapRows}`;
   }
@@ -1096,11 +1120,12 @@ function renderTabTechs(stats) {
   const keyTechs = Object.entries(stats.key_techs || {}).sort((a, b) => b[1].frequency - a[1].frequency);
   if (keyTechs.length > 0) {
     let rows = '';
+    const maxFreq = keyTechs[0][1].frequency || 1;
     for (const [name, d] of keyTechs) {
       rows += `
         <div class="trow">
           <span class="trow-name">${techDisplayName(name)}</span>
-          <div class="hbar-track"><div class="hbar-fill" style="width:${d.frequency}%"></div></div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${(d.frequency / maxFreq) * 100}%"></div></div>
           <span class="trow-num">${d.frequency}%</span>
           <span class="trow-wr">${d.avg_time != null ? formatHms(d.avg_time) : '—'}</span>
         </div>`;
@@ -1119,33 +1144,11 @@ function renderTabTechs(stats) {
   return html || `<div class="empty-tab">${t('app.noData')}</div>`;
 }
 
-// --- Tab: Maps & Civs ---
-function renderTabMapsCivs(stats) {
+// --- Tab: Matchups (Civs + Maps) ---
+function renderTabMatchups(stats) {
   let html = '<div class="mc-grid">';
 
-  const mapPlayed = stats.map_played || {};
-  const mapWR = stats.map_win_percent || {};
-  const mapEntries = Object.entries(mapPlayed).sort((a, b) => b[1] - a[1]);
-  if (mapEntries.length > 0) {
-    const maxCount = mapEntries[0][1] || 1;
-    let rows = '';
-    for (const [map, count] of mapEntries) {
-      const mwr = mapWR[map] || 0;
-      rows += `
-        <div class="trow">
-          <span class="trow-name">${escapeHtml(map)}</span>
-          <div class="hbar-track"><div class="hbar-fill" style="width:${(count / maxCount) * 100}%"></div></div>
-          <span class="trow-num">${count}g</span>
-          <span class="trow-wr ${wrClass(mwr)}">${mwr}%</span>
-        </div>`;
-    }
-    html += `<div class="mc-col">
-      <div class="tab-subtitle">${t('summary.map')}</div>
-      <div class="trow trow-head"><span class="trow-name">${t('summary.map')}</span><span class="trow-track-spacer"></span><span class="trow-num">${t('summary.games')}</span><span class="trow-wr">WR</span></div>
-      ${rows}
-    </div>`;
-  }
-
+  // Civs played
   const civPlayed = stats.civ_played_percent || {};
   const civWR = stats.civ_win_percent || {};
   const civEntries = Object.entries(civPlayed).sort((a, b) => b[1] - a[1]);
@@ -1154,23 +1157,65 @@ function renderTabMapsCivs(stats) {
     let rows = '';
     for (const [civ, pct] of civEntries) {
       const cwr = civWR[civ] || 0;
-      rows += `
-        <div class="trow">
-          <span class="trow-name">${escapeHtml(civ)}</span>
-          <div class="hbar-track"><div class="hbar-fill" style="width:${(pct / maxPct) * 100}%"></div></div>
-          <span class="trow-num">${pct}%</span>
-          <span class="trow-wr ${wrClass(cwr)}">${cwr}%</span>
-        </div>`;
+      rows += `<div class="trow">
+        <span class="trow-name">${escapeHtml(civ)}</span>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${(pct / maxPct) * 100}%"></div></div>
+        <span class="trow-num">${pct}%</span>
+        <span class="trow-wr ${wrClass(cwr)}">${cwr}%</span>
+      </div>`;
     }
     html += `<div class="mc-col">
-      <div class="tab-subtitle">${t('summary.civ')}</div>
+      <div class="tab-subtitle">${t('summary.civ')} ${t('summary.frequency')}</div>
       <div class="trow trow-head"><span class="trow-name">${t('summary.civ')}</span><span class="trow-track-spacer"></span><span class="trow-num">%</span><span class="trow-wr">WR</span></div>
       ${rows}
     </div>`;
   }
 
+  // Civs as opponent
+  const oppCivWR = stats.opp_civ_win_percent || {};
+  const oppEntries = Object.entries(oppCivWR).sort((a, b) => b[1] - a[1]);
+  if (oppEntries.length > 0) {
+    let rows = '';
+    for (const [civ, wr] of oppEntries) {
+      const totalGames = (stats.opp_civ_stats?.[civ]?.wins || 0) + (stats.opp_civ_stats?.[civ]?.losses || 0);
+      rows += `<div class="trow">
+        <span class="trow-name">vs ${escapeHtml(civ)}</span>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${wr}%"></div></div>
+        <span class="trow-num">${totalGames}g</span>
+        <span class="trow-wr ${wrClass(wr)}">${wr}%</span>
+      </div>`;
+    }
+    html += `<div class="mc-col">
+      <div class="tab-subtitle">vs Civ</div>
+      <div class="trow trow-head"><span class="trow-name">Rival</span><span class="trow-track-spacer"></span><span class="trow-num">Games</span><span class="trow-wr">WR</span></div>
+      ${rows}
+    </div>`;
+  }
+
   html += '</div>';
-  return mapEntries.length || civEntries.length ? html : `<div class="empty-tab">${t('app.noData')}</div>`;
+
+  // Maps
+  const mapPlayed = stats.map_played || {};
+  const mapWR = stats.map_win_percent || {};
+  const mapEntries = Object.entries(mapPlayed).sort((a, b) => b[1] - a[1]);
+  if (mapEntries.length > 0) {
+    const maxCount = mapEntries[0][1] || 1;
+    let rows = '';
+    for (const [map, count] of mapEntries) {
+      const mwr = mapWR[map] || 0;
+      rows += `<div class="trow">
+        <span class="trow-name">${escapeHtml(map)}</span>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${(count / maxCount) * 100}%"></div></div>
+        <span class="trow-num">${count}g</span>
+        <span class="trow-wr ${wrClass(mwr)}">${mwr}%</span>
+      </div>`;
+    }
+    html += `<div class="tab-subtitle">${t('summary.map')}</div>
+      <div class="trow trow-head"><span class="trow-name">${t('summary.map')}</span><span class="trow-track-spacer"></span><span class="trow-num">Games</span><span class="trow-wr">WR</span></div>
+      ${rows}`;
+  }
+
+  return html || `<div class="empty-tab">${t('app.noData')}</div>`;
 }
 
 // --- Tab: History ---
