@@ -43,7 +43,7 @@ function categorizeUnit(unitName) {
   return 'other';
 }
 
-export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, dataMainPlayer, onProgress = null) {
+export async function analyzeMatches(matches, playerId, playedCiv, opponentCivFilter, dataMainPlayer, onProgress = null) {
   const stats = {
     total: matches.length,
     player_name: matches.length > 0 ? (matches[0].player_name || 'Unknown') : 'Unknown',
@@ -265,12 +265,11 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     ratingDates.push(match.started || null);
 
     // Track opponent civ win/loss
-    const oppCiv = oppPlayer?.civilization || null;
-    if (oppCiv) {
-      const canon = CIV_CANONICAL_NAMES[oppCiv.toLowerCase()] || oppCiv;
-      if (!stats.opp_civ_stats[canon]) stats.opp_civ_stats[canon] = { wins: 0, losses: 0 };
-      if (winner) stats.opp_civ_stats[canon].wins++;
-      else stats.opp_civ_stats[canon].losses++;
+    const opponentCiv = oppPlayer?.civilization ? CIV_CANONICAL_NAMES[oppPlayer.civilization.toLowerCase()] || oppPlayer.civilization : 'Unknown';
+    if (opponentCiv && opponentCiv !== 'Unknown') {
+      if (!stats.opp_civ_stats[opponentCiv]) stats.opp_civ_stats[opponentCiv] = { wins: 0, losses: 0 };
+      if (winner) stats.opp_civ_stats[opponentCiv].wins++;
+      else stats.opp_civ_stats[opponentCiv].losses++;
     }
 
     const techs = mePlayer.queuedTechs || [];
@@ -833,8 +832,9 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
       }
     }
 
+    const matchOpponentCiv = oppPlayer?.civilization ? CIV_CANONICAL_NAMES[oppPlayer.civilization.toLowerCase()] || oppPlayer.civilization : 'Unknown';
     allMatchFeatures.push(features);
-    matchMeta.push({ mapName, meCiv, winner });
+    matchMeta.push({ mapName, meCiv, opponentCiv: matchOpponentCiv, winner });
   }
 
   const baselines = computePlayerBaselines(playerId, allMatchFeatures);
@@ -875,7 +875,8 @@ export async function analyzeMatches(matches, playerId, playedCiv, opponentCiv, 
     stats.match_cross_data.push({
       won: meta.winner,
       map: meta.mapName,
-      civ: meta.meCiv,
+      player_civ: meta.meCiv,
+      opponent_civ: meta.opponentCiv || 'Unknown',
       player_opening: feat.opening?.chosen_opening || 'Unknown',
       opponent_opening: allOppOpenings[i] || 'Unknown',
       player_feudal: feat.t_feudal || null,

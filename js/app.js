@@ -62,6 +62,17 @@ export async function init() {
         console.warn('Right player analysis failed:', e);
       }
 
+      const playerEntry = findPlayerInMatch(matchData, playerId);
+      const rivalEntry = findPlayerInMatch(matchData, rivalProfileId);
+      if (leftStats) {
+        leftStats.current_map = matchData.mapName || null;
+        leftStats.current_opponent_civ = rivalEntry?.player?.civName || rivalEntry?.player?.civilization || null;
+      }
+      if (rightStats) {
+        rightStats.current_map = matchData.mapName || null;
+        rightStats.current_opponent_civ = playerEntry?.player?.civName || playerEntry?.player?.civilization || null;
+      }
+
       // If at least one succeeded, render face-off overlay (use available data)
       let overlayBuilt = false;
       if (leftStats || rightStats) {
@@ -96,12 +107,20 @@ function is1v1Match(m) {
 }
 
 function findPlayerInMatch(m, playerId) {
-  for (let i = 0; i < m.teams.length; i++) {
-    const team = m.teams[i];
-    if (!team.players) continue;
-    for (const p of team.players) {
-      if (p.profileId === parseInt(playerId)) {
-        return { teamIndex: i, player: p };
+  const pid = parseInt(playerId, 10);
+  if (Array.isArray(m.players)) {
+    const matchPlayer = m.players.find(p => p.profileId === pid || p.profileId === playerId);
+    if (matchPlayer) return { teamIndex: null, player: matchPlayer };
+  }
+
+  if (Array.isArray(m.teams)) {
+    for (let i = 0; i < m.teams.length; i++) {
+      const team = m.teams[i];
+      if (!team.players) continue;
+      for (const p of team.players) {
+        if (p.profileId === pid || p.profileId === playerId) {
+          return { teamIndex: i, player: p };
+        }
       }
     }
   }

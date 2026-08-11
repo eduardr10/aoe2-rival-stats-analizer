@@ -145,32 +145,74 @@ function buildFeudalAdvantage(stats) {
 
 // ---- Matchup Behavior Model ----
 function buildMatchupBehaviorModel(stats) {
-  // Predict opponent opening distribution conditioned on our opening and map
-  const model = { byMyOpening: {}, globalOppOpenings: {}, suggestedCounters: {} };
+  const model = {
+    byMyOpening: {},
+    byMyOpeningMap: {},
+    byMyOpeningOppCiv: {},
+    byMyOpeningMapOppCiv: {},
+    globalOppOpenings: {},
+    suggestedCounters: {},
+  };
 
-  // Global opponent opening frequencies
   const oppOpenings = stats.opp_openings || {};
   const totalOppOpenings = Object.values(oppOpenings).reduce((a, b) => a + b, 0) || 1;
   for (const [open, count] of Object.entries(oppOpenings)) {
-    model.globalOppOpenings[open] = Math.round((count * 1000 / totalOppOpenings)) / 10; // percent
+    model.globalOppOpenings[open] = Math.round((count * 1000 / totalOppOpenings)) / 10;
   }
 
-  // For each of our openings, compute conditional distribution of opponent openings
   const openingVsOpp = stats.opening_vs_opponent || {};
   for (const [myOpen, oppMap] of Object.entries(openingVsOpp)) {
-    const dist = [];
-    let total = 0;
-    for (const [oppOpen, rec] of Object.entries(oppMap)) total += (rec.wins || 0) + (rec.losses || 0);
-    for (const [oppOpen, rec] of Object.entries(oppMap)) {
-      const cnt = (rec.wins || 0) + (rec.losses || 0);
-      if (cnt < 1) continue;
-      dist.push({ opponent_opening: oppOpen, count: cnt, probability: Math.round((cnt * 1000 / Math.max(1, total))) / 10 });
-    }
-    dist.sort((a, b) => b.count - a.count);
-    model.byMyOpening[myOpen] = dist;
+    model.byMyOpening[myOpen] = buildDistributionFromRecord(oppMap);
   }
 
-  // Suggested counters: use unit_effectiveness to find units with high WR when present
+  const conditionalByMap = {};
+  const conditionalByOppCiv = {};
+  const conditionalByMapOppCiv = {};
+  const cross = stats.match_cross_data || [];
+  for (const match of cross) {
+    const myOpen = match.player_opening || 'Unknown';
+    const oppOpen = match.opponent_opening || 'Unknown';
+    const mapName = match.map || 'Unknown';
+    const oppCiv = match.opponent_civ || 'Unknown';
+
+    if (!conditionalByMap[myOpen]) conditionalByMap[myOpen] = {};
+    if (!conditionalByMap[myOpen][mapName]) conditionalByMap[myOpen][mapName] = {};
+    conditionalByMap[myOpen][mapName][oppOpen] = (conditionalByMap[myOpen][mapName][oppOpen] || 0) + 1;
+
+    if (!conditionalByOppCiv[myOpen]) conditionalByOppCiv[myOpen] = {};
+    if (!conditionalByOppCiv[myOpen][oppCiv]) conditionalByOppCiv[myOpen][oppCiv] = {};
+    conditionalByOppCiv[myOpen][oppCiv][oppOpen] = (conditionalByOppCiv[myOpen][oppCiv][oppOpen] || 0) + 1;
+
+    if (!conditionalByMapOppCiv[myOpen]) conditionalByMapOppCiv[myOpen] = {};
+    if (!conditionalByMapOppCiv[myOpen][mapName]) conditionalByMapOppCiv[myOpen][mapName] = {};
+    if (!conditionalByMapOppCiv[myOpen][mapName][oppCiv]) conditionalByMapOppCiv[myOpen][mapName][oppCiv] = {};
+    conditionalByMapOppCiv[myOpen][mapName][oppCiv][oppOpen] = (conditionalByMapOppCiv[myOpen][mapName][oppCiv][oppOpen] || 0) + 1;
+  }
+
+  for (const [myOpen, byMap] of Object.entries(conditionalByMap)) {
+    model.byMyOpeningMap[myOpen] = {};
+    for (const [mapName, oppCounts] of Object.entries(byMap)) {
+      model.byMyOpeningMap[myOpen][mapName] = buildDistributionFromCounts(oppCounts);
+    }
+  }
+
+  for (const [myOpen, byCiv] of Object.entries(conditionalByOppCiv)) {
+    model.byMyOpeningOppCiv[myOpen] = {};
+    for (const [oppCiv, oppCounts] of Object.entries(byCiv)) {
+      model.byMyOpeningOppCiv[myOpen][oppCiv] = buildDistributionFromCounts(oppCounts);
+    }
+  }
+
+  for (const [myOpen, byMap] of Object.entries(conditionalByMapOppCiv)) {
+    model.byMyOpeningMapOppCiv[myOpen] = {};
+    for (const [mapName, byCiv] of Object.entries(byMap)) {
+      model.byMyOpeningMapOppCiv[myOpen][mapName] = {};
+      for (const [oppCiv, oppCounts] of Object.entries(byCiv)) {
+        model.byMyOpeningMapOppCiv[myOpen][mapName][oppCiv] = buildDistributionFromCounts(oppCounts);
+      }
+    }
+  }
+
   const unitEff = stats.unit_effectiveness || {};
   const sortedUnits = Object.entries(unitEff)
     .filter(([, d]) => d.matches >= 3)
@@ -179,24 +221,75 @@ function buildMatchupBehaviorModel(stats) {
     .map(([name, d]) => ({ unit: name, wr: d.wr, share: d.share }));
   model.suggestedCounters = sortedUnits;
 
-  // Predictor: dada nuestra apertura y opcionalmente el mapa, devolver probabilidades y counters
-  model.predict = function predictOpponentResponse({ myOpening = null, map = null, topN = 3 } = {}) {
-    const out = { predictions: [], counters: model.suggestedCounters.slice(0, 6) };
+  const MIN_SAMPLES = 3;
+
+  model.predict = function predictOpponentResponse({ myOpening = null, map = null, opponentCiv = null, topN = 3 } = {}) {
+    const out = { predictions: [], counters: model.suggestedCounters.slice(0, 6), source: 'global', confidence: 'low' };
+
+    function totalSamples(dist) { return (dist || []).reduce((s, d) => s + d.count, 0); }
+
     if (!myOpening) {
-      // fallback: top global opponent openings
       const sorted = Object.entries(model.globalOppOpenings).sort((a, b) => b[1] - a[1]).slice(0, topN);
       out.predictions = sorted.map(([op, pct]) => ({ opponent_opening: op, probability_pct: pct }));
+      out.confidence = 'high';
       return out;
     }
 
-    const dist = model.byMyOpening[myOpening] || [];
-    if (!dist.length) return out;
-    const filtered = dist.slice(0, topN).map(d => ({ opponent_opening: d.opponent_opening, probability_pct: d.probability }));
-    out.predictions = filtered;
+    const branch = (cond, sourceLabel, dist) => {
+      if (!cond || totalSamples(dist) < MIN_SAMPLES) return false;
+      out.predictions = dist.slice(0, topN).map(d => ({ opponent_opening: d.opponent_opening, probability_pct: d.probability }));
+      out.source = sourceLabel;
+      const total = totalSamples(dist);
+      out.confidence = total >= 10 ? 'high' : total >= 5 ? 'medium' : 'low';
+      out.sample = total;
+      return true;
+    };
+
+    if (branch(
+      map && opponentCiv && model.byMyOpeningMapOppCiv[myOpening]?.[map]?.[opponentCiv],
+      'opening+map+opponentCiv',
+      model.byMyOpeningMapOppCiv[myOpening]?.[map]?.[opponentCiv]
+    )) return out;
+
+    if (branch(
+      map && model.byMyOpeningMap[myOpening]?.[map],
+      'opening+map',
+      model.byMyOpeningMap[myOpening]?.[map]
+    )) return out;
+
+    if (branch(
+      opponentCiv && model.byMyOpeningOppCiv[myOpening]?.[opponentCiv],
+      'opening+opponentCiv',
+      model.byMyOpeningOppCiv[myOpening]?.[opponentCiv]
+    )) return out;
+
+    if (branch(model.byMyOpening[myOpening], 'opening', model.byMyOpening[myOpening])) return out;
+
+    const sorted = Object.entries(model.globalOppOpenings).sort((a, b) => b[1] - a[1]).slice(0, topN);
+    out.predictions = sorted.map(([op, pct]) => ({ opponent_opening: op, probability_pct: pct }));
     return out;
   };
 
   return model;
+}
+
+function buildDistributionFromRecord(record) {
+  const counts = {};
+  for (const [oppOpen, rec] of Object.entries(record)) {
+    counts[oppOpen] = (rec.wins || 0) + (rec.losses || 0);
+  }
+  return buildDistributionFromCounts(counts);
+}
+
+function buildDistributionFromCounts(counts) {
+  const dist = [];
+  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  for (const [oppOpen, count] of Object.entries(counts)) {
+    if (count < 1) continue;
+    dist.push({ opponent_opening: oppOpen, count, probability: Math.round((count * 1000 / Math.max(1, total))) / 10 });
+  }
+  dist.sort((a, b) => b.count - a.count);
+  return dist;
 }
 
 // ---- Determinant Features (effect size between wins and losses) ----

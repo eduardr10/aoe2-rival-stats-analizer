@@ -810,15 +810,31 @@ function buildPredictionCard(stats) {
   const ca = stats.cross_analysis || null;
   if (!ca || !ca.matchupBehavior) return '';
   const mb = ca.matchupBehavior;
-  // Default predict based on current opening
   const currentOpening = stats.current_opening?.chosen_opening || stats.player_profile?.primary_opening || null;
-  const pred = mb.predict({ myOpening: currentOpening, topN: 3 });
+  const currentMap = stats.current_map || null;
+  const currentOpponentCiv = stats.current_opponent_civ || null;
+  const pred = mb.predict({ myOpening: currentOpening, map: currentMap, opponentCiv: currentOpponentCiv, topN: 3 });
   const preds = pred.predictions || [];
   if (!preds.length) return '';
 
+  const sourceLabels = {
+    global: 'Global opponent opening distribution',
+    opening: 'Conditioned on your opening',
+    'opening+map': 'Conditioned on your opening and map',
+    'opening+opponentCiv': 'Conditioned on your opening and opponent civ',
+    'opening+map+opponentCiv': 'Conditioned on opening, map and opponent civ',
+  };
+  const sourceText = sourceLabels[pred.source] || '';
+  const sampleText = pred.sample ? ` (${pred.sample}g)` : '';
+  const confidenceText = pred.confidence === 'high' ? '' : pred.confidence === 'medium' ? ' · medium confidence' : ' · low confidence';
+  const contextParts = [];
+  if (currentMap) contextParts.push(`Map: ${currentMap}`);
+  if (currentOpponentCiv) contextParts.push(`Opponent civ: ${currentOpponentCiv}`);
+  const contextText = contextParts.length ? ` · ${contextParts.join(' · ')}` : '';
+
   let html = `<div class="card">
     <div class="card-label">Predicted Opponent Responses</div>
-    <div class="card-subtitle">Given your opening${currentOpening ? ` (${formatOpeningName(currentOpening)})` : ''}</div>
+    <div class="card-subtitle">${sourceText}${sampleText}${confidenceText}${contextText}</div>
     <div style="margin-top:8px">`;
   for (const p of preds) {
     html += `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border-subtle)"><div>${formatOpeningName(p.opponent_opening)}</div><div style="color:var(--accent-blue)">${p.probability_pct}%</div></div>`;
